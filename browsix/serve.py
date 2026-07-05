@@ -28,7 +28,7 @@ from browsix.config import (
 )
 from browsix.exceptions import BrowsixError
 
-__version__ = "1.11.0"
+__version__ = "1.11.1"
 
 
 def _import_aiohttp() -> Any:
