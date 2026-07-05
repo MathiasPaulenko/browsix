@@ -6,8 +6,8 @@ repo_name: MathiasPaulenko/browsix
 theme:
   name: material
   features:
-    - navigation.tabs
     - navigation.sections
+    - toc.integrate
     - search.suggest
     - content.code.copy
   palette:
@@ -24,17 +24,6 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 
-nav:
-  - Home: index.md
-  - Quickstart: quickstart.md
-  - Installation: install.md
-  - Commands: commands.md
-  - Multi: multi.md
-  - Backends: backends.md
-  - Raw Protocol: raw.md
-  - Troubleshooting: troubleshooting.md
-  - Contributing: contributing.md
-
 markdown_extensions:
   - admonition
   - codehilite
@@ -42,3 +31,5 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
+  - toc:
+      permalink: true
