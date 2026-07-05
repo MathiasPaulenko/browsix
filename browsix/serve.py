@@ -53,6 +53,24 @@ async def _get_backend(request: Any) -> AbstractBackend:
     return manager.select(preferred=preferred)
 
 
+async def _run_action(request: Any, action: Any) -> Any:
+    """Launch backend, execute action, and close backend.
+
+    Args:
+        request: The aiohttp request.
+        action: An action instance with an execute(backend) method.
+
+    Returns:
+        The result of action.execute().
+    """
+    backend = await _get_backend(request)
+    await backend.launch(BrowserOptions())
+    try:
+        return await action.execute(backend)
+    finally:
+        await backend.close()
+
+
 async def handle_screenshot(request: Any) -> Any:
     """Handle POST /screenshot — return PNG bytes."""
     web = _import_aiohttp()
@@ -60,9 +78,8 @@ async def handle_screenshot(request: Any) -> Any:
     params = ScreenshotParams(**data)
     from browsix.actions.screenshot import ScreenshotAction
 
-    backend = await _get_backend(request)
     action = ScreenshotAction(params)
-    image_bytes = await action.execute(backend)
+    image_bytes = await _run_action(request, action)
     return web.Response(body=image_bytes, content_type="image/png")
 
 
@@ -73,9 +90,8 @@ async def handle_pdf(request: Any) -> Any:
     params = PDFParams(**data)
     from browsix.actions.pdf import PDFAction
 
-    backend = await _get_backend(request)
     action = PDFAction(params)
-    pdf_bytes = await action.execute(backend)
+    pdf_bytes = await _run_action(request, action)
     return web.Response(body=pdf_bytes, content_type="application/pdf")
 
 
@@ -86,9 +102,8 @@ async def handle_eval(request: Any) -> Any:
     params = EvalParams(**data)
     from browsix.actions.eval import EvalAction
 
-    backend = await _get_backend(request)
     action = EvalAction(params)
-    result = await action.execute(backend)
+    result = await _run_action(request, action)
     return web.json_response({"result": result})
 
 
@@ -99,9 +114,8 @@ async def handle_scrape(request: Any) -> Any:
     params = ScrapeParams(**data)
     from browsix.actions.scrape import ScrapeAction
 
-    backend = await _get_backend(request)
     action = ScrapeAction(params)
-    result = await action.execute(backend)
+    result = await _run_action(request, action)
     if params.output_format == "csv":
         return web.Response(body=result, content_type="text/csv")
     return web.json_response({"result": result})
@@ -114,9 +128,8 @@ async def handle_dom_get(request: Any) -> Any:
     params = DOMParams(**data)
     from browsix.actions.dom import DOMAction
 
-    backend = await _get_backend(request)
     action = DOMAction(params)
-    result = await action.execute(backend)
+    result = await _run_action(request, action)
     return web.json_response({"result": result})
 
 
@@ -127,9 +140,8 @@ async def handle_dom_query(request: Any) -> Any:
     params = DOMParams(**data)
     from browsix.actions.dom import DOMAction
 
-    backend = await _get_backend(request)
     action = DOMAction(params)
-    result = await action.execute(backend)
+    result = await _run_action(request, action)
     return web.json_response({"result": result})
 
 
@@ -158,9 +170,8 @@ async def handle_har(request: Any) -> Any:
     params = HarParams(**data)
     from browsix.actions.har import HARAction
 
-    backend = await _get_backend(request)
     action = HARAction(params)
-    result = await action.execute(backend)
+    result = await _run_action(request, action)
     return web.json_response(result)
 
 
@@ -201,9 +212,8 @@ async def handle_input_click(request: Any) -> Any:
     params = InputParams(**data, action="click")
     from browsix.actions.input import InputAction
 
-    backend = await _get_backend(request)
     action = InputAction(params)
-    await action.execute(backend)
+    await _run_action(request, action)
     return web.json_response({"status": "ok"})
 
 
@@ -214,9 +224,8 @@ async def handle_input_type(request: Any) -> Any:
     params = InputParams(**data, action="type")
     from browsix.actions.input import InputAction
 
-    backend = await _get_backend(request)
     action = InputAction(params)
-    await action.execute(backend)
+    await _run_action(request, action)
     return web.json_response({"status": "ok"})
 
 
@@ -228,9 +237,8 @@ async def handle_perf_metrics(request: Any) -> Any:
     from browsix.actions.performance import PerformanceAction, PerformanceParams
 
     params = PerformanceParams(url=url, action="metrics")
-    backend = await _get_backend(request)
     action = PerformanceAction(params)
-    result = await action.execute(backend)
+    result = await _run_action(request, action)
     return web.json_response(result)
 
 
@@ -243,9 +251,8 @@ async def handle_perf_trace(request: Any) -> Any:
     from browsix.actions.performance import PerformanceAction, PerformanceParams
 
     params = PerformanceParams(url=url, action="trace", duration_ms=duration_ms)
-    backend = await _get_backend(request)
     action = PerformanceAction(params)
-    result = await action.execute(backend)
+    result = await _run_action(request, action)
     return web.json_response(result)
 
 
