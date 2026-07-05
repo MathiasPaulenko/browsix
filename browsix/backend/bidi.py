@@ -499,7 +499,6 @@ class BiDiBackend(AbstractBackend):
             http_only=params.http_only,
             secure=params.secure,
             same_site=params.same_site,
-            expires=params.expires,
         )
         await self._client.storage.set_cookie(self._context, cookie)
 
