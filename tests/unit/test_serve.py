@@ -34,7 +34,7 @@ class TestServeCreateApp:
 
         app = create_app()
         assert app is not None
-        assert "backend" in app
+        assert "backend_name" in app
 
     def test_create_app_has_routes(self) -> None:
         from browsix.serve import create_app
@@ -132,19 +132,22 @@ class TestServeHandlerMocks:
         return backend
 
     async def test_screenshot_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/screenshot",
-            json={"url": "https://example.com"},
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/screenshot",
+                json={"url": "https://example.com"},
+            )
         assert resp.status == 200
         assert resp.content_type == "image/png"
         data = await resp.read()
@@ -152,19 +155,22 @@ class TestServeHandlerMocks:
         await client.close()
 
     async def test_pdf_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/pdf",
-            json={"url": "https://example.com"},
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/pdf",
+                json={"url": "https://example.com"},
+            )
         assert resp.status == 200
         assert resp.content_type == "application/pdf"
         data = await resp.read()
@@ -172,118 +178,136 @@ class TestServeHandlerMocks:
         await client.close()
 
     async def test_eval_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/eval",
-            json={"url": "https://example.com", "expression": "1+1"},
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/eval",
+                json={"url": "https://example.com", "expression": "1+1"},
+            )
         assert resp.status == 200
         data = await resp.json()
         assert data == {"result": 42}
         await client.close()
 
     async def test_perf_metrics_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/perf/metrics",
-            json={"url": "https://example.com"},
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/perf/metrics",
+                json={"url": "https://example.com"},
+            )
         assert resp.status == 200
         data = await resp.json()
         assert "Timestamp" in data
         await client.close()
 
     async def test_perf_trace_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/perf/trace",
-            json={"url": "https://example.com", "duration_ms": 1000},
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/perf/trace",
+                json={"url": "https://example.com", "duration_ms": 1000},
+            )
         assert resp.status == 200
         data = await resp.json()
         assert "traceEvents" in data
         await client.close()
 
     async def test_navigate_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/navigate",
-            json={"url": "https://example.com"},
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/navigate",
+                json={"url": "https://example.com"},
+            )
         assert resp.status == 200
         data = await resp.json()
         assert data["status"] == "ok"
         await client.close()
 
     async def test_cookies_get_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/cookies/get",
-            json={"url": "https://example.com"},
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/cookies/get",
+                json={"url": "https://example.com"},
+            )
         assert resp.status == 200
         data = await resp.json()
         assert "cookies" in data
         await client.close()
 
     async def test_cookies_set_endpoint(self) -> None:
+        from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
 
         from browsix.serve import create_app
 
+        mock_backend = self._make_mock_backend()
         app = create_app()
-        app["backend"] = self._make_mock_backend()
         server = TestServer(app)
         client = TestClient(server)
         await client.start_server()
-        resp = await client.post(
-            "/cookies/set",
-            json={
-                "name": "foo",
-                "value": "bar",
-                "domain": "example.com",
-            },
-        )
+        with patch("browsix.serve.BackendManager.select", return_value=mock_backend):
+            resp = await client.post(
+                "/cookies/set",
+                json={
+                    "name": "foo",
+                    "value": "bar",
+                    "domain": "example.com",
+                },
+            )
         assert resp.status == 200
         data = await resp.json()
         assert data == {"status": "ok"}

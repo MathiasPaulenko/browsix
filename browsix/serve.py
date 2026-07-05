@@ -43,9 +43,14 @@ def _import_aiohttp() -> Any:
 
 
 async def _get_backend(request: Any) -> AbstractBackend:
-    """Retrieve the shared backend from the app context."""
-    backend: AbstractBackend = request.app["backend"]
-    return backend
+    """Create a fresh backend instance for this request.
+
+    Actions call launch() and close() internally, so we cannot share
+    a single backend across requests.
+    """
+    preferred = request.app.get("backend_name")
+    manager = BackendManager()
+    return manager.select(preferred=preferred)
 
 
 async def handle_screenshot(request: Any) -> Any:
@@ -287,7 +292,8 @@ def create_app(backend_name: str | None = None) -> Any:
     web = _import_aiohttp()
     app = web.Application()
     manager = BackendManager()
-    app["backend"] = manager.select(preferred=backend_name)
+    app["backend_name"] = backend_name
+    app["backends"] = manager.list_available()
 
     app.router.add_post("/screenshot", handle_screenshot)
     app.router.add_post("/pdf", handle_pdf)
