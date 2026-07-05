@@ -59,15 +59,19 @@ class TestBiDiBackendPhase5:
         with pytest.raises(NotImplementedError):
             asyncio.run(backend.intercept_download())
 
-    def test_get_security_state_raises(self) -> None:
+    def test_get_security_state_supported(self) -> None:
         backend = self._make_bidi_backend()
-        with pytest.raises(NotImplementedError):
-            asyncio.run(backend.get_security_state())
+        backend._client.cdp = MagicMock()
+        backend._client.cdp.send_command = AsyncMock(return_value={"securityState": "secure"})
+        asyncio.run(backend.get_security_state())
+        backend._client.cdp.send_command.assert_called_once()
 
-    def test_ignore_cert_errors_raises(self) -> None:
+    def test_ignore_cert_errors_supported(self) -> None:
         backend = self._make_bidi_backend()
-        with pytest.raises(NotImplementedError):
-            asyncio.run(backend.ignore_cert_errors(True))
+        backend._client.cdp = MagicMock()
+        backend._client.cdp.send_command = AsyncMock()
+        asyncio.run(backend.ignore_cert_errors(True))
+        backend._client.cdp.send_command.assert_called_once()
 
     def test_set_locale_supported(self) -> None:
         backend = self._make_bidi_backend()
@@ -76,10 +80,12 @@ class TestBiDiBackendPhase5:
         asyncio.run(backend.set_locale("en-US"))
         backend._client.cdp.send_command.assert_called_once()
 
-    def test_set_cpu_throttle_raises(self) -> None:
+    def test_set_cpu_throttle_supported(self) -> None:
         backend = self._make_bidi_backend()
-        with pytest.raises(NotImplementedError):
-            asyncio.run(backend.set_cpu_throttle(4.0))
+        backend._client.cdp = MagicMock()
+        backend._client.cdp.send_command = AsyncMock()
+        asyncio.run(backend.set_cpu_throttle(4.0))
+        backend._client.cdp.send_command.assert_called_once()
 
     def test_set_touch_emulation_supported(self) -> None:
         backend = self._make_bidi_backend()
@@ -88,10 +94,12 @@ class TestBiDiBackendPhase5:
         asyncio.run(backend.set_touch_emulation(True))
         backend._client.cdp.send_command.assert_called_once()
 
-    def test_set_sensors_raises(self) -> None:
+    def test_set_sensors_supported(self) -> None:
         backend = self._make_bidi_backend()
-        with pytest.raises(NotImplementedError):
-            asyncio.run(backend.set_sensors(SensorParams()))
+        backend._client.cdp = MagicMock()
+        backend._client.cdp.send_command = AsyncMock()
+        asyncio.run(backend.set_sensors(SensorParams(type="device-orientation", values={"alpha": 0, "beta": 0, "gamma": 0})))
+        backend._client.cdp.send_command.assert_called_once()
 
     def test_click_supported(self) -> None:
         backend = self._make_bidi_backend()

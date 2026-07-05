@@ -24,13 +24,9 @@ class TestBiDiBackend:
 
             backend = BiDiBackend()
             with pytest.raises(NotImplementedError):
-                await backend.pdf(MagicMock())
-            with pytest.raises(NotImplementedError):
                 await backend.screencast(MagicMock())
             with pytest.raises(NotImplementedError):
                 await backend.capture_har(MagicMock())
-            with pytest.raises(NotImplementedError):
-                await backend.emulate_device("iphone-15")
             with pytest.raises(NotImplementedError):
                 await backend.webauthn_add_virtual_authenticator("ctap2", "usb")
             with pytest.raises(NotImplementedError):
@@ -87,6 +83,18 @@ class TestBiDiBackend:
                 await backend.set_cache_disabled(True)
             with pytest.raises(RuntimeError, match="not launched"):
                 await backend.mock_response("https://example.com", {})
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.pdf(MagicMock())
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.emulate_device("iphone-15")
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.get_security_state()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.ignore_cert_errors(True)
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.set_cpu_throttle(4.0)
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.set_sensors(MagicMock())
 
     async def test_bidi_paridad_methods_raise_runtime_without_launch(self) -> None:
         with patch("browsix.backend.bidi.BiDiClient", MagicMock()):

@@ -13,6 +13,8 @@ from typing import Any
 
 from browsix.backend.base import AbstractBackend
 from browsix.config import (
+    DEVICE_PRESETS,
+    PAPER_SIZES,
     BrowserOptions,
     CookieParams,
     HarParams,
@@ -33,22 +35,23 @@ except ImportError:
 class BiDiBackend(AbstractBackend):
     """WebDriver BiDi backend via bidiwave.
 
-    Supports: launch, navigate, screenshot, screenshot_selector, eval, raw,
-    close, go_back, go_forward, reload, stop_loading, wait_for, list_tabs,
-    new_tab, close_tab, activate_tab, capture_console, capture_logs,
-    DOM methods, storage methods, cookies (get/set/delete/clear),
-    set_headers, set_user_agent, browser_version, set_viewport,
-    set_geolocation, set_timezone, set_dark_mode, set_locale,
-    set_touch_emulation, new_context, list_contexts, close_context,
-    get_window_bounds, set_window_bounds, dialog_accept, dialog_dismiss,
-    grant_permission, reset_permissions, click, type_text, fill,
-    select_option, hover, key_press, drag, tap, block_requests,
-    throttle_network, set_cache_disabled, intercept_requests, mock_response.
+    Supports: launch, navigate, screenshot, screenshot_selector, pdf, eval,
+    raw, close, go_back, go_forward, reload, stop_loading, wait_for,
+    list_tabs, new_tab, close_tab, activate_tab, capture_console,
+    capture_logs, DOM methods, storage methods, cookies (get/set/delete/clear),
+    set_headers, set_user_agent, browser_version, emulate_device, set_viewport,
+    set_geolocation, set_timezone, set_dark_mode, set_locale, set_touch_emulation,
+    set_cpu_throttle, set_sensors, new_context, list_contexts, close_context,
+    get_window_bounds, set_window_bounds, get_security_state, ignore_cert_errors,
+    dialog_accept, dialog_dismiss, grant_permission, reset_permissions,
+    click, type_text, fill, select_option, hover, key_press, drag, tap,
+    block_requests, throttle_network, set_cache_disabled, intercept_requests,
+    mock_response.
 
-    CDP-only features (HAR, PDF, screencast, a11y, downloads, security,
-    CPU throttle, sensors, performance, CSS, debug, DOM snapshot, overlay,
-    cache storage, IndexedDB, service workers, animations, WebAuthn,
-    WebAudio, Media, Cast, Bluetooth) raise NotImplementedError.
+    CDP-only features (HAR, screencast, a11y, downloads, performance,
+    CSS, debug, DOM snapshot, overlay, cache storage, IndexedDB,
+    service workers, animations, WebAuthn, WebAudio, Media, Cast, Bluetooth)
+    raise NotImplementedError.
     """
 
     def __init__(self) -> None:
@@ -252,7 +255,38 @@ class BiDiBackend(AbstractBackend):
         raise TimeoutError(f"wait_for timed out after {strategy.timeout}ms")
 
     async def pdf(self, params: PDFParams) -> bytes:
-        raise NotImplementedError("pdf is not supported by BiDiBackend")
+        """Generate a PDF via browsingContext.print.
+
+        Args:
+            params: PDF parameters (url, paper, landscape, margin, etc.).
+
+        Returns:
+            PDF bytes.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        await self._client.browsing.navigate(
+            self._context, params.url, wait="complete"
+        )
+        paper = PAPER_SIZES.get(params.paper, PAPER_SIZES["letter"])
+        margin_val = float(params.margin.replace("in", "").replace("cm", ""))
+        margin_dict = {
+            "top": margin_val,
+            "bottom": margin_val,
+            "left": margin_val,
+            "right": margin_val,
+        }
+        result = await self._client.browsing.print(
+            self._context,
+            background=False,
+            margin=margin_dict,
+            orientation="landscape" if params.landscape else "portrait",
+            page={"width": paper["width"], "height": paper["height"]},
+            scale=1.0,
+            shrink_to_fit=True,
+        )
+        data = result.data if hasattr(result, "data") else result.get("data", "")
+        return base64.b64decode(data)
 
     async def screencast(self, params: ScreencastParams) -> list[bytes]:
         raise NotImplementedError("screencast is not supported by BiDiBackend")
@@ -585,7 +619,32 @@ class BiDiBackend(AbstractBackend):
         return str(result.get("product", "unknown"))
 
     async def emulate_device(self, device: str) -> None:
-        raise NotImplementedError("emulate_device is not supported by BiDiBackend")
+        """Emulate a device by preset name using viewport + user agent + touch.
+
+        Args:
+            device: Device preset name (e.g. 'iphone-15').
+
+        Raises:
+            ValueError: If the device name is not in DEVICE_PRESETS.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        preset = DEVICE_PRESETS.get(device)
+        if preset is None:
+            raise ValueError(f"Unknown device preset: {device}")
+        await self._client.browsing.set_viewport(
+            self._context,
+            viewport={"width": int(preset["width"]), "height": int(preset["height"])},
+            device_pixel_ratio=float(preset["device_scale_factor"]),
+        )
+        await self._client.emulation.set_user_agent(
+            str(preset["user_agent"]),
+            contexts=[self._context] if self._context else None,
+        )
+        if preset.get("touch"):
+            await self._client.cdp.send_command(
+                "Emulation.setTouchEmulationEnabled", {"enabled": True},
+            )
 
     async def set_viewport(
         self, width: int, height: int, device_scale_factor: float = 1.0
@@ -872,10 +931,27 @@ class BiDiBackend(AbstractBackend):
     # ── Security ───────────────────────────────────────────
 
     async def get_security_state(self) -> dict[str, Any]:
-        raise NotImplementedError("get_security_state is not supported by BiDiBackend")
+        """Get the current security state via CDP Security.getState.
+
+        Returns:
+            Security state dict.
+        """
+        if self._client is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        result = await self._client.cdp.send_command("Security.getState", {})
+        return dict(result)
 
     async def ignore_cert_errors(self, ignore: bool = True) -> None:
-        raise NotImplementedError("ignore_cert_errors is not supported by BiDiBackend")
+        """Enable or disable ignoring certificate errors via CDP.
+
+        Args:
+            ignore: True to ignore cert errors, False to enforce them.
+        """
+        if self._client is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        await self._client.cdp.send_command(
+            "Security.setIgnoreCertificateErrors", {"ignore": ignore},
+        )
 
     # ── Emulation advanced ─────────────────────────────────
 
@@ -892,7 +968,16 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def set_cpu_throttle(self, rate: float) -> None:
-        raise NotImplementedError("set_cpu_throttle is not supported by BiDiBackend")
+        """Set CPU throttling rate via CDP Emulation.setCPUThrottlingRate.
+
+        Args:
+            rate: Throttling rate (1.0 = normal, 4.0 = 4x slower).
+        """
+        if self._client is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        await self._client.cdp.send_command(
+            "Emulation.setCPUThrottlingRate", {"rate": rate},
+        )
 
     async def set_touch_emulation(self, enabled: bool) -> None:
         """Enable or disable touch emulation via CDP Emulation.setTouchEmulationEnabled.
@@ -907,7 +992,31 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def set_sensors(self, sensors: SensorParams) -> None:
-        raise NotImplementedError("set_sensors is not supported by BiDiBackend")
+        """Override sensor values via CDP.
+
+        Args:
+            sensors: Sensor parameters with type and values.
+        """
+        if self._client is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        if sensors.type == "device-orientation":
+            await self._client.cdp.send_command(
+                "DeviceOrientation.setDeviceOrientationOverride",
+                {
+                    "alpha": sensors.values.get("alpha", 0),
+                    "beta": sensors.values.get("beta", 0),
+                    "gamma": sensors.values.get("gamma", 0),
+                },
+            )
+        elif sensors.type == "geolocation":
+            await self._client.emulation.set_geolocation(
+                coordinates={
+                    "latitude": sensors.values.get("latitude", 0),
+                    "longitude": sensors.values.get("longitude", 0),
+                    "accuracy": sensors.values.get("accuracy", 100),
+                },
+                contexts=[self._context] if self._context else None,
+            )
 
     # ── Performance ───────────────────────────────────────
 
