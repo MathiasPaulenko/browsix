@@ -13,8 +13,9 @@ class TestDialogIntegration:
     """Test suite for dialogintegration."""
     async def test_dialog_accept(self) -> None:
         """Test dialog accept."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<script>alert('test')</script>",
                 WaitStrategy(strategy="load"),
@@ -23,8 +24,9 @@ class TestDialogIntegration:
 
     async def test_dialog_dismiss(self) -> None:
         """Test dialog dismiss."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<script>confirm('test')</script>",
                 WaitStrategy(strategy="load"),

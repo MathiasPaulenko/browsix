@@ -13,8 +13,9 @@ class TestInputIntegration:
     """Test suite for inputintegration."""
     async def test_click_and_type(self) -> None:
         """Test click and type."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<input id='q' type='text'><button id='btn'>Click</button>",
                 WaitStrategy(strategy="load"),
@@ -29,8 +30,9 @@ class TestInputIntegration:
             "<input id='i' type='text'>"
             "<select id='s'><option value='a'>A</option><option value='b'>B</option></select>"
         )
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(html, WaitStrategy(strategy="load"))
             await backend.fill("#i", "test value")
             await backend.select_option("#s", "b")
@@ -41,8 +43,9 @@ class TestInputIntegration:
             "data:text/html,"
             "<div id='d' onmouseover='this.textContent=\"hovered\"'>Hover me</div>"
         )
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(html, WaitStrategy(strategy="load"))
             await backend.hover("#d")
             await backend.key_press("Tab")

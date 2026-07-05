@@ -48,11 +48,18 @@ nav:
       - CI/CD: cookbook/ci-cd.md
       - Screenshots: cookbook/screenshots.md
       - Scraping: cookbook/scraping.md
+      - Auth: cookbook/auth.md
+      - CSS: cookbook/css.md
+      - Debug: cookbook/debug.md
+      - Record & Replay: cookbook/record-replay.md
   - API Reference:
       - CLI: api/cli.md
       - Backends: api/backends.md
       - Actions: api/actions.md
+      - Config: api/config.md
       - Serve: api/serve.md
+      - Plugins: api/plugins.md
+      - Multi: api/multi.md
       - Exceptions: api/exceptions.md
 
 plugins:

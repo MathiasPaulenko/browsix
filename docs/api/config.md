@@ -1,0 +1,3 @@
+# Config
+
+::: browsix.config

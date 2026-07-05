@@ -13,8 +13,9 @@ class TestPermissionsIntegration:
     """Test suite for permissionsintegration."""
     async def test_grant_and_reset(self) -> None:
         """Test grant and reset."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),

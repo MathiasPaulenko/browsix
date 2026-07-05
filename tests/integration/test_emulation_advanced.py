@@ -13,8 +13,9 @@ class TestEmulationAdvancedIntegration:
     """Test suite for emulationadvancedintegration."""
     async def test_set_locale(self) -> None:
         """Test set locale."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),
@@ -23,8 +24,9 @@ class TestEmulationAdvancedIntegration:
 
     async def test_set_cpu_throttle(self) -> None:
         """Test set cpu throttle."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),
@@ -33,8 +35,9 @@ class TestEmulationAdvancedIntegration:
 
     async def test_set_touch_emulation(self) -> None:
         """Test set touch emulation."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),
@@ -43,8 +46,9 @@ class TestEmulationAdvancedIntegration:
 
     async def test_set_sensors_geolocation(self) -> None:
         """Test set sensors geolocation."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),

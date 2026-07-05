@@ -13,8 +13,9 @@ class TestA11yIntegration:
     """Test suite for a11yintegration."""
     async def test_a11y_tree(self) -> None:
         """Test a11y tree."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<h1>Title</h1><p>Paragraph</p>",
                 WaitStrategy(strategy="load"),
@@ -25,8 +26,9 @@ class TestA11yIntegration:
 
     async def test_a11y_node(self) -> None:
         """Test a11y node."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<h1>Title</h1>",
                 WaitStrategy(strategy="load"),

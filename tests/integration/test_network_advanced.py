@@ -13,8 +13,9 @@ class TestNetworkAdvancedIntegration:
     """Test suite for networkadvancedintegration."""
     async def test_block_requests(self) -> None:
         """Test block requests."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),
@@ -23,8 +24,9 @@ class TestNetworkAdvancedIntegration:
 
     async def test_throttle_network(self) -> None:
         """Test throttle network."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),
@@ -35,8 +37,9 @@ class TestNetworkAdvancedIntegration:
 
     async def test_set_cache_disabled(self) -> None:
         """Test set cache disabled."""
-        backend = CDPBackend(BrowserOptions(headless=True))
+        backend = CDPBackend()
         async with backend:
+            await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<html></html>",
                 WaitStrategy(strategy="load"),

@@ -1,0 +1,3 @@
+# Plugins
+
+::: browsix.plugins
