@@ -1719,7 +1719,8 @@ async def _perf_action(
 
     Args:
         url: URL to navigate to.
-        action: Performance action ("metrics", "trace", "profile", "heap", "coverage", "css-coverage").
+        action: Performance action ("metrics", "trace", "profile",
+            "heap", "coverage", "css-coverage").
         duration_ms: Duration in milliseconds for trace/profile actions.
 
     Returns:

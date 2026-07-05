@@ -25,9 +25,10 @@ Example ``pyproject.toml`` for a plugin package::
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.metadata import entry_points
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from browsix.actions.base import BaseAction
 from browsix.backend.base import AbstractBackend

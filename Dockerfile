@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl[cdp,serve] && rm /tmp/*.whl
+RUN pip install --no-cache-dir "$(ls /tmp/*.whl)[cdp,serve]" && rm /tmp/*.whl
 
 ENV CHROME_PATH=/usr/bin/chromium
 
