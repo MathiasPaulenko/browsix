@@ -38,18 +38,21 @@ class BiDiBackend(AbstractBackend):
     Supports: launch, navigate, screenshot, screenshot_selector, pdf, eval,
     raw, close, go_back, go_forward, reload, stop_loading, wait_for,
     list_tabs, new_tab, close_tab, activate_tab, capture_console,
-    capture_logs, DOM methods, storage methods, cookies (get/set/delete/clear),
-    set_headers, set_user_agent, browser_version, emulate_device, set_viewport,
-    set_geolocation, set_timezone, set_dark_mode, set_locale, set_touch_emulation,
+    capture_logs, DOM methods, dom_snapshot, storage methods,
+    cookies (get/set/delete/clear), set_headers, set_user_agent,
+    browser_version, emulate_device, set_viewport, set_geolocation,
+    set_timezone, set_dark_mode, set_locale, set_touch_emulation,
     set_cpu_throttle, set_sensors, new_context, list_contexts, close_context,
     get_window_bounds, set_window_bounds, get_security_state, ignore_cert_errors,
+    perf_metrics, perf_coverage, css_get_styles, css_get_computed,
     dialog_accept, dialog_dismiss, grant_permission, reset_permissions,
     click, type_text, fill, select_option, hover, key_press, drag, tap,
     block_requests, throttle_network, set_cache_disabled, intercept_requests,
     mock_response.
 
-    CDP-only features (HAR, screencast, a11y, downloads, performance,
-    CSS, debug, DOM snapshot, overlay, cache storage, IndexedDB,
+    CDP-only features (HAR, screencast, a11y, downloads, perf_trace,
+    perf_profile, perf_heap_snapshot, perf_css_coverage, css_get_stylesheets,
+    css_get_rules, debug, overlay, cache storage, IndexedDB,
     service workers, animations, WebAuthn, WebAudio, Media, Cast, Bluetooth)
     raise NotImplementedError.
     """
@@ -1013,7 +1016,37 @@ class BiDiBackend(AbstractBackend):
     # ── Performance ───────────────────────────────────────
 
     async def perf_metrics(self) -> dict[str, Any]:
-        raise NotImplementedError("perf_metrics is not supported by BiDiBackend")
+        """Get performance metrics via JS Performance API.
+
+        Uses script.evaluate to collect performance.timing,
+        performance.memory, and navigation timing data.
+
+        Returns:
+            Dict mapping metric names to values.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        js = (
+            "JSON.stringify({"
+            "  navigationStart: performance.timing.navigationStart,"
+            "  loadEventEnd: performance.timing.loadEventEnd,"
+            "  domContentLoadedEventEnd: performance.timing.domContentLoadedEventEnd,"
+            "  responseEnd: performance.timing.responseEnd,"
+            "  domInteractive: performance.timing.domInteractive,"
+            "  domComplete: performance.timing.domComplete,"
+            "  loadEventStart: performance.timing.loadEventStart,"
+            "  jsHeapUsedSize: performance.memory ? performance.memory.usedJSHeapSize : null,"
+            "  jsHeapTotalSize: performance.memory ? performance.memory.totalJSHeapSize : null,"
+            "  jsHeapLimit: performance.memory ? performance.memory.jsHeapSizeLimit : null,"
+            "  resourceCount: performance.getEntriesByType('resource').length,"
+            "  transferSize: performance.getEntriesByType('resource')"
+            "    .reduce((s,e)=>s+(e.transferSize||0),0)"
+            "})"
+        )
+        result = await self._client.script.evaluate(self._context, js)
+        import json as _json
+        val = result.value if hasattr(result, "value") else result
+        return _json.loads(val) if isinstance(val, str) else dict(val)
 
     async def perf_trace(self, duration_ms: int = 3000) -> dict[str, Any]:
         raise NotImplementedError("perf_trace is not supported by BiDiBackend")
@@ -1027,7 +1060,22 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def perf_coverage(self) -> dict[str, Any]:
-        raise NotImplementedError("perf_coverage is not supported by BiDiBackend")
+        """Get JS coverage data via CDP Profiler.
+
+        Uses CDP bridge to enable profiler and take precise coverage.
+
+        Returns:
+            Dict with 'result' key containing script coverage entries.
+        """
+        if self._client is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        await self._client.cdp.send_command("Profiler.enable", {})
+        await self._client.cdp.send_command(
+            "Profiler.startPreciseCoverage",
+            {"callCount": True, "detailed": True},
+        )
+        result = await self._client.cdp.send_command("Profiler.takePreciseCoverage", {})
+        return dict(result) if result else {}
 
     async def perf_css_coverage(self) -> dict[str, Any]:
         raise NotImplementedError(
@@ -1037,7 +1085,49 @@ class BiDiBackend(AbstractBackend):
     # ── CSS ────────────────────────────────────────────────
 
     async def css_get_styles(self, selector: str) -> dict[str, Any]:
-        raise NotImplementedError("css_get_styles is not supported by BiDiBackend")
+        """Get inline and matched styles for an element via JS.
+
+        Uses script.evaluate to extract inline styles and matched
+        CSS rules from document.styleSheets for the given selector.
+
+        Args:
+            selector: CSS selector for the target element.
+
+        Returns:
+            Dict containing inlineStyles and matchedStyles.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        escaped = selector.replace("'", "\\'")
+        js = (
+            f"(function(){{"
+            f"  var el=document.querySelector('{escaped}');"
+            f"  if(!el) return null;"
+            f"  var inline=el.getAttribute('style')||'';"
+            f"  var matched=[];"
+            f"  for(var i=0;i<document.styleSheets.length;i++){{"
+            f"    try{{"
+            f"      var sheet=document.styleSheets[i];"
+            f"      var rules=sheet.cssRules||sheet.rules;"
+            f"      for(var j=0;j<rules.length;j++){{"
+            f"        if(el.matches(rules[j].selectorText)){{"
+            f"          matched.push({{"
+            f"            selectorText:rules[j].selectorText,"
+            f"            cssText:rules[j].cssText"
+            f"          }});"
+            f"        }}"
+            f"      }}"
+            f"    }}catch(e){{}}"
+            f"  }}"
+            f"  return JSON.stringify({{inlineStyles:inline,matchedStyles:matched}});"
+            f"}})()"
+        )
+        result = await self._client.script.evaluate(self._context, js)
+        val = result.value if hasattr(result, "value") else result
+        if not val:
+            raise RuntimeError(f"Element not found: {selector}")
+        import json as _json
+        return _json.loads(val) if isinstance(val, str) else dict(val)
 
     async def css_get_stylesheets(self) -> list[dict[str, Any]]:
         raise NotImplementedError(
@@ -1048,9 +1138,36 @@ class BiDiBackend(AbstractBackend):
         raise NotImplementedError("css_get_rules is not supported by BiDiBackend")
 
     async def css_get_computed(self, selector: str) -> dict[str, Any]:
-        raise NotImplementedError(
-            "css_get_computed is not supported by BiDiBackend"
+        """Get computed styles for an element via JS getComputedStyle.
+
+        Args:
+            selector: CSS selector for the target element.
+
+        Returns:
+            Dict mapping CSS property names to computed values.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        escaped = selector.replace("'", "\\'")
+        js = (
+            f"(function(){{"
+            f"  var el=document.querySelector('{escaped}');"
+            f"  if(!el) return null;"
+            f"  var cs=getComputedStyle(el);"
+            f"  var result={{}};"
+            f"  for(var i=0;i<cs.length;i++){{"
+            f"    var prop=cs.item(i);"
+            f"    result[prop]=cs.getPropertyValue(prop);"
+            f"  }}"
+            f"  return JSON.stringify(result);"
+            f"}})()"
         )
+        result = await self._client.script.evaluate(self._context, js)
+        val = result.value if hasattr(result, "value") else result
+        if not val:
+            raise RuntimeError(f"Element not found: {selector}")
+        import json as _json
+        return _json.loads(val) if isinstance(val, str) else dict(val)
 
     # ── Debugging ──────────────────────────────────────────
 
@@ -1094,7 +1211,19 @@ class BiDiBackend(AbstractBackend):
     # ── DOM Snapshot ───────────────────────────────────────
 
     async def dom_snapshot(self) -> dict[str, Any]:
-        raise NotImplementedError("dom_snapshot is not supported by BiDiBackend")
+        """Capture a DOM snapshot via JS.
+
+        Uses script.evaluate to serialize the full DOM tree.
+
+        Returns:
+            Dict containing 'html' with the full outerHTML.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        js = "document.documentElement.outerHTML"
+        result = await self._client.script.evaluate(self._context, js)
+        html = result.value if hasattr(result, "value") else result
+        return {"html": str(html)}
 
     # ── Overlay ────────────────────────────────────────────
 

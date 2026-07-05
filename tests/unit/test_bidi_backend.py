@@ -95,6 +95,16 @@ class TestBiDiBackend:
                 await backend.set_cpu_throttle(4.0)
             with pytest.raises(RuntimeError, match="not launched"):
                 await backend.set_sensors(MagicMock())
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.perf_metrics()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.perf_coverage()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.css_get_styles("h1")
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.css_get_computed("h1")
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.dom_snapshot()
 
     async def test_bidi_paridad_methods_raise_runtime_without_launch(self) -> None:
         with patch("browsix.backend.bidi.BiDiClient", MagicMock()):
