@@ -105,6 +105,22 @@ class TestBiDiBackend:
                 await backend.css_get_computed("h1")
             with pytest.raises(RuntimeError, match="not launched"):
                 await backend.dom_snapshot()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.perf_css_coverage()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.css_get_stylesheets()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.css_get_rules("0")
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.overlay_highlight("h1")
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.overlay_clear()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.cache_storage_list()
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.cache_storage_entries("my-cache")
+            with pytest.raises(RuntimeError, match="not launched"):
+                await backend.cache_storage_delete("my-cache")
 
     async def test_bidi_paridad_methods_raise_runtime_without_launch(self) -> None:
         with patch("browsix.backend.bidi.BiDiClient", MagicMock()):

@@ -44,15 +44,16 @@ class BiDiBackend(AbstractBackend):
     set_timezone, set_dark_mode, set_locale, set_touch_emulation,
     set_cpu_throttle, set_sensors, new_context, list_contexts, close_context,
     get_window_bounds, set_window_bounds, get_security_state, ignore_cert_errors,
-    perf_metrics, perf_coverage, css_get_styles, css_get_computed,
+    perf_metrics, perf_coverage, perf_css_coverage, css_get_styles,
+    css_get_computed, css_get_stylesheets, css_get_rules, overlay_highlight,
+    overlay_clear, cache_storage_list, cache_storage_entries, cache_storage_delete,
     dialog_accept, dialog_dismiss, grant_permission, reset_permissions,
     click, type_text, fill, select_option, hover, key_press, drag, tap,
     block_requests, throttle_network, set_cache_disabled, intercept_requests,
     mock_response.
 
     CDP-only features (HAR, screencast, a11y, downloads, perf_trace,
-    perf_profile, perf_heap_snapshot, perf_css_coverage, css_get_stylesheets,
-    css_get_rules, debug, overlay, cache storage, IndexedDB,
+    perf_profile, perf_heap_snapshot, debug, IndexedDB,
     service workers, animations, WebAuthn, WebAudio, Media, Cast, Bluetooth)
     raise NotImplementedError.
     """
@@ -1077,9 +1078,23 @@ class BiDiBackend(AbstractBackend):
         return dict(result) if result else {}
 
     async def perf_css_coverage(self) -> dict[str, Any]:
-        raise NotImplementedError(
-            "perf_css_coverage is not supported by BiDiBackend"
+        """Get CSS rule usage coverage via CDP.
+
+        Uses CDP bridge to CSS.startRuleUsageTracking and stop.
+
+        Returns:
+            Dict with CSS coverage data.
+        """
+        if self._client is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        await self._client.cdp.send_command("CSS.enable", {})
+        await self._client.cdp.send_command("CSS.startRuleUsageTracking", {})
+        import asyncio as _asyncio
+        await _asyncio.sleep(1)
+        result = await self._client.cdp.send_command(
+            "CSS.stopRuleUsageTracking", {},
         )
+        return dict(result) if result else {}
 
     # ── CSS ────────────────────────────────────────────────
 
@@ -1129,12 +1144,55 @@ class BiDiBackend(AbstractBackend):
         return _json.loads(val) if isinstance(val, str) else dict(val)
 
     async def css_get_stylesheets(self) -> list[dict[str, Any]]:
-        raise NotImplementedError(
-            "css_get_stylesheets is not supported by BiDiBackend"
+        """List all stylesheets in the page via JS.
+
+        Returns:
+            List of stylesheet dicts with href, media, and rules count.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        js = (
+            "JSON.stringify(Array.from(document.styleSheets)"
+            ".map(function(s){{"
+            "  return {{"
+            "    href:s.href||'',"
+            "    media:s.media.mediaText||'',"
+            "    disabled:s.disabled,"
+            "    rulesCount:(s.cssRules||s.rules||[]).length"
+            "  }};"
+            "}}))"
         )
+        result = await self._client.script.evaluate(self._context, js)
+        import json as _json
+        val = result.value if hasattr(result, "value") else result
+        return _json.loads(val) if isinstance(val, str) else list(val)
 
     async def css_get_rules(self, stylesheet_id: str) -> list[dict[str, Any]]:
-        raise NotImplementedError("css_get_rules is not supported by BiDiBackend")
+        """Get CSS rules from a stylesheet by index via JS.
+
+        Args:
+            stylesheet_id: Index of the stylesheet (as string).
+
+        Returns:
+            List of CSS rule dicts with selectorText and cssText.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        idx = int(stylesheet_id) if stylesheet_id.isdigit() else 0
+        js = (
+            f"(function(){{"
+            f"  var sheets=document.styleSheets;"
+            f"  if({idx}>=sheets.length) return '[]';"
+            f"  var rules=sheets[{idx}].cssRules||sheets[{idx}].rules||[];"
+            f"  return JSON.stringify(Array.from(rules).map(function(r){{"
+            f"    return {{selectorText:r.selectorText||'',cssText:r.cssText||''}};"
+            f"  }}));"
+            f"}})()"
+        )
+        result = await self._client.script.evaluate(self._context, js)
+        import json as _json
+        val = result.value if hasattr(result, "value") else result
+        return _json.loads(val) if isinstance(val, str) else list(val)
 
     async def css_get_computed(self, selector: str) -> dict[str, Any]:
         """Get computed styles for an element via JS getComputedStyle.
@@ -1229,12 +1287,40 @@ class BiDiBackend(AbstractBackend):
     async def overlay_highlight(
         self, selector: str, color: str = "rgba(255,0,0,0.5)"
     ) -> None:
-        raise NotImplementedError(
-            "overlay_highlight is not supported by BiDiBackend"
+        """Highlight an element via JS outline.
+
+        Args:
+            selector: CSS selector for the element to highlight.
+            color: RGBA color string for the outline.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        escaped = selector.replace("'", "\\'")
+        js = (
+            f"(function(){{"
+            f"  var el=document.querySelector('{escaped}');"
+            f"  if(el){{"
+            f"    el.style.outline='3px solid {color}';"
+            f"    el.dataset.browsixHighlight='1';"
+            f"  }}"
+            f"}})()"
         )
+        await self._client.script.evaluate(self._context, js)
 
     async def overlay_clear(self) -> None:
-        raise NotImplementedError("overlay_clear is not supported by BiDiBackend")
+        """Clear all highlight overlays via JS."""
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        js = (
+            "(function(){"
+            "  document.querySelectorAll('[data-browsix-highlight]')"
+            "    .forEach(function(el){"
+            "      el.style.outline='';"
+            "      delete el.dataset.browsixHighlight;"
+            "    });"
+            "})()"
+        )
+        await self._client.script.evaluate(self._context, js)
 
     # ── Storage ────────────────────────────────────────────
 
@@ -1295,17 +1381,62 @@ class BiDiBackend(AbstractBackend):
         return items
 
     async def cache_storage_list(self) -> list[str]:
-        raise NotImplementedError("cache_storage_list is not supported by BiDiBackend")
+        """List cache storage names via JS Cache API.
 
-    async def cache_storage_entries(self, cache_name: str) -> list[dict[str, Any]]:
-        raise NotImplementedError(
-            "cache_storage_entries is not supported by BiDiBackend"
+        Returns:
+            List of cache names.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        js = (
+            "caches.keys().then(function(names){"
+            "  return JSON.stringify(names);"
+            "})"
         )
+        result = await self._client.script.evaluate(self._context, js)
+        import json as _json
+        val = result.value if hasattr(result, "value") else result
+        return _json.loads(val) if isinstance(val, str) else list(val)
+
+    async def cache_storage_entries(
+        self, cache_name: str,
+    ) -> list[dict[str, Any]]:
+        """List entries in a cache via JS Cache API.
+
+        Args:
+            cache_name: Name of the cache to list entries from.
+
+        Returns:
+            List of entry dicts with url and status.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        escaped = cache_name.replace("'", "\\'")
+        js = (
+            f"caches.open('{escaped}').then(function(cache){{"
+            f"  return cache.keys().then(function(requests){{"
+            f"    return JSON.stringify(requests.map(function(r){{"
+            f"      return {{url:r.url, method:r.method}};"
+            f"    }}));"
+            f"  }});"
+            f"}})"
+        )
+        result = await self._client.script.evaluate(self._context, js)
+        import json as _json
+        val = result.value if hasattr(result, "value") else result
+        return _json.loads(val) if isinstance(val, str) else list(val)
 
     async def cache_storage_delete(self, cache_name: str) -> None:
-        raise NotImplementedError(
-            "cache_storage_delete is not supported by BiDiBackend"
-        )
+        """Delete a cache by name via JS Cache API.
+
+        Args:
+            cache_name: Name of the cache to delete.
+        """
+        if self._client is None or self._context is None:
+            raise RuntimeError("BiDiBackend not launched. Call launch() first.")
+        escaped = cache_name.replace("'", "\\'")
+        js = f"caches.delete('{escaped}')"
+        await self._client.script.evaluate(self._context, js)
 
     async def indexeddb_list(self) -> list[dict[str, Any]]:
         raise NotImplementedError("indexeddb_list is not supported by BiDiBackend")
