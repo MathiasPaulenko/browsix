@@ -150,6 +150,31 @@ async def _dispatch(
         np = NavigateParams(url=params.get("url", ""))
         return await NavigateAction(np).execute(backend)
 
+    if action_type == "click":
+        from browsix.actions.input import InputAction
+        from browsix.config import InputParams, WaitStrategy
+
+        ip = InputParams(
+            url=params.get("url", ""),
+            action="click",
+            selector=params.get("selector", ""),
+            wait=WaitStrategy(strategy="load"),
+        )
+        return await InputAction(ip).execute(backend)
+
+    if action_type == "type":
+        from browsix.actions.input import InputAction
+        from browsix.config import InputParams, WaitStrategy
+
+        ip = InputParams(
+            url=params.get("url", ""),
+            action="type",
+            selector=params.get("selector", ""),
+            text=params.get("text", ""),
+            wait=WaitStrategy(strategy="load"),
+        )
+        return await InputAction(ip).execute(backend)
+
     raise MultiConfigError(
         "action_type",
         f"Unknown action type: {action_type}",

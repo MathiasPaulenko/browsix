@@ -24,7 +24,7 @@ from browsix.config import (
 )
 from browsix.exceptions import BrowsixError
 
-__version__ = "1.0.1"
+__version__ = "1.4.0"
 
 
 def _import_aiohttp() -> Any:
@@ -279,6 +279,116 @@ async def handle_version(request: Any) -> Any:
     return web.json_response({"version": __version__})
 
 
+async def handle_auth(request: Any) -> Any:
+    """Handle POST /auth — apply auth context and navigate."""
+    web = _import_aiohttp()
+    from browsix.auth import load_auth_context
+    from browsix.config import CookieParams
+
+    data = await request.json()
+    context_path = data.get("context", "")
+    url = data.get("url", "")
+    ctx = load_auth_context(context_path)
+    backend = await _get_backend(request)
+    await backend.launch(BrowserOptions())
+    try:
+        if ctx.headers:
+            await backend.set_headers(ctx.headers)
+        if ctx.username and ctx.password:
+            import base64
+
+            cred = base64.b64encode(
+                f"{ctx.username}:{ctx.password}".encode()
+            ).decode()
+            await backend.set_headers({"Authorization": f"Basic {cred}"})
+        await backend.navigate(url, WaitStrategy(strategy="load"))
+        for cookie in ctx.cookies:
+            cp = CookieParams(
+                name=cookie.get("name", ""),
+                value=cookie.get("value", ""),
+                domain=cookie.get("domain", ""),
+                path=cookie.get("path", "/"),
+            )
+            await backend.set_cookie(cp)
+        await backend.navigate(url, WaitStrategy(strategy="load"))
+    finally:
+        await backend.close()
+    return web.json_response({"status": "ok", "url": url})
+
+
+async def handle_user_agent(request: Any) -> Any:
+    """Handle POST /user-agent — set custom user agent."""
+    web = _import_aiohttp()
+    data = await request.json()
+    ua = data.get("user_agent", "")
+    url = data.get("url", "")
+    backend = await _get_backend(request)
+    await backend.launch(BrowserOptions())
+    try:
+        await backend.set_user_agent(ua)
+        await backend.navigate(url, WaitStrategy(strategy="load"))
+    finally:
+        await backend.close()
+    return web.json_response({"status": "ok", "user_agent": ua})
+
+
+async def handle_headers(request: Any) -> Any:
+    """Handle POST /headers — set custom HTTP headers."""
+    web = _import_aiohttp()
+    data = await request.json()
+    headers = data.get("headers", {})
+    url = data.get("url", "")
+    backend = await _get_backend(request)
+    await backend.launch(BrowserOptions())
+    try:
+        await backend.set_headers(headers)
+        await backend.navigate(url, WaitStrategy(strategy="load"))
+    finally:
+        await backend.close()
+    return web.json_response({"status": "ok", "headers": headers})
+
+
+async def handle_device(request: Any) -> Any:
+    """Handle POST /device — emulate a device preset."""
+    web = _import_aiohttp()
+    data = await request.json()
+    device = data.get("device", "")
+    url = data.get("url", "")
+    backend = await _get_backend(request)
+    await backend.launch(BrowserOptions())
+    try:
+        await backend.emulate_device(device)
+        await backend.navigate(url, WaitStrategy(strategy="load"))
+    finally:
+        await backend.close()
+    return web.json_response({"status": "ok", "device": device})
+
+
+async def handle_multi(request: Any) -> Any:
+    """Handle POST /multi — execute multiple actions from YAML."""
+    web = _import_aiohttp()
+    from pathlib import Path
+
+    from browsix.record import replay_from_yaml
+
+    data = await request.json()
+    yaml_path = data.get("config", "")
+    backend = await _get_backend(request)
+    await backend.launch(BrowserOptions(headless=True))
+    try:
+        results = await replay_from_yaml(Path(yaml_path), backend)
+    finally:
+        await backend.close()
+    return web.json_response({
+        "status": "ok",
+        "actions": len(results),
+        "results": [
+            len(r) if isinstance(r, bytes) else str(r)[:200]
+            for r in results
+        ],
+    })
+
+
 # ── App factory ─────────────────────────────────────────────
 
 
@@ -316,6 +426,11 @@ def create_app(backend_name: str | None = None) -> Any:
     app.router.add_post("/input/type", handle_input_type)
     app.router.add_post("/perf/metrics", handle_perf_metrics)
     app.router.add_post("/perf/trace", handle_perf_trace)
+    app.router.add_post("/auth", handle_auth)
+    app.router.add_post("/user-agent", handle_user_agent)
+    app.router.add_post("/headers", handle_headers)
+    app.router.add_post("/device", handle_device)
+    app.router.add_post("/multi", handle_multi)
     app.router.add_get("/health", handle_health)
     app.router.add_get("/backends", handle_backends)
     app.router.add_get("/version", handle_version)

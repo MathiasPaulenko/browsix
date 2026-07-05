@@ -2131,18 +2131,61 @@ def animation(
 def record(
     url: str = typer.Argument(..., help="URL to record"),
     output: str = typer.Option("session.yml", "-o", "--output", help="Output YAML file"),
+    actions: str = typer.Option(
+        "screenshot,eval",
+        "--actions",
+        help="Comma-separated action types to record "
+             "(screenshot,eval,navigate,click,type,scrape,pdf,dom)",
+    ),
+    selector: str = typer.Option(
+        "#button", "--selector", help="CSS selector for click/type actions",
+    ),
+    text: str = typer.Option("hello", "--text", help="Text for type action"),
+    expression: str = typer.Option(
+        "document.title", "--expression", help="JS expression for eval action",
+    ),
 ) -> None:
     """Record a browsing session to YAML for later replay."""
     from pathlib import Path
 
     from browsix.record import record_to_yaml
 
-    actions = [
-        {"screenshot": {"url": url, "output": "screenshot.png"}},
-        {"eval": {"url": url, "expression": "document.title"}},
-    ]
-    record_to_yaml(actions, Path(output))
-    _echo(f"Recorded {len(actions)} actions to {output}")
+    action_types = [a.strip() for a in actions.split(",") if a.strip()]
+    action_list: list[dict[str, Any]] = []
+    for at in action_types:
+        if at == "screenshot":
+            action_list.append({"screenshot": {"url": url, "output": "screenshot.png"}})
+        elif at == "eval":
+            action_list.append({"eval": {"url": url, "expression": expression}})
+        elif at == "navigate":
+            action_list.append({"navigate": {"url": url}})
+        elif at == "click":
+            action_list.append({"dom": {"url": url, "action": "get", "selector": selector}})
+        elif at == "type":
+            action_list.append({
+                "eval": {
+                    "url": url,
+                    "expression": f"document.querySelector('{selector}').value='{text}'",
+                },
+            })
+        elif at == "scrape":
+            action_list.append({
+                "scrape": {"url": url, "expression": expression},
+            })
+        elif at == "pdf":
+            action_list.append({"pdf": {"url": url, "paper": "a4"}})
+        elif at == "dom":
+            action_list.append({"dom": {"url": url, "action": "get", "selector": "body"}})
+        else:
+            typer.echo(f"Unknown action type: {at}", err=True)
+            raise typer.Exit(2)
+
+    if not action_list:
+        typer.echo("No actions to record", err=True)
+        raise typer.Exit(2)
+
+    record_to_yaml(action_list, Path(output))
+    _echo(f"Recorded {len(action_list)} actions to {output}")
 
 
 @app.command()
@@ -2403,6 +2446,81 @@ def _write_json_output(
         with open(output, "w") as f:  # noqa: ASYNC230
             json.dump(result, f, indent=2, default=str)
         _echo(f"Saved {label} to {output}")
+
+
+@app.command()
+def auth(
+    context: str = typer.Argument(..., help="Path to auth context JSON file"),
+    url: str = typer.Argument(..., help="URL to navigate to with auth context"),
+    output: str = typer.Option("-", "-o", "--output", help="Output file (- for stdout)"),
+    screenshot: bool = typer.Option(
+        False, "--screenshot", help="Take screenshot after applying auth",
+    ),
+) -> None:
+    """Apply auth context (cookies, headers, basic auth) and navigate to a URL."""
+    from browsix.auth import load_auth_context
+    from browsix.config import CookieParams
+
+    ctx = load_auth_context(context)
+
+    async def _run_auth() -> Any:
+        backend = _get_backend()
+        await backend.launch(BrowserOptions(headless=True))
+        try:
+            if ctx.headers:
+                await backend.set_headers(ctx.headers)
+            if ctx.username and ctx.password:
+                auth_header = {
+                    "Authorization": f"Basic {_basic_auth(ctx.username, ctx.password)}"
+                }
+                await backend.set_headers(auth_header)
+            await backend.navigate(url, WaitStrategy(strategy="load"))
+            for cookie in ctx.cookies:
+                cp = CookieParams(
+                    name=cookie.get("name", ""),
+                    value=cookie.get("value", ""),
+                    domain=cookie.get("domain", ""),
+                    path=cookie.get("path", "/"),
+                )
+                await backend.set_cookie(cp)
+            await backend.navigate(url, WaitStrategy(strategy="load"))
+            if screenshot:
+                return await backend.screenshot(
+                    ScreenshotParams(
+                        url=url, wait=WaitStrategy(strategy="load"),
+                    ),
+                )
+            return await backend.eval(
+                EvalParams(
+                    url=url,
+                    expression="document.title",
+                    wait=WaitStrategy(strategy="load"),
+                ),
+            )
+        finally:
+            await backend.close()
+
+    try:
+        result = asyncio.run(_run_auth())
+    except BrowsixError as e:
+        _handle_error(e)
+        return
+
+    if isinstance(result, bytes):
+        out = output or "auth_result.png"
+        with open(out, "wb") as f:  # noqa: ASYNC230
+            f.write(result)
+        _echo(f"Screenshot saved to {out}")
+    elif isinstance(result, str):
+        typer.echo(result)
+    else:
+        _write_json_output(result, output, "auth result")
+
+
+def _basic_auth(username: str, password: str) -> str:
+    """Encode basic auth credentials as base64."""
+    import base64
+    return base64.b64encode(f"{username}:{password}".encode()).decode()
 
 
 if __name__ == "__main__":

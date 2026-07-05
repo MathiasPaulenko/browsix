@@ -55,6 +55,11 @@ class TestServeCreateApp:
         assert "/input/type" in routes
         assert "/perf/metrics" in routes
         assert "/perf/trace" in routes
+        assert "/auth" in routes
+        assert "/user-agent" in routes
+        assert "/headers" in routes
+        assert "/device" in routes
+        assert "/multi" in routes
         assert "/health" in routes
         assert "/backends" in routes
         assert "/version" in routes
