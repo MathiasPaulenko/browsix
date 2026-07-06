@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import shlex
 from typing import Any
 
@@ -81,11 +80,11 @@ async def execute_repl_command(
             format="png",
             wait=WaitStrategy(strategy="load"),
         )
-        result = await backend.screenshot(params)
+        screenshot_data = await backend.screenshot(params)
         filename = args[0] if args else "screenshot.png"
         with open(filename, "wb") as f:  # noqa: ASYNC230
-            f.write(result)
-        return f"Screenshot saved to {filename} ({len(result)} bytes)"
+            f.write(screenshot_data)
+        return f"Screenshot saved to {filename} ({len(screenshot_data)} bytes)"
 
     if command == "eval":
         if not args:
@@ -125,17 +124,17 @@ async def execute_repl_command(
         return f"Pressed {args[0]}"
 
     if command == "cookies":
-        result = await backend.get_cookies()
         import json
-        return json.dumps(result, indent=2, default=str)
+        cookies_data = await backend.get_cookies()
+        return json.dumps(cookies_data, indent=2, default=str)
 
     if command == "url":
-        result = await backend.eval("window.location.href", await_promise=False)
-        return str(result)
+        url_data = await backend.eval("window.location.href", await_promise=False)
+        return str(url_data)
 
     if command == "title":
-        result = await backend.eval("document.title", await_promise=False)
-        return str(result)
+        title_data = await backend.eval("document.title", await_promise=False)
+        return str(title_data)
 
     if command == "wait":
         if not args:
@@ -146,11 +145,11 @@ async def execute_repl_command(
     if command in ("back", "forward", "reload"):
         from browsix.actions.navigate import BackAction, ForwardAction, ReloadAction
         if command == "back":
-            await BackAction(None).execute(backend)  # type: ignore[arg-type]
+            await BackAction(None).execute(backend)
         elif command == "forward":
-            await ForwardAction(None).execute(backend)  # type: ignore[arg-type]
+            await ForwardAction(None).execute(backend)
         else:
-            await ReloadAction(None).execute(backend)  # type: ignore[arg-type]
+            await ReloadAction(False).execute(backend)
         return f"{command.capitalize()} done"
 
     if command in ("exit", "quit"):
