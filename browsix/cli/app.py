@@ -984,13 +984,13 @@ def _multi_watch(config_path: Any) -> None:
             except BrowsixError as e:
                 _handle_error(e)
 
-            typer.echo(f"  Waiting for changes...")
+            typer.echo("  Waiting for changes...")
             while True:
                 time.sleep(1)
                 current_mtime = config_path.stat().st_mtime
                 if current_mtime != last_mtime:
                     last_mtime = current_mtime
-                    typer.echo(f"\n  File changed, re-running...")
+                    typer.echo("\n  File changed, re-running...")
                     break
     except KeyboardInterrupt:
         typer.echo("\nStopped watching.")

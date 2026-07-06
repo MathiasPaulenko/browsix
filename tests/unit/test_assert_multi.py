@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from browsix.cli.app import _check_assertion
-from browsix.config import CookieActionParams, CookieParams, HeaderParams, WaitStrategy
 
 
 @pytest.mark.unit
