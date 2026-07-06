@@ -2,6 +2,17 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.0.4 — 2026-07-07
+
+### Refactored
+
+- Extracted `_run_async` helper to eliminate ~60 `try/except asyncio.run` boilerplate patterns in `cli/app.py` (−229 lines net)
+- Added `github-release` job to `release.yml` workflow — automatically creates GitHub Release with changelog notes and dist artifacts on tag push
+- Narrowed `contextlib.suppress(Exception)` to `contextlib.suppress(WavexisError, OSError)` in `repl.py`
+- Narrowed `contextlib.suppress(Exception)` to `contextlib.suppress(WavexisError)` in `actions/lighthouse.py`
+- Removed 9 local `import json as _json` in `backend/bidi.py` — uses top-level `json` import
+- Fixed mypy type errors in `cdp.py`, `scrape.py`, `eval.py`, `cli/app.py`
+
 ## v2.0.3 — 2026-07-06
 
 ### Refactored
