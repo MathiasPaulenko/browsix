@@ -224,7 +224,7 @@ async def repl_loop(
 
         executed.append(line)
 
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(WavexisError, OSError):
         await backend.close()
 
     return executed

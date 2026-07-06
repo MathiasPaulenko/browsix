@@ -1209,9 +1209,8 @@ class BiDiBackend(AbstractBackend):
             "})"
         )
         result = await self._client.script.evaluate(self._context, js)
-        import json as _json
         val = result.value if hasattr(result, "value") else result
-        return _json.loads(val) if isinstance(val, str) else dict(val)
+        return json.loads(val) if isinstance(val, str) else dict(val)
 
     async def perf_trace(self, duration_ms: int = 3000) -> dict[str, Any]:
         """Capture a performance trace via CDP Tracing.
@@ -1346,8 +1345,7 @@ class BiDiBackend(AbstractBackend):
         val = result.value if hasattr(result, "value") else result
         if not val:
             raise RuntimeError(f"Element not found: {selector}")
-        import json as _json
-        return _json.loads(val) if isinstance(val, str) else dict(val)
+        return json.loads(val) if isinstance(val, str) else dict(val)
 
     async def css_get_stylesheets(self) -> list[dict[str, Any]]:
         """List all stylesheets in the page via JS.
@@ -1369,9 +1367,8 @@ class BiDiBackend(AbstractBackend):
             "}}))"
         )
         result = await self._client.script.evaluate(self._context, js)
-        import json as _json
         val = result.value if hasattr(result, "value") else result
-        return _json.loads(val) if isinstance(val, str) else list(val)
+        return json.loads(val) if isinstance(val, str) else list(val)
 
     async def css_get_rules(self, stylesheet_id: str) -> list[dict[str, Any]]:
         """Get CSS rules from a stylesheet by index via JS.
@@ -1396,9 +1393,8 @@ class BiDiBackend(AbstractBackend):
             f"}})()"
         )
         result = await self._client.script.evaluate(self._context, js)
-        import json as _json
         val = result.value if hasattr(result, "value") else result
-        return _json.loads(val) if isinstance(val, str) else list(val)
+        return json.loads(val) if isinstance(val, str) else list(val)
 
     async def css_get_computed(self, selector: str) -> dict[str, Any]:
         """Get computed styles for an element via JS getComputedStyle.
@@ -1429,8 +1425,7 @@ class BiDiBackend(AbstractBackend):
         val = result.value if hasattr(result, "value") else result
         if not val:
             raise RuntimeError(f"Element not found: {selector}")
-        import json as _json
-        return _json.loads(val) if isinstance(val, str) else dict(val)
+        return json.loads(val) if isinstance(val, str) else dict(val)
 
     # ── Debugging ──────────────────────────────────────────
 
@@ -1721,9 +1716,8 @@ class BiDiBackend(AbstractBackend):
             "})"
         )
         result = await self._client.script.evaluate(self._context, js)
-        import json as _json
         val = result.value if hasattr(result, "value") else result
-        return _json.loads(val) if isinstance(val, str) else list(val)
+        return json.loads(val) if isinstance(val, str) else list(val)
 
     async def cache_storage_entries(
         self, cache_name: str,
@@ -1749,9 +1743,8 @@ class BiDiBackend(AbstractBackend):
             f"}})"
         )
         result = await self._client.script.evaluate(self._context, js)
-        import json as _json
         val = result.value if hasattr(result, "value") else result
-        return _json.loads(val) if isinstance(val, str) else list(val)
+        return json.loads(val) if isinstance(val, str) else list(val)
 
     async def cache_storage_delete(self, cache_name: str) -> None:
         """Delete a cache by name via JS Cache API.
@@ -1845,9 +1838,8 @@ class BiDiBackend(AbstractBackend):
             "})"
         )
         result = await self._client.script.evaluate(self._context, js)
-        import json as _json
         val = result.value if hasattr(result, "value") else result
-        return _json.loads(val) if isinstance(val, str) else list(val)
+        return json.loads(val) if isinstance(val, str) else list(val)
 
     async def sw_unregister(self, registration_id: str) -> None:
         """Unregister a service worker by scope via JS.
@@ -1910,9 +1902,8 @@ class BiDiBackend(AbstractBackend):
             "})"
         )
         result = await self._client.script.evaluate(self._context, js)
-        import json as _json
         val = result.value if hasattr(result, "value") else result
-        return _json.loads(val) if isinstance(val, str) else list(val)
+        return json.loads(val) if isinstance(val, str) else list(val)
 
     async def animation_pause(self, animation_id: str) -> None:
         """Pause an animation by index via JS.

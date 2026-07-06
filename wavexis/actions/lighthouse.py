@@ -9,6 +9,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import WavexisError
 
 
 @dataclass
@@ -290,7 +291,7 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
             })()
         """
         console_errors: list[dict[str, Any]] = []
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(WavexisError):
             console_errors = await backend.capture_console(level="error")
 
         bp = await backend.eval(js, await_promise=False)
