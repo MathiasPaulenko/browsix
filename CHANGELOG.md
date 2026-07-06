@@ -2,6 +2,15 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.1.0 — 2026-07-07
+
+### Refactored
+
+- Split `cli/app.py` (~3700 lines) into 10 domain modules: `_shared`, `_navigation`, `_capture`, `_input`, `_network`, `_emulation`, `_debug`, `_perf`, `_experimental`, `_workflow`
+- `cli/app.py` is now a thin orchestrator (~15 lines) that imports domain modules
+- Added `_write_json_output` helper to `_shared.py` for shared JSON output logic
+- Updated unit tests to patch correct domain modules instead of monolithic `app.py`
+
 ## v2.0.6 — 2026-07-07
 
 ### Refactored

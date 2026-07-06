@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from wavexis.cli.app import _print_perf_summary
+from wavexis.cli._perf import _print_perf_summary
 
 
 @pytest.mark.unit
@@ -85,11 +85,9 @@ class TestPerfBackend:
 
     async def test_perf_metrics(self) -> None:
         """Test that _perf calls perf_metrics for metrics type."""
-        import sys
+        from wavexis.cli._perf import _perf
 
-        from wavexis.cli.app import _perf
-
-        app_module = sys.modules["wavexis.cli.app"]
+        import wavexis.cli._perf as _perf_module
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -99,23 +97,21 @@ class TestPerfBackend:
         )
         backend.close = AsyncMock()
 
-        original_get_backend = app_module._get_backend
-        app_module._get_backend = lambda: backend  # type: ignore[assignment]
+        original_get_backend = _perf_module._get_backend
+        _perf_module._get_backend = lambda: backend  # type: ignore[assignment]
 
         try:
             result = await _perf("https://example.com", "metrics", 3000)
             assert result == {"LargestContentfulPaint": 2500}
             backend.perf_metrics.assert_called_once()
         finally:
-            app_module._get_backend = original_get_backend  # type: ignore[assignment]
+            _perf_module._get_backend = original_get_backend  # type: ignore[assignment]
 
     async def test_perf_trace(self) -> None:
         """Test that _perf calls perf_trace for trace type."""
-        import sys
+        from wavexis.cli._perf import _perf
 
-        from wavexis.cli.app import _perf
-
-        app_module = sys.modules["wavexis.cli.app"]
+        import wavexis.cli._perf as _perf_module
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -123,23 +119,21 @@ class TestPerfBackend:
         backend.perf_trace = AsyncMock(return_value={"traceEvents": []})
         backend.close = AsyncMock()
 
-        original_get_backend = app_module._get_backend
-        app_module._get_backend = lambda: backend  # type: ignore[assignment]
+        original_get_backend = _perf_module._get_backend
+        _perf_module._get_backend = lambda: backend  # type: ignore[assignment]
 
         try:
             result = await _perf("https://example.com", "trace", 5000)
             assert result == {"traceEvents": []}
             backend.perf_trace.assert_called_once_with(duration_ms=5000)
         finally:
-            app_module._get_backend = original_get_backend  # type: ignore[assignment]
+            _perf_module._get_backend = original_get_backend  # type: ignore[assignment]
 
     async def test_perf_coverage(self) -> None:
         """Test that _perf calls perf_coverage for coverage type."""
-        import sys
+        from wavexis.cli._perf import _perf
 
-        from wavexis.cli.app import _perf
-
-        app_module = sys.modules["wavexis.cli.app"]
+        import wavexis.cli._perf as _perf_module
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -147,15 +141,15 @@ class TestPerfBackend:
         backend.perf_coverage = AsyncMock(return_value={"result": []})
         backend.close = AsyncMock()
 
-        original_get_backend = app_module._get_backend
-        app_module._get_backend = lambda: backend  # type: ignore[assignment]
+        original_get_backend = _perf_module._get_backend
+        _perf_module._get_backend = lambda: backend  # type: ignore[assignment]
 
         try:
             result = await _perf("https://example.com", "coverage", 3000)
             assert result == {"result": []}
             backend.perf_coverage.assert_called_once()
         finally:
-            app_module._get_backend = original_get_backend  # type: ignore[assignment]
+            _perf_module._get_backend = original_get_backend  # type: ignore[assignment]
 
 
 @pytest.mark.unit
@@ -164,11 +158,9 @@ class TestConsoleEnhancements:
 
     async def test_console_capture_both(self) -> None:
         """Test that _console with capture='both' gets console and logs."""
-        import sys
+        from wavexis.cli._navigation import _console
 
-        from wavexis.cli.app import _console
-
-        app_module = sys.modules["wavexis.cli.app"]
+        import wavexis.cli._navigation as _nav_module
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -181,8 +173,8 @@ class TestConsoleEnhancements:
         )
         backend.close = AsyncMock()
 
-        original_get_backend = app_module._get_backend
-        app_module._get_backend = lambda: backend  # type: ignore[assignment]
+        original_get_backend = _nav_module._get_backend
+        _nav_module._get_backend = lambda: backend  # type: ignore[assignment]
 
         try:
             result = await _console("https://example.com", "all", "both")
@@ -191,15 +183,13 @@ class TestConsoleEnhancements:
             assert result["console"] == [{"level": "error", "text": "JS error"}]
             assert result["logs"] == [{"level": "info", "message": "log entry"}]
         finally:
-            app_module._get_backend = original_get_backend  # type: ignore[assignment]
+            _nav_module._get_backend = original_get_backend  # type: ignore[assignment]
 
     async def test_console_capture_logs_only(self) -> None:
         """Test that _console with capture='logs' only gets logs."""
-        import sys
+        from wavexis.cli._navigation import _console
 
-        from wavexis.cli.app import _console
-
-        app_module = sys.modules["wavexis.cli.app"]
+        import wavexis.cli._navigation as _nav_module
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -210,12 +200,12 @@ class TestConsoleEnhancements:
         )
         backend.close = AsyncMock()
 
-        original_get_backend = app_module._get_backend
-        app_module._get_backend = lambda: backend  # type: ignore[assignment]
+        original_get_backend = _nav_module._get_backend
+        _nav_module._get_backend = lambda: backend  # type: ignore[assignment]
 
         try:
             result = await _console("https://example.com", "all", "logs")
             assert "console" not in result
             assert "logs" in result
         finally:
-            app_module._get_backend = original_get_backend  # type: ignore[assignment]
+            _nav_module._get_backend = original_get_backend  # type: ignore[assignment]

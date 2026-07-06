@@ -53,7 +53,7 @@ class TestErrorHandling:
     def test_backend_not_available_error(self) -> None:
         """Test backend not available error."""
         with patch(
-            "wavexis.cli.app._get_backend",
+            "wavexis.cli._capture._get_backend",
             side_effect=BackendNotAvailableError(),
         ):
             result = runner.invoke(app, ["screenshot", "https://example.com"])
@@ -62,7 +62,7 @@ class TestErrorHandling:
     def test_navigation_error(self) -> None:
         """Test navigation error."""
         with patch(
-            "wavexis.cli.app._get_backend",
+            "wavexis.cli._capture._get_backend",
             side_effect=NavigationError("https://example.com", "timeout"),
         ):
             result = runner.invoke(app, ["screenshot", "https://example.com"])
@@ -71,7 +71,7 @@ class TestErrorHandling:
     def test_wait_timeout_error(self) -> None:
         """Test wait timeout error."""
         with patch(
-            "wavexis.cli.app._get_backend",
+            "wavexis.cli._capture._get_backend",
             side_effect=WaitTimeoutError("load", 30000),
         ):
             result = runner.invoke(app, ["screenshot", "https://example.com"])
@@ -80,7 +80,7 @@ class TestErrorHandling:
     def test_element_not_found_error(self) -> None:
         """Test element not found error."""
         with patch(
-            "wavexis.cli.app._get_backend",
+            "wavexis.cli._capture._get_backend",
             side_effect=ElementNotFoundError("#nonexistent"),
         ):
             result = runner.invoke(app, ["screenshot", "https://example.com"])
@@ -89,7 +89,7 @@ class TestErrorHandling:
     def test_multi_config_error(self) -> None:
         """Test multi config error."""
         with patch(
-            "wavexis.cli.app._get_backend",
+            "wavexis.cli._workflow._get_backend",
             side_effect=MultiConfigError("actions", "missing key"),
         ):
             result = runner.invoke(app, ["multi", "config.yml"])
@@ -98,7 +98,7 @@ class TestErrorHandling:
     def test_generic_wavexis_error(self) -> None:
         """Test generic wavexis error."""
         with patch(
-            "wavexis.cli.app._get_backend",
+            "wavexis.cli._capture._get_backend",
             side_effect=WavexisError("something went wrong"),
         ):
             result = runner.invoke(app, ["screenshot", "https://example.com"])
