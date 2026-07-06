@@ -1330,15 +1330,12 @@ class CDPBackend(AbstractBackend):
         """
         if self._session is None:
             raise NavigationError("", "Session not initialized.")
-        result = await self._session.send(
-            "Accessibility.getPartialAXTree",
-            {"nodeId": node_id},
-        )
+        result = await self._session.send("Accessibility.getFullAXTree")
         nodes = result.get("nodes", [])
         for node in nodes:
             if node.get("nodeId") == node_id:
                 return dict(node)
-        return dict(nodes[0]) if nodes else {}
+        return {}
 
     async def a11y_ancestors(self, node_id: str) -> list[dict[str, Any]]:
         """Get ancestor nodes of an accessibility node.
@@ -1351,10 +1348,7 @@ class CDPBackend(AbstractBackend):
         """
         if self._session is None:
             raise NavigationError("", "Session not initialized.")
-        result = await self._session.send(
-            "Accessibility.getPartialAXTree",
-            {"nodeId": node_id, "fetchRelatives": True},
-        )
+        result = await self._session.send("Accessibility.getFullAXTree")
         nodes = result.get("nodes", [])
         ancestors: list[dict[str, Any]] = []
         for node in nodes:
