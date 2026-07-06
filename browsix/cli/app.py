@@ -2511,9 +2511,40 @@ def record(
     expression: str = typer.Option(
         "document.title", "--expression", help="JS expression for eval action",
     ),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        help=(
+            "Launch non-headless browser and capture real interactions "
+            "(clicks, inputs, navigations)"
+        ),
+    ),
+    duration: int = typer.Option(
+        60, "--duration", "-d", help="Recording duration in seconds (interactive mode)"
+    ),
 ) -> None:
-    """Record a browsing session to YAML for later replay."""
+    """Record a browsing session to YAML for later replay.
+
+    Use --interactive to launch a real browser and capture your interactions.
+    Without --interactive, generates a YAML from specified action types.
+    """
     from pathlib import Path
+
+    if interactive:
+        from browsix.actions.record import record_session
+
+        backend = _get_backend()
+        try:
+            yaml_content = asyncio.run(record_session(backend, url, duration))
+        except BrowsixError as e:
+            _handle_error(e)
+            return
+
+        out_path = Path(output)
+        out_path.write_text(yaml_content, encoding="utf-8")
+        _echo(f"Recorded config saved to {output}")
+        _echo(f"Run with: browsix multi {output}")
+        return
 
     from browsix.record import record_to_yaml
 
@@ -2898,37 +2929,6 @@ def _basic_auth(username: str, password: str) -> str:
     """Encode basic auth credentials as base64."""
     import base64
     return base64.b64encode(f"{username}:{password}".encode()).decode()
-
-
-@app.command()
-def record(
-    url: str = typer.Argument(..., help="URL to navigate to for recording"),
-    output: str = typer.Option(
-        "browsix.yaml", "--output", "-o", help="Output YAML file path"
-    ),
-    duration: int = typer.Option(
-        60, "--duration", "-d", help="Maximum recording duration in seconds"
-    ),
-) -> None:
-    """Record browser interactions and generate a browsix.yaml config.
-
-    Launches a non-headless browser, injects event listeners, and
-    captures clicks, inputs, and navigations. Press Ctrl+C to stop early.
-    """
-    from browsix.actions.record import record_session
-    from pathlib import Path
-
-    backend = _get_backend()
-    try:
-        yaml_content = asyncio.run(record_session(backend, url, duration))
-    except BrowsixError as e:
-        _handle_error(e)
-        return
-
-    out_path = Path(output)
-    out_path.write_text(yaml_content, encoding="utf-8")
-    typer.echo(f"Recorded config saved to {output}")
-    typer.echo(f"Run with: browsix multi {output}")
 
 
 if __name__ == "__main__":

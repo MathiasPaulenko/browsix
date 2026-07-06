@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from typing import Any
 
@@ -130,10 +131,8 @@ async def record_session(
     await backend.eval(_RECORD_SCRIPT, await_promise=False)
 
     events: list[dict[str, Any]] = []
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         await asyncio.sleep(min(duration, 60))
-    except KeyboardInterrupt:
-        pass
 
     try:
         raw = await backend.eval(
@@ -147,9 +146,7 @@ async def record_session(
     except Exception:
         pass
 
-    try:
+    with contextlib.suppress(Exception):
         await backend.close()
-    except Exception:
-        pass
 
     return events_to_yaml(events, url)

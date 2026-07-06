@@ -12,7 +12,7 @@ from typing import Any
 try:
     import yaml as _yaml
 except ImportError:
-    _yaml = None
+    _yaml = None  # type: ignore[assignment]
 
 try:
     from rich.console import Console
