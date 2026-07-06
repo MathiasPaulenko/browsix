@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -52,13 +53,14 @@ class TestSessionSave:
         action = SessionSaveAction(path)
         await action.execute(backend)
 
-        data = json.loads(path.read_text(encoding="utf-8"))
+        with open(path, encoding="utf-8") as f:  # noqa: ASYNC230
+            data = json.load(f)
         assert len(data["cookies"]) == 1
         assert data["cookies"][0]["name"] == "session"
         assert data["local_storage"]["token"] == "xyz"
         assert data["session_storage"]["temp"] == "123"
         assert data["url"] == "https://example.com/page"
-        path.unlink()
+        os.remove(path)
 
     async def test_save_handles_eval_error(self) -> None:
         backend = MagicMock()
@@ -78,7 +80,7 @@ class TestSessionSave:
 
         data = json.loads(result)
         assert data["url"] == ""
-        path.unlink()
+        os.remove(path)
 
 
 class TestSessionLoad:
@@ -109,7 +111,7 @@ class TestSessionLoad:
 
         assert backend.set_cookie.call_count == 1
         assert backend.storage_set.call_count == 2
-        path.unlink()
+        os.remove(path)
 
     async def test_load_empty_session(self) -> None:
         with tempfile.NamedTemporaryFile(
@@ -131,7 +133,7 @@ class TestSessionLoad:
 
         assert backend.set_cookie.call_count == 0
         assert backend.storage_set.call_count == 0
-        path.unlink()
+        os.remove(path)
 
 
 class TestSessionData:
