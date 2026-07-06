@@ -2931,5 +2931,25 @@ def _basic_auth(username: str, password: str) -> str:
     return base64.b64encode(f"{username}:{password}".encode()).decode()
 
 
+@app.command()
+def repl(
+    url: str = typer.Argument(
+        "", help="Optional URL to navigate to before starting the REPL"
+    ),
+) -> None:
+    """Start an interactive REPL session with a live browser.
+
+    Launches a non-headless browser and provides a command prompt
+    to execute actions interactively. Type 'help' for available commands.
+    """
+    from browsix.repl import repl_loop
+
+    backend = _get_backend()
+    try:
+        asyncio.run(repl_loop(backend, url or None))
+    except BrowsixError as e:
+        _handle_error(e)
+
+
 if __name__ == "__main__":
     app()
