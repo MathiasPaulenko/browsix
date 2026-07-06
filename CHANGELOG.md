@@ -2,6 +2,14 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.0.6 — 2026-07-07
+
+### Refactored
+
+- Refactored `replay` command to use a single coroutine instead of 3 sequential `asyncio.run` calls
+- Removed unused `contextlib` import from `cli/app.py`
+- Verified `asyncio.run` is only used in CLI entry point (`cli/app.py`)
+
 ## v2.0.5 — 2026-07-07
 
 ### Fixed
