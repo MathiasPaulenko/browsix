@@ -175,6 +175,43 @@ async def _dispatch(
         )
         return await InputAction(ip).execute(backend)
 
+    if action_type == "cookies":
+        from browsix.actions.cookies import CookieAction
+        from browsix.config import CookieActionParams, CookieParams, WaitStrategy
+
+        cookie_data = params.get("cookie")
+        if cookie_data and isinstance(cookie_data, dict):
+            cookie_obj = CookieParams(
+                name=cookie_data.get("name", ""),
+                value=cookie_data.get("value", ""),
+                domain=cookie_data.get("domain", ""),
+                path=cookie_data.get("path", "/"),
+            )
+        else:
+            cookie_obj = CookieParams()
+        cp = CookieActionParams(
+            url=params.get("url", ""),
+            action=params.get("action", "get"),
+            cookie=cookie_obj,
+            name=params.get("name", ""),
+            domain=params.get("domain", ""),
+            wait=WaitStrategy(strategy="load"),
+        )
+        return await CookieAction(cp).execute(backend)
+
+    if action_type == "headers":
+        from browsix.actions.headers import HeaderAction
+        from browsix.config import HeaderParams, WaitStrategy
+
+        hp = HeaderParams(
+            url=params.get("url", ""),
+            action=params.get("action", "set-headers"),
+            headers=params.get("headers", {}),
+            user_agent=params.get("user_agent", ""),
+            wait=WaitStrategy(strategy="load"),
+        )
+        return await HeaderAction(hp).execute(backend)
+
     from browsix.plugins import get_registry
 
     plugin = get_registry().get_action(action_type)

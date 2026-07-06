@@ -282,8 +282,19 @@ def eval(
         False, "--await-promise", help="Await a returned Promise"
     ),
     file: str | None = typer.Option(None, "--file", help="Read expression from file"),
+    assert_expr: str = typer.Option(
+        "",
+        "--assert",
+        help=(
+            "Assertion: '== value', '!= value', 'contains substring', "
+            "'matches regex'. Exit 0 if pass, 1 if fail"
+        ),
+    ),
 ) -> None:
-    """Evaluate a JavaScript expression on a web page."""
+    """Evaluate a JavaScript expression on a web page.
+
+    Use --assert to create CI gates that pass/fail based on the result.
+    """
     if file and not expression:
         expression = f"@{file}"
     elif file:
@@ -296,9 +307,67 @@ def eval(
         _handle_error(e)
         return
 
+    if assert_expr:
+        passed, message = _check_assertion(result, assert_expr)
+        typer.echo(f"assert: {assert_expr}")
+        typer.echo(f"result: {result}")
+        typer.echo(f"status: {'PASS' if passed else 'FAIL'}")
+        if not passed:
+            typer.echo(f"  {message}", err=True)
+        raise typer.Exit(0 if passed else 1)
+
     Output.write_formatted(result, format, output)
     if output:
         typer.echo(f"Result saved to {output}")
+
+
+def _check_assertion(result: Any, assert_expr: str) -> tuple[bool, str]:
+    """Check if a result satisfies an assertion expression.
+
+    Supported operators:
+        == value   — result equals value (string/number)
+        != value   — result does not equal value
+        contains substring — result contains substring
+        matches regex — result matches regex pattern
+
+    Args:
+        result: The evaluation result.
+        assert_expr: Assertion expression string.
+
+    Returns:
+        Tuple of (passed, message). Message is empty on success.
+    """
+    result_str = str(result)
+
+    if assert_expr.startswith("== "):
+        expected = assert_expr[3:]
+        if result_str == expected:
+            return True, ""
+        return False, f"Expected '{expected}', got '{result_str}'"
+
+    if assert_expr.startswith("!= "):
+        expected = assert_expr[3:]
+        if result_str != expected:
+            return True, ""
+        return False, f"Expected not '{expected}', got '{result_str}'"
+
+    if assert_expr.startswith("contains "):
+        substring = assert_expr[9:]
+        if substring in result_str:
+            return True, ""
+        return False, f"'{result_str}' does not contain '{substring}'"
+
+    if assert_expr.startswith("matches "):
+        import re
+        pattern = assert_expr[8:]
+        if re.search(pattern, result_str):
+            return True, ""
+        return False, f"'{result_str}' does not match /{pattern}/"
+
+    return False, (
+        f"Unknown assertion: {assert_expr}. "
+        "Use: '== value', '!= value', 'contains substring', 'matches regex'"
+    )
 
 
 async def _eval(url: str, expression: str, await_promise: bool, file: str | None) -> Any:
@@ -846,8 +915,16 @@ def multi(
         "--dry-run",
         help="Validate config and show planned actions without launching browser",
     ),
+    watch: bool = typer.Option(
+        False,
+        "--watch",
+        help="Re-execute actions when the config file changes (Ctrl+C to stop)",
+    ),
 ) -> None:
-    """Execute multiple actions from a YAML config file."""
+    """Execute multiple actions from a YAML config file.
+
+    Use --watch to re-run automatically when the config file changes.
+    """
     from pathlib import Path
 
     config_path = Path(config)
@@ -861,6 +938,10 @@ def multi(
         typer.echo(f"Plan: {len(actions)} action(s)")
         for i, desc in enumerate(actions):
             typer.echo(f"  {i + 1}. {desc}")
+        return
+
+    if watch:
+        _multi_watch(config_path)
         return
 
     try:
@@ -877,6 +958,42 @@ def multi(
             typer.echo(f"  Action {i + 1}: {result[:100]}")
         else:
             typer.echo(f"  Action {i + 1}: {type(result).__name__}")
+
+
+def _multi_watch(config_path: Any) -> None:
+    """Watch a config file and re-execute on change.
+
+    Uses polling to detect file modifications (cross-platform compatible).
+
+    Args:
+        config_path: Path to the YAML config file to watch.
+    """
+    import time
+
+    last_mtime = config_path.stat().st_mtime
+    typer.echo(f"Watching {config_path} for changes (Ctrl+C to stop)...")
+
+    try:
+        while True:
+            try:
+                results = asyncio.run(_multi(config_path))
+                typer.echo(
+                    f"[{time.strftime('%H:%M:%S')}] "
+                    f"Completed {len(results)} actions"
+                )
+            except BrowsixError as e:
+                _handle_error(e)
+
+            typer.echo(f"  Waiting for changes...")
+            while True:
+                time.sleep(1)
+                current_mtime = config_path.stat().st_mtime
+                if current_mtime != last_mtime:
+                    last_mtime = current_mtime
+                    typer.echo(f"\n  File changed, re-running...")
+                    break
+    except KeyboardInterrupt:
+        typer.echo("\nStopped watching.")
 
 
 async def _multi(config_path: Any) -> list[Any]:
