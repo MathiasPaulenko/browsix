@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import shlex
 from typing import Any
 
 from browsix.backend.base import AbstractBackend
 from browsix.config import BrowserOptions, ScreenshotParams, WaitStrategy
-
 
 HELP_TEXT = """\
 Available commands:
@@ -219,17 +219,7 @@ async def repl_loop(
 
         executed.append(line)
 
-    with _suppress_close():
+    with contextlib.suppress(Exception):
         await backend.close()
 
     return executed
-
-
-class _suppress_close:
-    """Context manager to suppress exceptions from backend.close()."""
-
-    def __enter__(self) -> _suppress_close:
-        return self
-
-    def __exit__(self, *args: Any) -> bool:
-        return True
