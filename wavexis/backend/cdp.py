@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import time
+from pathlib import Path
 from typing import Any
 
 from wavexis.backend.base import AbstractBackend
@@ -1267,11 +1269,10 @@ class CDPBackend(AbstractBackend):
         """
         if self._session is None:
             raise NavigationError("", "Session not initialized.")
-        import json as _json
 
         body = response.get("body", "")
         if isinstance(body, (dict, list)):
-            body = _json.dumps(body)
+            body = json.dumps(body)
         body_b64 = base64.b64encode(body.encode("utf-8")).decode("ascii")
 
         fulfilled: list[bool] = [False]
@@ -1374,7 +1375,6 @@ class CDPBackend(AbstractBackend):
         """
         if self._session is None:
             raise NavigationError("", "Session not initialized.")
-        import os
         import tempfile
 
         download_dir = tempfile.mkdtemp()
@@ -1385,11 +1385,9 @@ class CDPBackend(AbstractBackend):
 
         await asyncio.sleep(2)
 
-        for fname in os.listdir(download_dir):
-            fpath = os.path.join(download_dir, fname)
-            if os.path.isfile(fpath):  # noqa: ASYNC240
-                with open(fpath, "rb") as f:  # noqa: ASYNC230
-                    return f.read()
+        for fpath in await asyncio.to_thread(list, Path(download_dir).iterdir):
+            if await asyncio.to_thread(Path(fpath).is_file):
+                return await asyncio.to_thread(Path(fpath).read_bytes)
 
         return b""
 
@@ -1585,10 +1583,8 @@ class CDPBackend(AbstractBackend):
                     zf = zipfile.ZipFile(io.BytesIO(raw))
                     for name in zf.namelist():
                         content = zf.read(name).decode("utf-8", errors="replace")
-                        import json as _json
-
-                        trace_events.extend(_json.loads(content).get("traceEvents", []))
-                except Exception:
+                        trace_events.extend(json.loads(content).get("traceEvents", []))
+                except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
                     trace_events.append({"raw_size": len(raw)})
             else:
                 trace_events.append({"error": "No stream handle in tracingComplete"})
@@ -2323,7 +2319,7 @@ class CDPBackend(AbstractBackend):
             )
             for ev in events:
                 players.append(dict(ev.get("player", ev)))
-        except Exception:
+        except (TimeoutError, KeyError, TypeError):
             pass
         return players
 
@@ -2340,7 +2336,7 @@ class CDPBackend(AbstractBackend):
             for ev in events:
                 if ev.get("playerId") == player_id:
                     messages.append(dict(ev))
-        except Exception:
+        except (TimeoutError, KeyError, TypeError):
             pass
         return messages
 

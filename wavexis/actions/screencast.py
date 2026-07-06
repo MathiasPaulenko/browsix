@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import os
+import asyncio
+from pathlib import Path
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
@@ -38,13 +39,14 @@ class ScreencastAction(BaseAction[ScreencastParams, list[str]]):
         finally:
             await backend.close()
 
-        os.makedirs(self._output_dir, exist_ok=True)
+        await asyncio.to_thread(
+            lambda: Path(self._output_dir).mkdir(parents=True, exist_ok=True)
+        )
         saved: list[str] = []
         for i, frame in enumerate(frames):
             ext = "png" if self.params.format == "png" else "jpg"
             fname = f"frame_{i:05d}.{ext}"
-            fpath = os.path.join(self._output_dir, fname)
-            with open(fpath, "wb") as f:  # noqa: ASYNC230
-                f.write(frame)
+            fpath = str(Path(self._output_dir) / fname)
+            await asyncio.to_thread(Path(fpath).write_bytes, frame)
             saved.append(fpath)
         return saved

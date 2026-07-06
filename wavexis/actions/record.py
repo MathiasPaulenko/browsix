@@ -11,6 +11,7 @@ import yaml
 
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import WavexisError
 
 _RECORD_SCRIPT = """
 (function() {
@@ -142,10 +143,10 @@ async def record_session(
             events = json.loads(raw)
         elif isinstance(raw, list):
             events = raw
-    except Exception:
+    except (json.JSONDecodeError, TypeError, WavexisError):
         pass
 
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(WavexisError):
         await backend.close()
 
     return events_to_yaml(events, url)

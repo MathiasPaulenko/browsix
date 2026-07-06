@@ -474,7 +474,7 @@ async def handle_websocket(request: Any) -> Any:
         else:
             await ws.close()
             return ws
-    except Exception:
+    except (json.JSONDecodeError, KeyError, TypeError):
         await ws.close()
         return ws
 

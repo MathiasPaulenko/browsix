@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,9 @@ class ScrapeAction(BaseAction[ScrapeParams, list[dict[str, Any]]]):
         expression = params.expression
 
         if params.file:
-            expression = Path(params.file).read_text(encoding="utf-8")  # noqa: ASYNC240
+            expression = await asyncio.to_thread(
+                lambda: Path(params.file).read_text(encoding="utf-8")
+            )
 
         if not expression:
             expression = "document.title"

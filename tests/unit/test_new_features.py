@@ -20,6 +20,7 @@ from wavexis.actions.session import (
 )
 from wavexis.actions.websocket import WebSocketInterceptAction, WebSocketParams
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import WavexisError
 
 pytestmark = pytest.mark.unit
 
@@ -68,7 +69,7 @@ class TestSessionSave:
         backend.close = AsyncMock()
         backend.get_cookies = AsyncMock(return_value=[])
         backend.storage_list = AsyncMock(side_effect=[{}, {}])
-        backend.eval = AsyncMock(side_effect=Exception("no page"))
+        backend.eval = AsyncMock(side_effect=WavexisError("no page"))
 
         with tempfile.NamedTemporaryFile(
             suffix=".json", delete=False, mode="w"
@@ -273,7 +274,7 @@ class TestFormAction:
         backend.launch = AsyncMock()
         backend.close = AsyncMock()
         backend.navigate = AsyncMock()
-        backend.fill = AsyncMock(side_effect=[None, Exception("not found")])
+        backend.fill = AsyncMock(side_effect=[None, WavexisError("not found")])
 
         params = FormParams(
             url="https://app.com/register",

@@ -2,6 +2,16 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.0.3 — 2026-07-06
+
+### Refactored
+
+- Removed all `# noqa` lint suppressions — converted Typer argument annotations to `Annotated` types (B008), replaced sync file I/O in async functions with `asyncio.to_thread` (ASYNC230, ASYNC240), fixed mutable default argument (B006)
+- Narrowed broad `except Exception` clauses to specific exception types (`WavexisError`, `OSError`, `json.JSONDecodeError`, `KeyError`, `TypeError`, `TimeoutError`, `zipfile.BadZipFile`, `yaml.YAMLError`) across `cli/app.py`, `repl.py`, `serve.py`, `plugins.py`, `actions/record.py`, `actions/form.py`, `actions/crawl.py`, `actions/session.py`, `backend/cdp.py`
+- Replaced 6 module-level mutable globals (`_preferred_backend`, `_verbose`, `_quiet`, `_headless`, `_timeout`, `_proxy`) with `CLIContext` dataclass + `contextvars.ContextVar` for thread-safe state management
+- Removed unused `os` import in `backend/cdp.py` download handler
+- Replaced local `import json as _json` with top-level `json` import in `backend/cdp.py`
+
 ## v2.0.2 — 2026-07-06
 
 ### Changed

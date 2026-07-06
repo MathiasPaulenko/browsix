@@ -9,6 +9,7 @@ import pytest
 from wavexis.actions.crawl import CrawlAction, CrawlParams
 from wavexis.actions.input import InputAction
 from wavexis.config import InputParams, WaitStrategy
+from wavexis.exceptions import WavexisError
 
 pytestmark = pytest.mark.unit
 
@@ -182,6 +183,8 @@ class TestCrawlAction:
             side_effect=[
                 "Page 1",
                 ["https://example.com/about", "https://other.com/page"],
+                "About",
+                [],
             ]
         )
 
@@ -205,6 +208,8 @@ class TestCrawlAction:
             side_effect=[
                 "Blog",
                 ["https://example.com/blog/post1", "https://example.com/about"],
+                "Blog Post 1",
+                [],
             ]
         )
 
@@ -242,7 +247,7 @@ class TestCrawlAction:
 
     async def test_crawl_handles_navigation_error(self) -> None:
         backend = MagicMock()
-        backend.navigate = AsyncMock(side_effect=Exception("Network error"))
+        backend.navigate = AsyncMock(side_effect=WavexisError("Network error"))
         backend.eval = AsyncMock()
 
         params = CrawlParams(

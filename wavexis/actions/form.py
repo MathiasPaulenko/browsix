@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import WavexisError
 
 
 @dataclass
@@ -52,7 +53,7 @@ class FormAction(BaseAction[FormParams, dict[str, Any]]):
                 try:
                     await backend.fill(selector, value)
                     filled += 1
-                except Exception:
+                except WavexisError:
                     pass
 
             submitted = False
@@ -60,7 +61,7 @@ class FormAction(BaseAction[FormParams, dict[str, Any]]):
                 try:
                     await backend.click(self.params.submit)
                     submitted = True
-                except Exception:
+                except WavexisError:
                     pass
 
             return {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,8 @@ class EvalAction(BaseAction[EvalParams, Any]):
 
         expression = params.expression
         if params.file:
-            expression = Path(params.file).read_text(encoding="utf-8")  # noqa: ASYNC240
+            expression = await asyncio.to_thread(
+                lambda: Path(params.file).read_text(encoding="utf-8")
+            )
 
         return await backend.eval(expression, await_promise=params.await_promise)

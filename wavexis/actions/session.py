@@ -11,6 +11,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import CookieParams
+from wavexis.exceptions import WavexisError
 
 
 @dataclass
@@ -69,7 +70,7 @@ class SessionSaveAction(BaseAction[Path, str]):
         local_storage = await backend.storage_list("local")
         session_storage = await backend.storage_list("session")
         url = ""
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(WavexisError):
             url = await backend.eval("window.location.href", await_promise=False)
 
         data = SessionData(

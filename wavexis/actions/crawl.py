@@ -11,6 +11,7 @@ from urllib.parse import urljoin, urlparse
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import WavexisError
 
 
 @dataclass
@@ -63,16 +64,16 @@ class CrawlAction(BaseAction[CrawlParams, list[dict[str, Any]]]):
 
             try:
                 await backend.navigate(url, self.params.wait)
-            except Exception:
+            except WavexisError:
                 continue
 
             title = ""
             links: list[str] = []
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(WavexisError):
                 title = await backend.eval(
                     "document.title", await_promise=False
                 )
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(WavexisError):
                 raw_links = await backend.eval(
                     "Array.from(document.querySelectorAll('a[href]')).map(a => a.href)",
                     await_promise=False,

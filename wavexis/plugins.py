@@ -192,7 +192,7 @@ def _discover_entry_points() -> PluginRegistry:
 
     try:
         eps = entry_points(group=ENTRY_POINT_GROUP)
-    except Exception:
+    except (OSError, ValueError):
         return registry
 
     for ep in eps:

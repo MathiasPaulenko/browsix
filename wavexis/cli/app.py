@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import sys
-from typing import Any
+from dataclasses import dataclass
+from typing import Annotated, Any
 
 import typer
 
@@ -74,19 +76,37 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
-_preferred_backend: str | None = None
-_verbose: bool = False
-_quiet: bool = False
-_headless: bool = True
-_timeout: int = 30000
-_proxy: str | None = None
+@dataclass
+class CLIContext:
+    """Mutable CLI context holding global flags and settings."""
+
+    preferred_backend: str | None = None
+    verbose: bool = False
+    quiet: bool = False
+    headless: bool = True
+    timeout: int = 30000
+    proxy: str | None = None
+
+
+_ctx: contextvars.ContextVar[CLIContext] = contextvars.ContextVar(
+    "wavexis_cli_ctx", default=None
+)
+
+
+def _get_ctx() -> CLIContext:
+    """Get the current CLI context, initializing if needed."""
+    ctx = _ctx.get()
+    if ctx is None:
+        ctx = CLIContext()
+        _ctx.set(ctx)
+    return ctx
 
 
 def _load_global_config() -> None:
     """Load defaults from ~/.wavexis/config.yml if it exists."""
-    global _preferred_backend, _headless, _timeout, _proxy
     from pathlib import Path
 
+    ctx = _get_ctx()
     config_path = Path.home() / ".wavexis" / "config.yml"
     if not config_path.exists():
         return
@@ -96,16 +116,17 @@ def _load_global_config() -> None:
         raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             return
-        if "backend" in raw and _preferred_backend is None:
-            _preferred_backend = str(raw["backend"])
+        if "backend" in raw and ctx.preferred_backend is None:
+            ctx.preferred_backend = str(raw["backend"])
         if "headless" in raw:
-            _headless = bool(raw["headless"])
+            ctx.headless = bool(raw["headless"])
         if "timeout" in raw:
-            _timeout = int(raw["timeout"])
+            ctx.timeout = int(raw["timeout"])
         if "proxy" in raw:
-            _proxy = str(raw["proxy"])
-    except Exception:
-        pass
+            ctx.proxy = str(raw["proxy"])
+    except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+        if ctx.verbose:
+            _echo(f"Warning: failed to load config from {config_path}: {exc}")
 
 
 @app.callback()
@@ -133,17 +154,17 @@ def main_callback(
     ),
 ) -> None:
     """wavexis — browser automation CLI."""
-    global _preferred_backend, _verbose, _quiet, _headless, _timeout, _proxy
     _load_global_config()
-    _preferred_backend = backend
-    _verbose = verbose
-    _quiet = quiet
+    ctx = _get_ctx()
+    ctx.preferred_backend = backend
+    ctx.verbose = verbose
+    ctx.quiet = quiet
     if headed:
-        _headless = False
+        ctx.headless = False
     if timeout > 0:
-        _timeout = timeout
+        ctx.timeout = timeout
     if proxy:
-        _proxy = proxy
+        ctx.proxy = proxy
     if version:
         from wavexis import __version__
 
@@ -153,7 +174,7 @@ def main_callback(
 
 def _echo(msg: str) -> None:
     """Print a message unless quiet mode is active."""
-    if not _quiet:
+    if not _get_ctx().quiet:
         typer.echo(msg)
 
 
@@ -187,19 +208,20 @@ def _handle_error(e: Exception) -> None:
 
 
 def _get_backend() -> Any:
-    """Select a backend using the global preferred backend if set."""
-    return get_manager().select(_preferred_backend)
+    """Select a backend using the preferred backend if set."""
+    return get_manager().select(_get_ctx().preferred_backend)
 
 
 def _browser_options() -> BrowserOptions:
-    """Build BrowserOptions from global CLI state.
+    """Build BrowserOptions from CLI context.
 
     Applies --headed, --timeout, and --proxy global flags.
     """
+    ctx = _get_ctx()
     return BrowserOptions(
-        headless=_headless,
-        timeout=_timeout,
-        proxy=_proxy,
+        headless=ctx.headless,
+        timeout=ctx.timeout,
+        proxy=ctx.proxy,
     )
 
 
@@ -739,7 +761,7 @@ async def _dom(
 
 @app.command()
 def scrape(
-    urls: list[str] = typer.Argument(..., help="URLs to scrape"),  # noqa: B008
+    urls: Annotated[list[str], typer.Argument(help="URLs to scrape")],
     expression: str = typer.Option(
         "document.title", "--expression", "-e", help="JavaScript expression"
     ),
@@ -1288,7 +1310,7 @@ async def _batch(
         async with semaphore:
             try:
                 return await _batch_single(url, action, out_dir, expression)
-            except Exception as exc:
+            except (WavexisError, OSError) as exc:
                 return exc
 
     tasks = [_run_one(u) for u in urls]
@@ -1702,7 +1724,7 @@ def input_scroll(
 def input_upload(
     url: str = typer.Argument(..., help="URL to navigate to"),
     selector: str = typer.Argument(..., help="CSS selector for file input element"),
-    files: list[str] = typer.Argument(..., help="Absolute file paths to upload"),  # noqa: B008
+    files: Annotated[list[str], typer.Argument(help="Absolute file paths to upload")] = ...,
 ) -> None:
     """Upload files to a file input element on a web page."""
     try:
@@ -1761,7 +1783,7 @@ app.add_typer(network_app, name="network")
 
 @network_app.command("block")
 def network_block(
-    patterns: list[str] = typer.Argument(..., help="URL patterns to block (glob-style)"),  # noqa: B008
+    patterns: Annotated[list[str], typer.Argument(help="URL patterns to block (glob-style)")],
 ) -> None:
     """Block requests matching URL patterns."""
     try:
@@ -2311,7 +2333,7 @@ def serve(
     from wavexis.serve import serve as _serve
 
     try:
-        _serve(port=port, host=host, backend=backend or _preferred_backend)
+        _serve(port=port, host=host, backend=backend or _get_ctx().preferred_backend)
     except WavexisError as e:
         _handle_error(e)
         return
@@ -2797,7 +2819,7 @@ def storage(
         if output == "-":
             typer.echo(result)
         else:
-            with open(output, "w") as f:  # noqa: ASYNC230
+            with open(output, "w") as f:
                 f.write(result)
             _echo(f"Saved to {output}")
     else:
@@ -3203,7 +3225,7 @@ def _write_json_output(
     if output == "-":
         typer.echo(json.dumps(result, indent=2, default=str))
     else:
-        with open(output, "w") as f:  # noqa: ASYNC230
+        with open(output, "w") as f:
             json.dump(result, f, indent=2, default=str)
         _echo(f"Saved {label} to {output}")
 
@@ -3256,7 +3278,7 @@ def auth(
 
     if isinstance(result, bytes):
         out = output or "auth_result.png"
-        with open(out, "wb") as f:  # noqa: ASYNC230
+        with open(out, "wb") as f:
             f.write(result)
         _echo(f"Screenshot saved to {out}")
     elif isinstance(result, str):
@@ -3844,13 +3866,16 @@ def ws(
 @app.command()
 def lighthouse(
     url: str = typer.Argument(..., help="URL to audit"),
-    categories: list[str] = typer.Option(  # noqa: B008
-        [], "--category", "-c",
-        help=(
-            "Audit category: performance, accessibility, seo, "
-            "best-practices (repeatable, empty=all)"
+    categories: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--category", "-c",
+            help=(
+                "Audit category: performance, accessibility, seo, "
+                "best-practices (repeatable, empty=all)"
+            ),
         ),
-    ),
+    ] = None,
     output: str | None = typer.Option(
         None, "--output", "-o", help="Output file path (.json)"
     ),
@@ -3865,11 +3890,13 @@ def lighthouse(
     """
     from wavexis.actions.lighthouse import LighthouseAction, LighthouseParams
 
+    cats = categories or []
+
     async def _lighthouse() -> dict[str, Any]:
         backend = _get_backend()
         params = LighthouseParams(
             url=url,
-            categories=categories,
+            categories=cats,
             wait=WaitStrategy(strategy="load"),
         )
         action = LighthouseAction(params)

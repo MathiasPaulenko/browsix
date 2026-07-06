@@ -15,6 +15,13 @@ pytestmark = pytest.mark.unit
 _cli = sys.modules["wavexis.cli.app"]
 
 
+def _fresh_ctx() -> _cli.CLIContext:
+    """Create a fresh CLIContext and set it as the current context."""
+    ctx = _cli.CLIContext()
+    _cli._ctx.set(ctx)
+    return ctx
+
+
 class TestBrowserOptions:
     """Tests for BrowserOptions with proxy and timeout fields."""
 
@@ -45,32 +52,27 @@ class TestBrowserOptionsHelper:
     """Tests for _browser_options() CLI helper."""
 
     def test_default_options(self) -> None:
-        _cli._headless = True
-        _cli._timeout = 30000
-        _cli._proxy = None
+        _fresh_ctx()
         opts = _cli._browser_options()
         assert opts.headless is True
         assert opts.timeout == 30000
         assert opts.proxy is None
 
     def test_headed_options(self) -> None:
-        _cli._headless = False
-        _cli._timeout = 30000
-        _cli._proxy = None
+        ctx = _fresh_ctx()
+        ctx.headless = False
         opts = _cli._browser_options()
         assert opts.headless is False
 
     def test_proxy_options(self) -> None:
-        _cli._headless = True
-        _cli._timeout = 30000
-        _cli._proxy = "http://proxy:8080"
+        ctx = _fresh_ctx()
+        ctx.proxy = "http://proxy:8080"
         opts = _cli._browser_options()
         assert opts.proxy == "http://proxy:8080"
 
     def test_timeout_options(self) -> None:
-        _cli._headless = True
-        _cli._timeout = 60000
-        _cli._proxy = None
+        ctx = _fresh_ctx()
+        ctx.timeout = 60000
         opts = _cli._browser_options()
         assert opts.timeout == 60000
 
@@ -80,15 +82,12 @@ class TestLoadGlobalConfig:
 
     def test_no_config_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(Path, "home", lambda: Path("/nonexistent_home_12345"))
-        _cli._preferred_backend = None
-        _cli._headless = True
-        _cli._timeout = 30000
-        _cli._proxy = None
+        ctx = _fresh_ctx()
         _cli._load_global_config()
-        assert _cli._preferred_backend is None
-        assert _cli._headless is True
-        assert _cli._timeout == 30000
-        assert _cli._proxy is None
+        assert ctx.preferred_backend is None
+        assert ctx.headless is True
+        assert ctx.timeout == 30000
+        assert ctx.proxy is None
 
     def test_loads_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         config_dir = tmp_path / ".wavexis"
@@ -100,16 +99,13 @@ class TestLoadGlobalConfig:
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        _cli._preferred_backend = None
-        _cli._headless = True
-        _cli._timeout = 30000
-        _cli._proxy = None
+        ctx = _fresh_ctx()
         _cli._load_global_config()
 
-        assert _cli._preferred_backend == "bidi"
-        assert _cli._headless is False
-        assert _cli._timeout == 60000
-        assert _cli._proxy == "http://proxy:9090"
+        assert ctx.preferred_backend == "bidi"
+        assert ctx.headless is False
+        assert ctx.timeout == 60000
+        assert ctx.proxy == "http://proxy:9090"
 
     def test_cli_overrides_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -120,14 +116,12 @@ class TestLoadGlobalConfig:
         config_file.write_text("backend: bidi\ntimeout: 60000\n", encoding="utf-8")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        _cli._preferred_backend = "cdp"
-        _cli._headless = True
-        _cli._timeout = 30000
-        _cli._proxy = None
+        ctx = _fresh_ctx()
+        ctx.preferred_backend = "cdp"
         _cli._load_global_config()
 
-        assert _cli._preferred_backend == "cdp"
-        assert _cli._timeout == 60000
+        assert ctx.preferred_backend == "cdp"
+        assert ctx.timeout == 60000
 
 
 class TestConfigCommand:
