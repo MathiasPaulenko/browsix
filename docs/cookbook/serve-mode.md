@@ -70,7 +70,7 @@ Connect to `ws://localhost:8080/ws` and send a JSON subscribe message:
 ```json
 {
     "url": "https://example.com",
-    "events": ["screenshot", "console", "navigation"],
+    "events": ["screenshot", "console", "navigation", "dom_mutation", "perf_metrics"],
     "interval": 1.0,
     "format": "png",
     "quality": 80
@@ -87,6 +87,11 @@ The server sends JSON messages with a `type` field:
 | `screenshot` | Base64-encoded screenshot image |
 | `console` | Console message (deduplicated) |
 | `navigation` | URL change detected |
+| `dom_mutation` | DOM content change detected (polled) |
+| `perf_metrics` | Performance metrics snapshot (LCP, FCP, CLS, etc.) |
+| `network_request` | Network request intercepted |
+| `network_response` | Network response intercepted |
+| `dialog` | JavaScript dialog event |
 | `navigated` | Confirmation of client-initiated navigation |
 | `eval_result` | Result of a client-initiated eval |
 | `error` | Error from a stream source |
@@ -101,6 +106,19 @@ Send JSON commands to control the browser:
 {"action": "screenshot"}
 {"action": "close"}
 ```
+
+### Available event types
+
+| Event | Description | Streaming method |
+|-------|-------------|-----------------|
+| `screenshot` | Periodic screenshots (base64) | Polling |
+| `console` | Console messages (deduplicated) | Polling |
+| `navigation` | URL changes | Polling |
+| `dom_mutation` | DOM content changes | Polling |
+| `perf_metrics` | Performance metrics snapshots | Polling |
+| `network_request` | Network requests | Event subscription |
+| `network_response` | Network responses | Event subscription |
+| `dialog` | JavaScript dialogs | Event subscription |
 
 ### Python client example
 

@@ -12,6 +12,9 @@ These flags go before the subcommand (e.g. `wavexis --headed screenshot <url>`).
 | `--headed` | Run browser in headed mode (visible window) |
 | `--timeout <ms>` | Navigation timeout in milliseconds (default: 30000) |
 | `--proxy <url>` | Proxy server URL (e.g. `http://proxy:8080`, `socks5://proxy:1080`) |
+| `--stealth` | Enable anti-bot stealth mode (hides `navigator.webdriver`, fakes plugins, etc.) |
+| `--browser-url <url>` | Connect to existing browser (e.g. `ws://localhost:9222`) |
+| `--user-data-dir <path>` | Browser user data directory for persistent sessions |
 | `--version` | Print wavexis version and exit |
 
 Global flags can also be set persistently via `wavexis config`:
@@ -364,6 +367,7 @@ wavexis multi <config> [options]
 | `--watch` | Re-run on config file changes |
 | `--dry-run` | Validate and show plan without launching browser |
 | `--parallel` | Execute all actions concurrently instead of sequentially |
+| `--cache-ttl <seconds>` | Cache action results for N seconds (cacheable: screenshot, dom, scrape, eval, cookies, headers) |
 
 ## backends
 
@@ -545,6 +549,60 @@ Bluetooth emulation commands.
 ```bash
 wavexis bluetooth emulate --name "Test Adapter"
 wavexis bluetooth stop
+```
+
+## extension-install
+
+Install a browser extension from a `.crx` file or unpacked directory. See [Extensions & Preferences](extensions.md) for details.
+
+```bash
+wavexis extension-install <path>
+```
+
+Returns the extension ID (32-character hex string).
+
+## extension-uninstall
+
+Uninstall a browser extension by ID.
+
+```bash
+wavexis extension-uninstall <extension-id>
+```
+
+## extension-list
+
+List installed browser extensions.
+
+```bash
+wavexis extension-list
+```
+
+## pref-get
+
+Get a browser preference value by key.
+
+```bash
+wavexis pref-get <key>
+```
+
+Example:
+
+```bash
+wavexis pref-get download.default_directory
+```
+
+## pref-set
+
+Set a browser preference value.
+
+```bash
+wavexis pref-set <key> <value>
+```
+
+Example:
+
+```bash
+wavexis pref-set download.default_directory /tmp/downloads
 ```
 
 ## repl

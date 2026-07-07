@@ -44,6 +44,8 @@ nav:
       - Performance: guide/perf.md
       - CI Assertions: guide/assert.md
       - Backends: guide/backends.md
+      - Stealth Mode: guide/stealth.md
+      - Extensions & Prefs: guide/extensions.md
       - Plugins: guide/plugins.md
       - Raw Protocol: guide/raw.md
       - Troubleshooting: guide/troubleshooting.md

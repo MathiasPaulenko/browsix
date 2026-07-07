@@ -142,6 +142,59 @@ wavexis eval https://example.com -e "document.title" --assert "matches Error \\d
 
 Output includes `assert:`, `result:`, and `status: PASS/FAIL`. Exit code 0 on pass, 1 on fail.
 
+## Stealth mode
+
+Enable anti-bot stealth mode to hide headless browser indicators. Useful for scraping protected sites:
+
+```bash
+# Global flag — applies to all commands
+wavexis --stealth screenshot https://example.com -o out.png
+wavexis --stealth scrape https://protected-site.com --selector "article"
+```
+
+Stealth mode hides `navigator.webdriver`, fakes plugins, languages, chrome runtime, WebGL vendor/renderer, permissions API, `navigator.connection`, `hardwareConcurrency`, `deviceMemory`, and `platform`. Works with both CDP and BiDi backends.
+
+## Action caching
+
+Cache action results to avoid re-analyzing pages when running multi-action workflows repeatedly:
+
+```bash
+# Cache results for 60 seconds
+wavexis multi actions.yml --cache-ttl 60
+```
+
+Cacheable actions: `screenshot`, `dom`, `scrape`, `eval`, `cookies`, `headers`. Cache is keyed by URL, action type, and params hash.
+
+## WebExtension management
+
+Install, uninstall, and list browser extensions:
+
+```bash
+# Install an unpacked extension directory
+wavexis extension-install /path/to/extension/
+
+# Install a .crx file
+wavexis extension-install /path/to/extension.crx
+
+# List installed extensions
+wavexis extension-list
+
+# Uninstall by extension ID
+wavexis extension-uninstall <extension-id>
+```
+
+## Browser preferences
+
+Get and set browser preferences programmatically:
+
+```bash
+# Get a preference
+wavexis pref-get download.default_directory
+
+# Set a preference
+wavexis pref-set download.default_directory /tmp/downloads
+```
+
 ## Performance metrics
 
 Capture Core Web Vitals and performance data:
@@ -216,7 +269,7 @@ curl -X POST http://localhost:8080/screenshot \
   -o screenshot.png
 ```
 
-WebSocket endpoint at `/ws` for real-time streaming of screenshots, console events, and navigation:
+WebSocket endpoint at `/ws` for real-time streaming of screenshots, console events, navigation, DOM mutations, and performance metrics:
 
 ```python
 import aiohttp, json, asyncio
@@ -351,6 +404,9 @@ Both backends implement **all** methods. BiDi uses native BiDi commands, JS work
 | Media | `media_get_players`, `media_get_messages` | CDP bridge |
 | Cast | `cast_list`, `cast_start_tab`, `cast_stop` | CDP bridge |
 | Bluetooth | `bluetooth_emulate`, `bluetooth_stop` | CDP bridge |
+| Extensions | `extension_install`, `extension_uninstall`, `extension_list` | CDP bridge |
+| Preferences | `get_pref`, `set_pref` | CDP bridge |
+| Stealth | `stealth` JS injection on launch | JS |
 
 ## Commands
 
@@ -370,7 +426,8 @@ wavexis provides 100+ CLI commands organized into categories:
 | Debug | `debug-break`, `debug-step`, `debug-pause`, `debug-resume` |
 | Performance | `perf` (metrics, trace, profile, coverage, heap-snapshot, css-coverage) |
 | Storage | `storage` (get/set/clear/list), `indexeddb` |
-| Advanced | `sw`, `animation`, `record`, `replay`, `webauthn`, `cast`, `bluetooth` |
+| Advanced | `sw`, `animation`, `record`, `replay`, `webauthn`, `cast`, `bluetooth`, `extension-install`, `extension-uninstall`, `extension-list` |
+| Preferences | `pref-get`, `pref-set` |
 | Auth | `auth save`, `auth use`, `auth list`, `auth delete` |
 | Serve | `serve` (HTTP API server) |
 | Interactive | `repl` (live browser REPL), `init` (config wizard) |
@@ -406,6 +463,11 @@ Run `wavexis --help` for the full list.
 | CI assertions | Yes | No | No |
 | Performance metrics | Yes | No | No |
 | Watch mode | Yes | No | No |
+| Action caching | Yes | No | No |
+| Stealth mode | Yes | No | No |
+| WebExtension management | Yes | No | No |
+| Browser preferences | Yes | No | No |
+| Live event streaming | Yes | No | No |
 
 ## Documentation
 

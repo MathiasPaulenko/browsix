@@ -372,6 +372,48 @@ This is useful when actions are independent (e.g. scraping multiple URLs). Resul
 wavexis multi config.yml --parallel --watch
 ```
 
+## Action caching
+
+Cache action results to avoid re-analyzing pages when running workflows repeatedly. Useful in watch mode or CI where the same config is executed multiple times.
+
+```bash
+wavexis multi config.yml --cache-ttl 60
+```
+
+### Cacheable actions
+
+| Action | Cached |
+|--------|--------|
+| `screenshot` | Yes |
+| `dom` | Yes |
+| `scrape` | Yes |
+| `eval` | Yes |
+| `cookies` | Yes |
+| `headers` | Yes |
+| `navigate` | No |
+| `click` | No |
+| `type` | No |
+| `pdf` | No |
+| `wait` | No |
+| `emulation` | No |
+
+### How caching works
+
+- Cache is keyed by URL, action type, and a hash of action parameters.
+- TTL (time-to-live) controls how long cached results are valid.
+- On cache hit, the action is skipped and the cached result is returned.
+- Cache is in-memory per `multi` invocation — no persistent storage.
+- Use `--cache-ttl 0` to disable caching (default).
+
+### Example: iterative development
+
+```bash
+# Cache for 120 seconds while iterating on config
+wavexis multi config.yml --watch --cache-ttl 120
+```
+
+Each time the config changes and re-runs, cacheable actions that haven't expired will return instantly.
+
 ## Validation errors
 
 Invalid config files raise `MultiConfigError` with exit code 2:

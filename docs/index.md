@@ -32,6 +32,11 @@ wavexis is a command-line tool for browser automation. It wraps the cdpwave (Chr
 - **Performance metrics** — LCP, FCP, CLS, TTFB, CPU traces, profiles, coverage
 - **Console capture** — console messages and browser logs with level filtering
 - **Raw protocol** — escape hatch for direct CDP/BiDi commands
+- **Action caching** — cache results with `--cache-ttl` to avoid re-analyzing pages
+- **Stealth mode** — `--stealth` flag hides headless indicators for scraping protected sites
+- **WebExtension management** — install, uninstall, and list browser extensions
+- **Browser preferences** — get and set browser prefs programmatically
+- **Live event streaming** — WebSocket streaming with `dom_mutation` and `perf_metrics` event types
 - **Experimental domains** — WebAuthn, WebAudio, Media, Cast, Bluetooth
 - **Fully typed** — `mypy --strict` across the entire codebase
 - **MIT licensed** — permissive, compatible with any use
@@ -79,6 +84,11 @@ wavexis eval https://example.com -e "document.title"
 | `webauthn` | Virtual authenticator management |
 | `cast` | List sinks, start/stop tab mirroring |
 | `bluetooth` | Emulate and stop Bluetooth adapter |
+| `extension-install` | Install a browser extension (.crx or unpacked directory) |
+| `extension-uninstall` | Uninstall a browser extension by ID |
+| `extension-list` | List installed browser extensions |
+| `pref-get` | Get a browser preference value |
+| `pref-set` | Set a browser preference value |
 
 ## Next steps
 
@@ -92,6 +102,8 @@ wavexis eval https://example.com -e "document.title"
 - [CI Assertions](guide/assert.md) — pass/fail gates for CI pipelines
 - [Backends](guide/backends.md) — CDP vs BiDi with full parity
 - [Raw Protocol](guide/raw.md) — escape hatch for direct protocol commands
+- [Stealth Mode](guide/stealth.md) — anti-bot stealth mode for protected sites
+- [Extensions & Prefs](guide/extensions.md) — WebExtension and browser preference management
 - [Cookbook](cookbook/serve-mode.md) — recipes for common scenarios
 - [API Reference](api/cli.md) — auto-generated docs for every module
 - [Troubleshooting](guide/troubleshooting.md) — common errors and solutions

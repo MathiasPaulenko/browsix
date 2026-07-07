@@ -32,7 +32,7 @@ All 100+ methods are supported. Zero `NotImplementedError`.
 |----------|----------|
 | BiDi native | Navigation, screenshots, tabs, cookies, contexts, dialogs, permissions, input, storage |
 | JS workaround | DOM, CSS inspection, overlay, cache storage, service workers, animations |
-| CDP bridge | Performance profiling, accessibility, debug, HAR, IndexedDB, WebAuthn, WebAudio, Media, Cast, Bluetooth, security, downloads |
+| CDP bridge | Performance profiling, accessibility, debug, HAR, IndexedDB, WebAuthn, WebAudio, Media, Cast, Bluetooth, security, downloads, extensions, preferences |
 
 ## Selecting a backend
 
