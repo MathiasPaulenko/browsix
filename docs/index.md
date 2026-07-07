@@ -2,8 +2,6 @@
   <img src="assets/images/logo-wide.svg" alt="wavexis" width="400">
 </div>
 
-# wavexis
-
 Browser automation CLI — wraps [cdpwave](https://pypi.org/project/cdpwave/) and [bidiwave](https://pypi.org/project/bidiwave/).
 
 No Node.js. No Chromium download. Uses your existing Chrome/Edge installation.

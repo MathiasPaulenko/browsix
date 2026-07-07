@@ -6,8 +6,6 @@
 
 ---
 
-# wavexis
-
 [![CI](https://github.com/MathiasPaulenko/wavexis/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasPaulenko/wavexis/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/wavexis.svg)](https://pypi.org/project/wavexis/)
 [![Python](https://img.shields.io/pypi/pyversions/wavexis.svg)](https://pypi.org/project/wavexis/)
