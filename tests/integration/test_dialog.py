@@ -1,5 +1,7 @@
 """Integration tests for dialog handling against real Chrome."""
 
+import asyncio
+
 import pytest
 
 from wavexis.backend.cdp import CDPBackend
@@ -18,8 +20,9 @@ class TestDialogIntegration:
             await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<script>alert('test')</script>",
-                WaitStrategy(strategy="domcontentloaded"),
+                WaitStrategy(strategy="none"),
             )
+            await asyncio.sleep(1)
             await backend.dialog_accept()
 
     async def test_dialog_dismiss(self) -> None:
@@ -29,6 +32,7 @@ class TestDialogIntegration:
             await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<script>confirm('test')</script>",
-                WaitStrategy(strategy="domcontentloaded"),
+                WaitStrategy(strategy="none"),
             )
+            await asyncio.sleep(1)
             await backend.dialog_dismiss()

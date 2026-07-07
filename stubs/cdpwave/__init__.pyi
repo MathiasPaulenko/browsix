@@ -26,6 +26,9 @@ class CDPSession:
     web_authn: Any
     media: Any
 
+    target_id: str
+    session_id: str
+
     async def close(self) -> None: ...
     async def send(self, method: str, params: dict[str, Any] | None = ...) -> dict[str, Any]: ...
     async def wait_for_event(self, event: str, timeout: float = ...) -> dict[str, Any]: ...

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import re
 import time
@@ -1133,7 +1134,7 @@ class CDPBackend(AbstractBackend):
             The browser context ID string.
         """
         session = self._require_session()
-        result = await session.target.create_browser_context()
+        result = await session.send("Target.createBrowserContext", {})
         return str(result.get("browserContextId", ""))
 
     async def list_contexts(self) -> list[dict[str, Any]]:
@@ -1162,9 +1163,12 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict with width, height, left, top.
         """
+        session = self._require_session()
         if self._client is None:
             raise NavigationError("", "Client not initialized.")
-        result = await self._client.browser.get_window_for_target()
+        result = await self._client.browser.get_window_for_target(
+            target_id=session.target_id
+        )
         bounds = result.get("bounds", {})
         return {
             "width": bounds.get("width", 0),
@@ -1184,9 +1188,12 @@ class CDPBackend(AbstractBackend):
             x: Window X position.
             y: Window Y position.
         """
+        session = self._require_session()
         if self._client is None:
             raise NavigationError("", "Client not initialized.")
-        result = await self._client.browser.get_window_for_target()
+        result = await self._client.browser.get_window_for_target(
+            target_id=session.target_id
+        )
         window_id = result.get("windowId", 0)
         bounds = {
             "left": x,
@@ -2627,20 +2634,25 @@ class CDPBackend(AbstractBackend):
     # ── CSS ────────────────────────────────────────────────
 
     async def css_get_styles(self, selector: str) -> dict[str, Any]:
-        """Get inline and matched styles for an element by CSS selector.
+        """Get inline and computed styles for an element by CSS selector.
 
         Args:
             selector: CSS selector for the target element.
 
         Returns:
-            Dict containing inlineStyles and matchedStyles.
+            Dict containing inlineStyles and computedStyles.
         """
         session = self._require_session()
         await session.dom.enable()
-        await session.css.enable()
         node_id = await self._find_node(selector)
-        inline = await session.css.get_inline_styles(node_id)
-        computed = await session.css.get_computed_style_for_node(node_id)
+        try:
+            await session.send("CSS.enable", {})
+            inline = await session.send("CSS.getInlineStyles", {"nodeId": node_id})
+        except Exception:
+            inline = {"inlineStyle": {}, "attributesStyle": {}}
+        computed = await session.send(
+            "CSS.getComputedStyleForNode", {"nodeId": node_id}
+        )
         return {"inlineStyles": inline, "computedStyles": computed}
 
     async def css_get_stylesheets(self) -> list[dict[str, Any]]:
@@ -2651,10 +2663,18 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
         await session.dom.enable()
-        await session.css.enable()
-        result = await session.css.get_layout_tree_and_styles()
-        stylesheets = result.get("stylesheets", [])
-        return [dict(s) for s in stylesheets] if stylesheets else []
+        await session.send("CSS.enable", {})
+        js = """
+            Array.from(document.styleSheets).map((s, i) => ({
+                styleSheetId: String(i),
+                sourceURL: s.href || '',
+                disabled: s.disabled,
+                isInline: !s.href,
+            }))
+        """
+        result = await session.runtime.evaluate(js)
+        value = result.get("result", {}).get("value", [])
+        return [dict(v) for v in value] if value else []
 
     async def css_get_rules(self, stylesheet_id: str) -> list[dict[str, Any]]:
         """Get CSS rules from a specific stylesheet.
@@ -2783,6 +2803,8 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         await session.debugger.enable()
         await session.debugger.pause()
+        with contextlib.suppress(TimeoutError):
+            await session.wait_for_event("Debugger.paused", timeout=5.0)
 
     async def debug_resume(self) -> None:
         """Resume JavaScript execution after a pause."""
