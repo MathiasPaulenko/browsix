@@ -323,6 +323,45 @@ class AbstractBackend(ABC):
             auto_wait: If True, wait for element to be visible before filling.
         """
 
+    # ── Shadow DOM ──────────────────────────────────────────
+
+    @abstractmethod
+    async def shadow_eval(
+        self, selectors: list[str], expression: str, await_promise: bool = False
+    ) -> Any:
+        """Evaluate a JavaScript expression inside a shadow DOM tree.
+
+        Args:
+            selectors: List of CSS selectors piercing shadow boundaries.
+                selectors[0] is in the main document, selectors[1] in
+                selectors[0].shadowRoot, and so on.
+            expression: JavaScript expression to evaluate in the shadow context.
+            await_promise: Whether to await a returned Promise.
+        """
+
+    @abstractmethod
+    async def shadow_click(
+        self, selectors: list[str], auto_wait: bool = True
+    ) -> None:
+        """Click an element inside a shadow DOM tree.
+
+        Args:
+            selectors: List of CSS selectors piercing shadow boundaries.
+            auto_wait: If True, wait for element to be visible before clicking.
+        """
+
+    @abstractmethod
+    async def shadow_fill(
+        self, selectors: list[str], value: str, auto_wait: bool = True
+    ) -> None:
+        """Fill an input element inside a shadow DOM tree.
+
+        Args:
+            selectors: List of CSS selectors piercing shadow boundaries.
+            value: Value to set in the input field.
+            auto_wait: If True, wait for element to be visible before filling.
+        """
+
     # ── Network advanced ───────────────────────────────────
 
     @abstractmethod

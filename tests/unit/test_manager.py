@@ -269,6 +269,13 @@ class FakeBackend(AbstractBackend):
         """Iframe click."""
     async def iframe_fill(self, iframe_selector, selector, value, auto_wait=True):
         """Iframe fill."""
+    async def shadow_eval(self, selectors, expression, await_promise=False):
+        """Shadow eval."""
+        return None
+    async def shadow_click(self, selectors, auto_wait=True):
+        """Shadow click."""
+    async def shadow_fill(self, selectors, value, auto_wait=True):
+        """Shadow fill."""
 
 
 class TestBackendManager:

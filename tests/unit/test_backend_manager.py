@@ -268,6 +268,24 @@ class DummyBackend(AbstractBackend):
         """Iframe fill."""
         pass
 
+    async def shadow_eval(
+        self, selectors: list[str], expression: str, await_promise: bool = False
+    ) -> object:
+        """Shadow eval."""
+        return None
+
+    async def shadow_click(
+        self, selectors: list[str], auto_wait: bool = True
+    ) -> None:
+        """Shadow click."""
+        pass
+
+    async def shadow_fill(
+        self, selectors: list[str], value: str, auto_wait: bool = True
+    ) -> None:
+        """Shadow fill."""
+        pass
+
     async def throttle_network(self, params: object) -> None:
         """Throttle network."""
         pass

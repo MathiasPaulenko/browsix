@@ -1128,6 +1128,135 @@ class BiDiBackend(AbstractBackend):
         if not result_value:
             raise ElementNotFoundError(selector)
 
+    # ── Shadow DOM ──────────────────────────────────────────
+
+    @staticmethod
+    def _build_shadow_pierce_js(selectors: list[str]) -> str:
+        """Build JS that pierces shadow boundaries via a selector chain."""
+        escaped = [s.replace("'", "\\'") for s in selectors]
+        parts = [f"var el=document.querySelector('{escaped[0]}')"]
+        for sel in escaped[1:]:
+            parts.append(
+                f"if(!el||!el.shadowRoot)return null;"
+                f"el=el.shadowRoot.querySelector('{sel}')"
+            )
+        parts.append("return el")
+        body = ";".join(parts)
+        return f"(function(){{{body};}})()"
+
+    async def shadow_eval(
+        self, selectors: list[str], expression: str, await_promise: bool = False
+    ) -> Any:
+        """Evaluate a JavaScript expression inside a shadow DOM tree.
+
+        Args:
+            selectors: List of CSS selectors piercing shadow boundaries.
+            expression: JavaScript expression to evaluate in the shadow context.
+            await_promise: Whether to await a returned Promise.
+
+        Returns:
+            The evaluation result value.
+        """
+        client = self._require_client()
+        pierce_js = self._build_shadow_pierce_js(selectors)
+        escaped_expr = expression.replace("\\", "\\\\").replace("'", "\\'")
+        js = (
+            f"(function(){{var el=({pierce_js});"
+            f"if(!el)return null;"
+            f"return (function(){{{escaped_expr}}}).call(el);}})()"
+        )
+        result = await client.script.evaluate(
+            self._context, js, await_promise=await_promise
+        )
+        if hasattr(result, "value"):
+            return result.value
+        return result
+
+    async def _wait_for_element_in_shadow(
+        self, selectors: list[str], timeout_ms: int = 30000
+    ) -> None:
+        """Wait for an element inside a shadow DOM tree to exist and be visible.
+
+        Args:
+            selectors: List of CSS selectors piercing shadow boundaries.
+            timeout_ms: Maximum wait time in milliseconds.
+
+        Raises:
+            WaitTimeoutError: If the element is not found within the timeout.
+        """
+        import asyncio as _asyncio
+        import time as _time
+
+        client = self._require_client()
+        pierce_js = self._build_shadow_pierce_js(selectors)
+        js = (
+            f"(function(){{var el=({pierce_js});"
+            f"if(!el)return false;"
+            f"var rect=el.getBoundingClientRect();"
+            f"return rect.width>0&&rect.height>0;}})()"
+        )
+        deadline = _time.monotonic() + timeout_ms / 1000
+        while _time.monotonic() < deadline:
+            result = await client.script.evaluate(self._context, js)
+            value = getattr(result, "value", None)
+            if value is True or value == "true":
+                return
+            await _asyncio.sleep(0.1)
+        raise WaitTimeoutError("selector", timeout_ms)
+
+    async def shadow_click(
+        self, selectors: list[str], auto_wait: bool = True
+    ) -> None:
+        """Click an element inside a shadow DOM tree.
+
+        Args:
+            selectors: List of CSS selectors piercing shadow boundaries.
+            auto_wait: If True, wait for element to be visible before clicking.
+        """
+        client = self._require_client()
+        if auto_wait:
+            await self._wait_for_element_in_shadow(selectors)
+        pierce_js = self._build_shadow_pierce_js(selectors)
+        js = (
+            f"(function(){{var el=({pierce_js});"
+            f"if(!el)return false;"
+            f"el.scrollIntoView({{block:'center',behavior:'instant'}});"
+            f"el.dispatchEvent(new MouseEvent('click',{{bubbles:true,composed:true}}));"
+            f"return true;}})()"
+        )
+        result = await client.script.evaluate(self._context, js)
+        result_value = getattr(result, "value", None)
+        if not result_value:
+            raise ElementNotFoundError(" -> ".join(selectors))
+
+    async def shadow_fill(
+        self, selectors: list[str], value: str, auto_wait: bool = True
+    ) -> None:
+        """Fill an input element inside a shadow DOM tree.
+
+        Args:
+            selectors: List of CSS selectors piercing shadow boundaries.
+            value: Value to set in the input field.
+            auto_wait: If True, wait for element to be visible before filling.
+        """
+        client = self._require_client()
+        if auto_wait:
+            await self._wait_for_element_in_shadow(selectors)
+        pierce_js = self._build_shadow_pierce_js(selectors)
+        escaped_val = value.replace("\\", "\\\\").replace("'", "\\'")
+        js = (
+            f"(function(){{var el=({pierce_js});"
+            f"if(!el)return false;"
+            f"el.focus();el.value='{escaped_val}';"
+            f"el.dispatchEvent(new Event('input',{{bubbles:true,composed:true}}));"
+            f"el.dispatchEvent(new Event('change',{{bubbles:true,composed:true}}));"
+            f"return true;}})()"
+        )
+        result = await client.script.evaluate(self._context, js)
+        result_value = getattr(result, "value", None)
+        if not result_value:
+            raise ElementNotFoundError(" -> ".join(selectors))
+
     async def block_requests(self, patterns: list[str]) -> None:
         """Block requests matching URL patterns (partial BiDi support)."""
         if self._client is None:

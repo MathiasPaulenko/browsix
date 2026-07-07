@@ -2,6 +2,17 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.3.3 — 2026-07-07
+
+### Added
+
+- Shadow DOM support: `shadow_click`, `shadow_fill`, `shadow_eval` in both CDP and BiDi backends
+- `wavexis shadow click/fill/eval` CLI command with `--selectors` (comma-separated piercing chain)
+- `_build_shadow_pierce_js` helper generates JS that traverses `shadowRoot` boundaries
+- Auto-waiting inside shadow DOM via `_wait_for_element_in_shadow` with polling and configurable timeout
+- `--no-wait` flag to skip auto-waiting for shadow interactions
+- Events dispatched with `composed: true` to cross shadow boundaries
+
 ## v2.3.2 — 2026-07-07
 
 ### Added
