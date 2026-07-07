@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import contextlib
 import json
 import re
 import time
@@ -1133,8 +1132,10 @@ class CDPBackend(AbstractBackend):
         Returns:
             The browser context ID string.
         """
-        session = self._require_session()
-        result = await session.send("Target.createBrowserContext", {})
+        self._require_session()
+        if self._client is None:
+            raise NavigationError("", "Client not initialized.")
+        result = await self._client.send("Target.createBrowserContext", {})
         return str(result.get("browserContextId", ""))
 
     async def list_contexts(self) -> list[dict[str, Any]]:
@@ -2803,8 +2804,7 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         await session.debugger.enable()
         await session.debugger.pause()
-        with contextlib.suppress(TimeoutError):
-            await session.wait_for_event("Debugger.paused", timeout=5.0)
+        await asyncio.sleep(1)
 
     async def debug_resume(self) -> None:
         """Resume JavaScript execution after a pause."""
