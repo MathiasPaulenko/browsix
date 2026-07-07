@@ -85,9 +85,8 @@ class TestPerfBackend:
 
     async def test_perf_metrics(self) -> None:
         """Test that _perf calls perf_metrics for metrics type."""
-        from wavexis.cli._perf import _perf
-
         import wavexis.cli._perf as _perf_module
+        from wavexis.cli._perf import _perf
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -109,9 +108,8 @@ class TestPerfBackend:
 
     async def test_perf_trace(self) -> None:
         """Test that _perf calls perf_trace for trace type."""
-        from wavexis.cli._perf import _perf
-
         import wavexis.cli._perf as _perf_module
+        from wavexis.cli._perf import _perf
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -131,9 +129,8 @@ class TestPerfBackend:
 
     async def test_perf_coverage(self) -> None:
         """Test that _perf calls perf_coverage for coverage type."""
-        from wavexis.cli._perf import _perf
-
         import wavexis.cli._perf as _perf_module
+        from wavexis.cli._perf import _perf
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -158,9 +155,8 @@ class TestConsoleEnhancements:
 
     async def test_console_capture_both(self) -> None:
         """Test that _console with capture='both' gets console and logs."""
-        from wavexis.cli._navigation import _console
-
         import wavexis.cli._navigation as _nav_module
+        from wavexis.cli._navigation import _console
 
         backend = MagicMock()
         backend.launch = AsyncMock()
@@ -187,9 +183,8 @@ class TestConsoleEnhancements:
 
     async def test_console_capture_logs_only(self) -> None:
         """Test that _console with capture='logs' only gets logs."""
-        from wavexis.cli._navigation import _console
-
         import wavexis.cli._navigation as _nav_module
+        from wavexis.cli._navigation import _console
 
         backend = MagicMock()
         backend.launch = AsyncMock()
