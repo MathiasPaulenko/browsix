@@ -21,6 +21,7 @@ from wavexis.exceptions import (
     ElementNotFoundError,
     MultiConfigError,
     NavigationError,
+    SessionNotInitializedError,
     WaitTimeoutError,
     WavexisError,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "MultiConfigError",
     "NavigationError",
     "Output",
+    "SessionNotInitializedError",
     "WaitTimeoutError",
     "WavexisError",
     "_browser_options",
@@ -209,20 +211,28 @@ def _handle_error(e: Exception) -> None:
     """
     if isinstance(e, BackendNotAvailableError):
         Output.error(
-            "No backend available. Install cdpwave: pip install wavexis[cdp]"
+            "No backend available.\n"
+            "Hint: Install cdpwave with `pip install wavexis[cdp]`, "
+            "or bidiwave with `pip install wavexis[bidi]`."
         )
         raise typer.Exit(EXIT_BACKEND_ERROR) from e
+    if isinstance(e, SessionNotInitializedError):
+        Output.error(str(e))
+        raise typer.Exit(EXIT_BROWSER_ERROR) from e
     if isinstance(e, NavigationError):
-        Output.error(f"Navigation failed: {e}")
+        Output.error(str(e))
         raise typer.Exit(EXIT_BROWSER_ERROR) from e
     if isinstance(e, WaitTimeoutError):
-        Output.error(f"Timeout waiting: {e}")
+        Output.error(str(e))
         raise typer.Exit(EXIT_BROWSER_ERROR) from e
     if isinstance(e, ElementNotFoundError):
-        Output.error(f"Element not found: {e}")
+        Output.error(str(e))
         raise typer.Exit(EXIT_BROWSER_ERROR) from e
     if isinstance(e, MultiConfigError):
-        Output.error(f"Invalid multi config: {e}")
+        Output.error(
+            f"Invalid multi config: {e}\n"
+            "Hint: Run `wavexis multi <config> --dry-run` to validate the config."
+        )
         raise typer.Exit(EXIT_CONFIG_ERROR) from e
     if isinstance(e, WavexisError):
         Output.error(str(e))

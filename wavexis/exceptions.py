@@ -41,6 +41,21 @@ class BackendNotSupportedError(WavexisError):
 class SessionNotInitializedError(WavexisError):
     """Raised when a backend method is called before launch()."""
 
+    def __init__(self, msg: str | None = None) -> None:
+        """Initialize the error.
+
+        Args:
+            msg: Optional custom message.
+        """
+        if msg:
+            super().__init__(msg)
+        else:
+            super().__init__(
+                "Browser session not initialized. Call launch() first.\n"
+                "Hint: This usually means the browser failed to start. "
+                "Try --headed to see the browser window, or check if Chromium is installed."
+            )
+
 
 class NavigationError(WavexisError):
     """Raised when navigation fails or times out."""
@@ -52,7 +67,11 @@ class NavigationError(WavexisError):
             url: The URL that failed to navigate to.
             reason: The failure reason.
         """
-        super().__init__(f"Navigation to '{url}' failed: {reason}")
+        super().__init__(
+            f"Navigation to '{url}' failed: {reason}\n"
+            f"Hint: Check the URL is reachable, try --timeout 60000, "
+            f"or use --proxy if behind a firewall."
+        )
 
 
 class WaitTimeoutError(WavexisError):
@@ -66,7 +85,9 @@ class WaitTimeoutError(WavexisError):
             timeout_ms: The timeout duration in milliseconds.
         """
         super().__init__(
-            f"Wait strategy '{strategy}' timed out after {timeout_ms}ms"
+            f"Wait strategy '{strategy}' timed out after {timeout_ms}ms\n"
+            f"Hint: Increase timeout with --timeout {max(timeout_ms * 2, 60000)}, "
+            f"or use a different wait strategy (load, domcontentloaded, networkidle)."
         )
 
 
@@ -79,7 +100,11 @@ class ElementNotFoundError(WavexisError):
         Args:
             selector: The CSS selector that matched no elements.
         """
-        super().__init__(f"No element found matching selector: {selector}")
+        super().__init__(
+            f"No element found matching selector: {selector}\n"
+            f"Hint: Verify the selector with `wavexis dom --selector '{selector}'`, "
+            f"or use `wavexis screenshot` to inspect the page visually."
+        )
 
 
 class ActionError(WavexisError):

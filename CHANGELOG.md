@@ -2,6 +2,18 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.2.5 — 2026-07-07
+
+### Improved
+
+- Error messages now include actionable hints for common failures
+- `ElementNotFoundError` suggests `wavexis dom` and `wavexis screenshot` for debugging
+- `WaitTimeoutError` suggests increasing `--timeout` and alternative wait strategies
+- `NavigationError` suggests checking URL, `--timeout`, and `--proxy`
+- `SessionNotInitializedError` suggests `--headed` and checking Chromium installation
+- `BackendNotAvailableError` shows install commands for both backends
+- `MultiConfigError` suggests `--dry-run` to validate config
+
 ## v2.2.4 — 2026-07-07
 
 ### Added
