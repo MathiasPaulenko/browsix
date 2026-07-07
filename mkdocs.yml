@@ -44,6 +44,7 @@ nav:
       - REPL: guide/repl.md
       - Init Wizard: guide/init.md
       - Performance: guide/perf.md
+      - Core Web Vitals: guide/cwv.md
       - CI Assertions: guide/assert.md
       - Backends: guide/backends.md
       - Stealth Mode: guide/stealth.md

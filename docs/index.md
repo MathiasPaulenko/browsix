@@ -32,6 +32,10 @@ wavexis is a command-line tool for browser automation. It wraps the cdpwave (Chr
 - **Config wizard** — generate wavexis.yaml from 7 templates interactively
 - **CI assertions** — `--assert` flag on `eval` for pass/fail gates with exit codes
 - **Performance metrics** — LCP, FCP, CLS, TTFB, CPU traces, profiles, coverage
+- **Core Web Vitals scoring** — `cwv` command with LCP/CLS/INP ratings, 0-100 score, and CI budgets
+- **Request modification** — intercept and modify requests/responses in-flight via Fetch domain
+- **Rate limiting** — token bucket middleware for serve mode with `--rate-limit`
+- **Backend degradation** — automatic fallback from preferred backend to next available
 - **Console capture** — console messages and browser logs with level filtering
 - **Raw protocol** — escape hatch for direct CDP/BiDi commands
 - **Action caching** — cache results with `--cache-ttl` to avoid re-analyzing pages
@@ -78,6 +82,18 @@ wavexis eval https://example.com -e "document.title"
 | `css` | Inspect styles, computed values, rules |
 | `debug` | Breakpoints, stepping, pause, resume |
 | `perf` | Metrics (LCP/FCP/CLS/TTFB), trace, profile, coverage, heap snapshot |
+| `cwv` | Core Web Vitals scoring with ratings, 0-100 score, and CI budgets |
+| `modify` | Intercept and modify network requests in-flight |
+| `modify-response` | Intercept and modify network responses in-flight |
+| `inspect` | Inspect request/response bodies |
+| `har-replay` | Replay a recorded HAR file |
+| `trace` | Unified tracing (screenshots + network + DOM + console) |
+| `axe` | Accessibility audit using axe-core |
+| `events` | Subscribe to browser events |
+| `nl` | Natural language selector (click/fill/find) |
+| `shadow` | Shadow DOM interaction (click/fill/eval) |
+| `batch` | Process multiple URLs from a file |
+| `crawl` | Crawl a website collecting titles and links |
 | `console` | Capture console messages and browser logs (with `--capture`, `--format`) |
 | `repl` | Interactive REPL for live browser sessions |
 | `init` | Generate wavexis.yaml from templates interactively |
@@ -101,6 +117,7 @@ wavexis eval https://example.com -e "document.title"
 - [REPL](guide/repl.md) — interactive browser shell
 - [Init Wizard](guide/init.md) — config generation from templates
 - [Performance](guide/perf.md) — Core Web Vitals and profiling
+- [Core Web Vitals](guide/cwv.md) — CWV scoring with CI budgets
 - [CI Assertions](guide/assert.md) — pass/fail gates for CI pipelines
 - [Backends](guide/backends.md) — CDP vs BiDi with full parity
 - [Raw Protocol](guide/raw.md) — escape hatch for direct protocol commands

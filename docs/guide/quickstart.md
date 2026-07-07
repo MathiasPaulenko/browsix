@@ -67,6 +67,7 @@ wavexis emulation device https://example.com --device iphone-15 -o mobile.png
 - [REPL](repl.md) — interactive browser shell for live sessions
 - [Init Wizard](init.md) — generate configs from templates
 - [Performance](perf.md) — Core Web Vitals and profiling
+- [Core Web Vitals](cwv.md) — CWV scoring with CI budgets
 - [CI Assertions](assert.md) — pass/fail gates for CI pipelines
 - [Backends](backends.md) — CDP vs BiDi with full parity
 - [Raw Protocol](raw.md) — escape hatch for direct protocol commands

@@ -133,6 +133,17 @@ The snapshot contains all objects in the heap with their types, sizes, and refer
 
 ## CI integration
 
+### Core Web Vitals scoring with budgets
+
+Use the `cwv` command for actionable CWV scoring with CI budgets:
+
+```bash
+wavexis cwv https://my-app.com --budget '{"lcp_ms":2500,"cls":0.1,"inp_ms":200}' -o cwv.json
+```
+
+The report includes `budgets.all_pass` (true/false) for programmatic CI gating.
+Exit code 0 if all budgets pass, 1 if any fail.
+
 ### Performance regression detection
 
 Capture metrics in CI and compare against a baseline:

@@ -66,3 +66,21 @@ wavexis backends
 
 - **CDP** — Chrome/Edge only. Most direct protocol access. Best for debugging and profiling.
 - **BiDi** — Works with any WebDriver BiDi-compatible browser (Chrome, Firefox, Safari). Best for cross-browser automation. Falls back to CDP bridge for Chrome-specific features.
+
+## Graceful backend degradation
+
+If the preferred backend cannot be created (e.g. dependency not installed), wavexis
+automatically falls back to the next available backend. This is handled by
+`BackendManager.select_with_fallback()`:
+
+```bash
+# Prefers CDP, falls back to BiDi if cdpwave is not installed
+wavexis screenshot https://example.com -o out.png
+
+# Prefers BiDi, falls back to CDP if bidiwave is not installed
+wavexis --backend bidi screenshot https://example.com -o out.png
+```
+
+This applies to both CLI commands and serve mode. The fallback only handles
+backend *creation* failures (e.g. `ImportError`). Browser *launch* failures
+are handled by each action's error handling.

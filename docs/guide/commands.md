@@ -443,10 +443,182 @@ wavexis record list
 Start an HTTP API server.
 
 ```bash
-wavexis serve [--host 0.0.0.0] [--port 8080]
+wavexis serve [--host 0.0.0.0] [--port 8080] [--rate-limit N]
 ```
 
+| Option | Description |
+|--------|-------------|
+| `--host` | Host to bind to (default: localhost) |
+| `--port, -p` | Port to listen on (default: 8080) |
+| `--backend` | Preferred backend (cdp or bidi) |
+| `--rate-limit` | Max requests per minute (0 = no limit) |
+
 See [Serve Mode](../cookbook/serve-mode.md) for endpoint documentation.
+
+## cwv
+
+Measure Core Web Vitals (LCP, CLS, INP) with actionable scoring and CI budgets.
+
+```bash
+wavexis cwv <url> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output` | Output file path (- for stdout) |
+| `--observe-ms` | Observation period in ms (default: 5000) |
+| `--budget` | JSON budget thresholds, e.g. `{"lcp_ms":2500,"cls":0.1,"inp_ms":200}` |
+
+```bash
+# Basic measurement
+wavexis cwv https://example.com
+
+# With CI budgets
+wavexis cwv https://example.com --budget '{"lcp_ms":2500,"cls":0.1,"inp_ms":200}' -o report.json
+```
+
+## modify
+
+Intercept and modify network requests in-flight via the Fetch domain.
+
+```bash
+wavexis modify <url> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-p, --pattern` | URL pattern to match (wildcard) |
+| `--header` | Header to add/override (format: `Key: Value`) |
+| `--body` | Replacement body (JSON string) |
+| `--status` | Replacement status code |
+| `--method` | HTTP method to match |
+| `--wait` | Seconds to keep browser open for interception |
+
+## modify-response
+
+Intercept and modify network responses in-flight.
+
+```bash
+wavexis modify-response <url> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-p, --pattern` | URL pattern to match (wildcard) |
+| `-b, --body` | Replacement body (JSON string) |
+| `-s, --status` | Replacement status code |
+| `--header` | Header to add/override (format: `Key: Value`) |
+| `--wait` | Seconds to keep browser open for interception |
+
+## inspect
+
+Inspect request/response bodies for a specific request ID.
+
+```bash
+wavexis inspect <url> --request-id <id> [options]
+```
+
+## har-replay
+
+Replay a recorded HAR file against a URL.
+
+```bash
+wavexis har-replay <har-path> --url <url> [options]
+```
+
+## trace
+
+Unified tracing (screenshots + network + DOM + console).
+
+```bash
+wavexis trace start <url> [options]
+wavexis trace stop
+```
+
+## axe
+
+Run an accessibility audit using axe-core.
+
+```bash
+wavexis axe <url> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output` | Output file path (.json) |
+| `--category` | Audit category (repeatable) |
+
+## events
+
+Subscribe to and unsubscribe from browser events.
+
+```bash
+wavexis events subscribe <url> --types "console,network" [options]
+wavexis events unsubscribe <url>
+```
+
+## nl
+
+Natural language selector — interact with elements using plain English.
+
+```bash
+wavexis nl click "the login button" <url>
+wavexis nl fill "the email field" "admin@example.com" <url>
+wavexis nl find "the main heading" <url>
+```
+
+## shadow
+
+Shadow DOM interaction commands.
+
+```bash
+wavexis shadow click <url> --selector "#host" --inner "button"
+wavexis shadow fill <url> --selector "#host" --inner "input" --text "hello"
+wavexis shadow eval <url> --selector "#host" --expression "element.textContent"
+```
+
+## batch
+
+Process multiple URLs from a file with a single action.
+
+```bash
+wavexis batch <urls-file> <action> [options]
+```
+
+Actions: `screenshot`, `pdf`, `scrape`, `eval`
+
+```bash
+wavexis batch urls.txt screenshot -o ./screenshots/
+wavexis batch urls.txt scrape --expression "document.title"
+```
+
+## crawl
+
+Crawl a website starting from a URL, collecting titles and links.
+
+```bash
+wavexis crawl <url> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-d, --depth` | Maximum crawl depth (0 = start page only, default: 2) |
+| `--max-pages` | Maximum number of pages to visit (default: 50) |
+| `--same-origin/--cross-origin` | Only crawl same-origin links (default: same) |
+| `--pattern` | Regex pattern to filter URLs (empty = all) |
+| `-o, --output` | Output file path (.json) |
+
+```bash
+wavexis crawl https://example.com --depth 3 --max-pages 100 -o results.json
+```
+
+## plugins
+
+List discovered plugins (actions, backends, middleware).
+
+```bash
+wavexis plugins
+```
 
 ## css
 

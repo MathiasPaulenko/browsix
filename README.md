@@ -227,6 +227,44 @@ wavexis perf https://example.com -m heap-snapshot -o heap.json
 
 Metrics: `metrics` (default), `trace`, `profile`, `heap-snapshot`, `coverage`, `css-coverage`.
 
+## Core Web Vitals scoring
+
+Measure LCP, CLS, INP with actionable ratings and a 0-100 score:
+
+```bash
+# Basic measurement
+wavexis cwv https://example.com
+
+# With CI budgets (fails if thresholds exceeded)
+wavexis cwv https://example.com --budget '{"lcp_ms":2500,"cls":0.1,"inp_ms":200}'
+
+# Save report to file
+wavexis cwv https://example.com -o cwv-report.json
+```
+
+Ratings: **good** / **needs-improvement** / **poor** based on official Google thresholds.
+
+| Metric | Good | Poor |
+|--------|------|------|
+| LCP | < 2500ms | > 4000ms |
+| CLS | < 0.1 | > 0.25 |
+| INP | < 200ms | > 500ms |
+
+## Request modification
+
+Intercept and modify network requests and responses in-flight:
+
+```bash
+# Modify request headers for matching URLs
+wavexis modify https://example.com -p "*/api/*" --header "X-Custom: value"
+
+# Modify response body
+wavexis modify-response https://example.com -p "*/api/*" -b '{"modified":true}' -s 200
+
+# Keep browser open for interception
+wavexis modify https://example.com -p "*/api/*" --wait 10
+```
+
 ## Auth
 
 Store and use browser credentials for authenticated scraping:
@@ -266,6 +304,9 @@ HTTP API server powered by aiohttp with WebSocket streaming:
 
 ```bash
 wavexis serve --host 0.0.0.0 --port 8080
+
+# With rate limiting (60 requests/min)
+wavexis serve --host 0.0.0.0 --port 8080 --rate-limit 60
 ```
 
 ```bash
@@ -374,6 +415,19 @@ Select with `--backend`:
 wavexis --backend bidi screenshot https://example.com -o out.png
 ```
 
+### Graceful backend degradation
+
+If the preferred backend fails to initialize (e.g. dependency not installed), wavexis
+automatically falls back to the next available backend:
+
+```bash
+# Prefers CDP, falls back to BiDi if cdpwave is not installed
+wavexis screenshot https://example.com -o out.png
+
+# Prefers BiDi, falls back to CDP if bidiwave is not installed
+wavexis --backend bidi screenshot https://example.com -o out.png
+```
+
 ### Feature parity (v1.7.0)
 
 Both backends implement **all** methods. BiDi uses native BiDi commands, JS workarounds
@@ -430,14 +484,22 @@ wavexis provides 100+ CLI commands organized into categories:
 | Input | `click`, `type`, `fill`, `select`, `hover`, `key`, `drag`, `tap` |
 | CSS | `css-styles`, `css-computed`, `css-rules` |
 | Debug | `debug-break`, `debug-step`, `debug-pause`, `debug-resume` |
-| Performance | `perf` (metrics, trace, profile, coverage, heap-snapshot, css-coverage) |
+| Performance | `perf` (metrics, trace, profile, coverage, heap-snapshot, css-coverage), `cwv` (Core Web Vitals scoring) |
 | Storage | `storage` (get/set/clear/list), `indexeddb` |
 | Advanced | `sw`, `animation`, `record`, `replay`, `webauthn`, `cast`, `bluetooth`, `extension-install`, `extension-uninstall`, `extension-list` |
 | Preferences | `pref-get`, `pref-set` |
 | Auth | `auth save`, `auth use`, `auth list`, `auth delete` |
 | Serve | `serve` (HTTP API server) |
 | Interactive | `repl` (live browser REPL), `init` (config wizard) |
-| Utility | `multi` (with `--watch`, `--dry-run`), `raw`, `backends`, `install_check`, `completions` |
+| Network inspection | `inspect`, `modify`, `modify-response`, `har-replay` |
+| Tracing | `trace` (start/stop unified tracing) |
+| Accessibility | `axe` (accessibility audit) |
+| Events | `events` (subscribe/unsubscribe to browser events) |
+| Natural language | `nl` (click/fill/find using natural language selectors) |
+| Shadow DOM | `shadow` (click/fill/eval inside shadow roots) |
+| Batch | `batch` (process multiple URLs from file) |
+| Crawl | `crawl` (crawl website collecting titles and links) |
+| Utility | `multi` (with `--watch`, `--dry-run`, `--parallel`, `--cache-ttl`), `raw`, `backends`, `install_check`, `completions`, `plugins` |
 
 Run `wavexis --help` for the full list.
 
@@ -474,6 +536,14 @@ Run `wavexis --help` for the full list.
 | WebExtension management | Yes | No | No |
 | Browser preferences | Yes | No | No |
 | Live event streaming | Yes | No | No |
+| Core Web Vitals scoring | Yes | No | No |
+| Request modification | Yes | No | No |
+| Rate limiting (serve) | Yes | No | No |
+| Backend degradation | Yes | No | No |
+| Site crawling | Yes | No | No |
+| Accessibility audit | Yes | No | No |
+| WebSocket inspection | Yes | No | No |
+| Visual diff | Yes | No | No |
 
 ## Documentation
 

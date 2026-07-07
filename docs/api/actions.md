@@ -39,11 +39,16 @@
 ## Performance & Profiling
 
 ::: wavexis.actions.performance.PerformanceAction
+::: wavexis.actions.core_web_vitals.CoreWebVitalsAction
+::: wavexis.actions.lighthouse.LighthouseAction
 
 ## Network
 
 ::: wavexis.actions.network.NetworkAction
 ::: wavexis.actions.har.HARAction
+::: wavexis.actions.har_replay.HARReplayAction
+::: wavexis.actions.modify_request.ModifyRequestAction
+::: wavexis.actions.websocket.WebSocketAction
 
 ## Storage
 
@@ -113,3 +118,51 @@
 ## Multi-Action
 
 ::: wavexis.actions.multi.MultiAction
+
+## Accessibility Audit
+
+::: wavexis.actions.axe_audit.AxeAuditAction
+
+## Crawl
+
+::: wavexis.actions.crawl.CrawlAction
+
+## Visual Diff
+
+::: wavexis.actions.visual_diff.VisualDiffAction
+
+## Combined Trace
+
+::: wavexis.actions.combined_trace.CombinedTraceAction
+
+## Record & Replay
+
+::: wavexis.actions.record.RecordAction
+
+## Stealth
+
+::: wavexis.actions.stealth.StealthAction
+
+## Wait
+
+::: wavexis.actions.wait.WaitAction
+
+## Browser
+
+::: wavexis.actions.browser.BrowserAction
+
+## Cache
+
+::: wavexis.actions.cache.CacheAction
+
+## Session
+
+::: wavexis.actions.session.SessionAction
+
+## Extract
+
+::: wavexis.actions.extract.ExtractAction
+
+## Form
+
+::: wavexis.actions.form.FormAction
