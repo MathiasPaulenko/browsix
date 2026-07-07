@@ -2,6 +2,24 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.4.0 — 2026-07-07
+
+### Added
+
+- Request/response body inspection: `get_request_body`, `get_response_body` in both CDP and BiDi backends
+- `wavexis inspect <url> -r <request_id> -t request|response` CLI command
+- Request interception and modification: `modify_request` via CDP Fetch domain in both backends
+- `wavexis modify <url> -p <pattern> -h <header> -m <method>` CLI command
+- HAR replay: `replay_har` reads HAR file and replays requests via browser fetch API
+- `wavexis har-replay <har_path> -u <url> -f <filter>` CLI command
+- Combined tracing: `start_combined_trace`/`stop_combined_trace` capturing screenshots, network, console, and trace events
+- `wavexis trace start|stop` CLI command with `--no-screenshots`, `--no-network`, `--no-console` flags
+- axe-core accessibility audit: `axe_audit` injects axe-core JS and returns violations/passes/incomplete/inapplicable
+- `wavexis axe <url> -o <output>` CLI command
+- Event subscription: `subscribe_events`/`unsubscribe_events` for real-time console, network, dialog, and navigation events
+- `wavexis events subscribe <url> -t <types> -d <duration>` CLI command
+- WebSocket event streaming in serve.py for network_request, network_response, and dialog events
+
 ## v2.3.5 — 2026-07-07
 
 ### Added

@@ -444,6 +444,111 @@ class AbstractBackend(ABC):
     async def mock_response(self, url: str, response: dict[str, Any]) -> None:
         """Mock a response for requests matching a URL pattern."""
 
+    # ── Network inspection ─────────────────────────────────
+
+    @abstractmethod
+    async def get_request_body(self, request_id: str) -> str | None:
+        """Get the body of a network request by ID.
+
+        Args:
+            request_id: The CDP/BiDi network request ID.
+
+        Returns:
+            The request body as a string, or None if not available.
+        """
+
+    @abstractmethod
+    async def get_response_body(self, request_id: str) -> str | None:
+        """Get the body of a network response by ID.
+
+        Args:
+            request_id: The CDP/BiDi network request ID.
+
+        Returns:
+            The response body as a string, or None if not available.
+        """
+
+    @abstractmethod
+    async def modify_request(
+        self,
+        pattern: dict[str, Any],
+        modifications: dict[str, Any],
+    ) -> None:
+        """Intercept and modify requests matching a pattern.
+
+        Args:
+            pattern: Pattern dict with optional keys: urlPattern, resourceType,
+                requestStage.
+            modifications: Dict with optional keys: headers, url, method, post_data.
+        """
+
+    @abstractmethod
+    async def replay_har(self, har_path: str, url_filter: str = "") -> None:
+        """Replay network requests from a HAR file.
+
+        Args:
+            har_path: Path to the HAR file.
+            url_filter: Optional URL pattern to filter which entries to replay.
+        """
+
+    @abstractmethod
+    async def start_combined_trace(
+        self,
+        capture_screenshots: bool = True,
+        capture_network: bool = True,
+        capture_console: bool = True,
+    ) -> str:
+        """Start a combined trace capturing screenshots, network, and console.
+
+        Returns:
+            A trace ID string for later stopping and collecting results.
+        """
+
+    @abstractmethod
+    async def stop_combined_trace(self, trace_id: str) -> dict[str, Any]:
+        """Stop a combined trace and return collected data.
+
+        Args:
+            trace_id: The trace ID returned by start_combined_trace.
+
+        Returns:
+            Dict with keys: trace_events, screenshots, network, console.
+        """
+
+    @abstractmethod
+    async def axe_audit(self) -> dict[str, Any]:
+        """Run axe-core accessibility audit on the current page.
+
+        Returns:
+            Dict with violations, passes, incomplete, and inapplicable lists.
+        """
+
+    @abstractmethod
+    async def subscribe_events(
+        self,
+        event_types: list[str],
+        callback: Any,
+    ) -> str:
+        """Subscribe to real-time browser events.
+
+        Args:
+            event_types: List of event types to subscribe to
+                ('console', 'network_request', 'network_response',
+                 'dom_mutation', 'dialog', 'navigation').
+            callback: Callable that receives event dicts.
+
+        Returns:
+            A subscription ID for later unsubscription.
+        """
+
+    @abstractmethod
+    async def unsubscribe_events(self, subscription_id: str) -> None:
+        """Unsubscribe from events by subscription ID.
+
+        Args:
+            subscription_id: The ID returned by subscribe_events.
+        """
+
     # ── Accessibility ──────────────────────────────────────
 
     @abstractmethod

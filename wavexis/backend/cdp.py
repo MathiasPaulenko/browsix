@@ -1765,6 +1765,371 @@ class CDPBackend(AbstractBackend):
             {"patterns": [{"urlPattern": url, "requestStage": "Response"}]},
         )
 
+    # ── Network inspection (W3, W6, W7) ───────────────────
+
+    async def get_request_body(self, request_id: str) -> str | None:
+        """Get the body of a network request by ID.
+
+        Args:
+            request_id: The CDP network request ID.
+
+        Returns:
+            The request body as a string, or None if not available.
+        """
+        session = self._require_session()
+        try:
+            result = await session.send(
+                "Network.getRequestPostData",
+                {"requestId": request_id},
+            )
+            return result.get("postData")
+        except Exception:
+            return None
+
+    async def get_response_body(self, request_id: str) -> str | None:
+        """Get the body of a network response by ID.
+
+        Args:
+            request_id: The CDP network request ID.
+
+        Returns:
+            The response body as a string, or None if not available.
+        """
+        session = self._require_session()
+        try:
+            result = await session.send(
+                "Network.getResponseBody",
+                {"requestId": request_id},
+            )
+            return result.get("body")
+        except Exception:
+            return None
+
+    async def modify_request(
+        self,
+        pattern: dict[str, Any],
+        modifications: dict[str, Any],
+    ) -> None:
+        """Intercept and modify requests matching a pattern.
+
+        Uses CDP Fetch domain to pause requests and continue with modifications.
+
+        Args:
+            pattern: Pattern dict with optional keys: urlPattern, resourceType,
+                requestStage.
+            modifications: Dict with optional keys: headers, url, method, post_data.
+        """
+        session = self._require_session()
+
+        async def on_request_paused(event_params: dict[str, Any]) -> None:
+            """Handle Fetch.requestPaused and continue with modifications."""
+            request_id = event_params.get("requestId", "")
+            await session.send(
+                "Fetch.continueRequest",
+                {
+                    "requestId": request_id,
+                    "url": modifications.get("url", event_params.get("request", {}).get("url", "")),
+                    "method": modifications.get(
+                        "method", event_params.get("request", {}).get("method", "GET")
+                    ),
+                    "headers": modifications.get(
+                        "headers", event_params.get("request", {}).get("headers", [])
+                    ),
+                    "postData": modifications.get("post_data"),
+                },
+            )
+
+        session.on("Fetch.requestPaused", on_request_paused)
+        await session.send("Fetch.enable", {"patterns": [pattern]})
+
+    async def replay_har(self, har_path: str, url_filter: str = "") -> None:
+        """Replay network requests from a HAR file.
+
+        Reads the HAR JSON, iterates entries, and replays each request using
+        the browser's fetch API.
+
+        Args:
+            har_path: Path to the HAR file.
+            url_filter: Optional URL pattern to filter which entries to replay.
+        """
+        session = self._require_session()
+        from pathlib import Path
+
+        content = await asyncio.to_thread(Path(har_path).read_text, encoding="utf-8")
+        har_data = json.loads(content)
+
+        entries = har_data.get("log", {}).get("entries", [])
+        for entry in entries:
+            request = entry.get("request", {})
+            url = request.get("url", "")
+            if url_filter and url_filter not in url:
+                continue
+
+            method = request.get("method", "GET")
+            headers = {
+                h["name"]: h["value"]
+                for h in request.get("headers", [])
+                if "name" in h and "value" in h
+            }
+            post_data = request.get("postData", {}).get("text", "")
+
+            fetch_js = (
+                f"fetch({json.dumps(url)}, {{"
+                f"method: {json.dumps(method)},"
+                f"headers: {json.dumps(headers)},"
+                f"body: {json.dumps(post_data) if post_data else 'undefined'}"
+                f"}}).then(r => r.status).catch(e => e.message)"
+            )
+            await session.runtime.evaluate(fetch_js)
+
+    # ── Combined trace (W8) ────────────────────────────────
+
+    async def start_combined_trace(
+        self,
+        capture_screenshots: bool = True,
+        capture_network: bool = True,
+        capture_console: bool = True,
+    ) -> str:
+        """Start a combined trace capturing screenshots, network, and console.
+
+        Returns:
+            A trace ID string for later stopping and collecting results.
+        """
+        session = self._require_session()
+        trace_id = f"trace-{int(time.time() * 1000)}"
+
+        state: dict[str, Any] = {
+            "trace_events": [],
+            "screenshots": [],
+            "network": [],
+            "console": [],
+            "capture_screenshots": capture_screenshots,
+            "capture_network": capture_network,
+            "capture_console": capture_console,
+        }
+
+        if capture_network:
+            await session.network.enable()
+
+            def on_network_request(event_params: dict[str, Any]) -> None:
+                state["network"].append({
+                    "type": "request",
+                    "url": event_params.get("request", {}).get("url", ""),
+                    "method": event_params.get("request", {}).get("method", ""),
+                    "requestId": event_params.get("requestId", ""),
+                    "timestamp": event_params.get("timestamp"),
+                })
+
+            def on_network_response(event_params: dict[str, Any]) -> None:
+                state["network"].append({
+                    "type": "response",
+                    "url": event_params.get("response", {}).get("url", ""),
+                    "status": event_params.get("response", {}).get("status", 0),
+                    "requestId": event_params.get("requestId", ""),
+                    "timestamp": event_params.get("timestamp"),
+                })
+
+            session.on("Network.requestWillBeSent", on_network_request)
+            session.on("Network.responseReceived", on_network_response)
+
+        if capture_console:
+            await session.runtime.enable()
+
+            def on_console_api(event_params: dict[str, Any]) -> None:
+                state["console"].append({
+                    "type": event_params.get("type", "log"),
+                    "args": event_params.get("args", []),
+                    "timestamp": event_params.get("timestamp"),
+                })
+
+            session.on("Runtime.consoleAPICalled", on_console_api)
+
+        if capture_screenshots:
+            screenshot = await session.page.capture_screenshot()
+            if screenshot:
+                state["screenshots"].append({
+                    "timestamp": time.time(),
+                    "data": screenshot,
+                })
+
+        await session.send("Tracing.start", {"traceType": "devtools-timeline"})
+
+        self._combined_traces: dict[str, dict[str, Any]] = getattr(
+            self, "_combined_traces", {}
+        )
+        self._combined_traces[trace_id] = state
+        return trace_id
+
+    async def stop_combined_trace(self, trace_id: str) -> dict[str, Any]:
+        """Stop a combined trace and return collected data.
+
+        Args:
+            trace_id: The trace ID returned by start_combined_trace.
+
+        Returns:
+            Dict with keys: trace_events, screenshots, network, console.
+        """
+        session = self._require_session()
+        traces: dict[str, dict[str, Any]] = getattr(self, "_combined_traces", {})
+        state = traces.get(trace_id)
+        if state is None:
+            return {"error": f"Unknown trace_id: {trace_id}"}
+
+        trace_events: list[dict[str, Any]] = []
+
+        async def _on_tracing_complete(params: dict[str, Any]) -> None:
+            """Handle Tracing.tracingComplete and extract trace events."""
+            import io
+            import zipfile
+
+            stream_handle = params.get("stream")
+            if stream_handle:
+                chunks: list[bytes] = []
+                while True:
+                    resp = await session.send("IO.read", {"handle": stream_handle})
+                    data = resp.get("data", "")
+                    if not data:
+                        break
+                    chunks.append(base64.b64decode(data))
+                    if not resp.get("base64Encoded", True):
+                        break
+                raw = b"".join(chunks)
+                try:
+                    zf = zipfile.ZipFile(io.BytesIO(raw))
+                    for name in zf.namelist():
+                        content = zf.read(name).decode("utf-8", errors="replace")
+                        trace_events.extend(json.loads(content).get("traceEvents", []))
+                except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
+                    trace_events.append({"raw_size": len(raw)})
+
+        session.on("Tracing.tracingComplete", _on_tracing_complete)
+        await session.send("Tracing.end", {})
+
+        if state["capture_screenshots"]:
+            screenshot = await session.page.capture_screenshot()
+            if screenshot:
+                state["screenshots"].append({
+                    "timestamp": time.time(),
+                    "data": screenshot,
+                })
+
+        await asyncio.sleep(0.5)
+
+        result: dict[str, Any] = {
+            "trace_events": trace_events,
+            "screenshots": state["screenshots"],
+            "network": state["network"],
+            "console": state["console"],
+        }
+        del traces[trace_id]
+        return result
+
+    # ── axe-core audit (W9) ────────────────────────────────
+
+    async def axe_audit(self) -> dict[str, Any]:
+        """Run axe-core accessibility audit on the current page.
+
+        Injects axe-core JS via Runtime.evaluate and returns the results.
+
+        Returns:
+            Dict with violations, passes, incomplete, and inapplicable lists.
+        """
+        session = self._require_session()
+
+        axe_js = (
+            "if (typeof axe === 'undefined') { "
+            "  import('https://unpkg.com/axe-core@4.9.1/axe.min.js')"
+            "    .then(m => { window.axe = m.default || m; }); "
+            "} "
+            "await new Promise(r => setTimeout(r, 2000)); "
+            "if (typeof axe === 'undefined') { "
+            "  const s = document.createElement('script'); "
+            "  s.src = 'https://unpkg.com/axe-core@4.9.1/axe.min.js'; "
+            "  document.head.appendChild(s); "
+            "  await new Promise(r => s.onload = r); "
+            "} "
+            "await axe.run(document, { "
+            "  resultTypes: ['violations', 'passes', 'incomplete', 'inapplicable'] "
+            "})"
+        )
+        result = await session.runtime.evaluate(axe_js, await_promise=True)
+        value = result.get("result", {}).get("value")
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                return dict(json.loads(value))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {"error": "axe-core audit failed", "raw": dict(result)}
+
+    # ── Event subscription (W11) ───────────────────────────
+
+    async def subscribe_events(
+        self,
+        event_types: list[str],
+        callback: Any,
+    ) -> str:
+        """Subscribe to real-time browser events.
+
+        Args:
+            event_types: List of event types to subscribe to.
+            callback: Callable that receives event dicts.
+
+        Returns:
+            A subscription ID for later unsubscription.
+        """
+        session = self._require_session()
+        sub_id = f"sub-{int(time.time() * 1000)}"
+
+        if not hasattr(self, "_subscriptions"):
+            self._subscriptions: dict[str, dict[str, Any]] = {}
+
+        handlers: dict[str, Any] = {}
+
+        event_map = {
+            "console": ("Runtime.consoleAPICalled", "console"),
+            "network_request": ("Network.requestWillBeSent", "network_request"),
+            "network_response": ("Network.responseReceived", "network_response"),
+            "dialog": ("Page.javascriptDialogOpening", "dialog"),
+            "navigation": ("Page.frameNavigated", "navigation"),
+        }
+
+        for evt_type in event_types:
+            if evt_type in event_map:
+                cdp_event, label = event_map[evt_type]
+
+                def make_handler(lbl: str) -> Any:
+                    def _handler(params: dict[str, Any]) -> None:
+                        callback({"type": lbl, "data": params})
+                    return _handler
+
+                handler = make_handler(label)
+                session.on(cdp_event, handler)
+                handlers[cdp_event] = handler
+
+                if evt_type in ("network_request", "network_response"):
+                    asyncio.ensure_future(session.network.enable())
+                elif evt_type == "console":
+                    asyncio.ensure_future(session.runtime.enable())
+
+        self._subscriptions[sub_id] = handlers
+        return sub_id
+
+    async def unsubscribe_events(self, subscription_id: str) -> None:
+        """Unsubscribe from events by subscription ID.
+
+        Args:
+            subscription_id: The ID returned by subscribe_events.
+        """
+        session = self._require_session()
+        subs: dict[str, dict[str, Any]] = getattr(self, "_subscriptions", {})
+        handlers = subs.pop(subscription_id, {})
+        for cdp_event, handler in handlers.items():
+            off = getattr(session, "off", None)
+            if off is not None:
+                off(cdp_event, handler)
+
     # ── Accessibility ──────────────────────────────────────
 
     async def a11y_tree(self) -> dict[str, Any]:

@@ -527,6 +527,19 @@ async def handle_websocket(request: Any) -> Any:
             _stream_navigation(ws, backend, max(interval, 0.5)),
         ))
 
+    subscribe_types = [
+        e for e in events if e in ("network_request", "network_response", "dialog")
+    ]
+    if subscribe_types:
+        async def _on_event(event: dict[str, Any]) -> None:
+            await ws.send_json({
+                "type": event.get("type", "event"),
+                "data": event.get("data", {}),
+                "timestamp": time.time(),
+            })
+
+        await backend.subscribe_events(subscribe_types, _on_event)
+
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:

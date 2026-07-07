@@ -604,6 +604,51 @@ class DummyBackend(AbstractBackend):
         """Bluetooth stop."""
         pass
 
+    async def get_request_body(self, request_id: str) -> str | None:
+        """Get request body."""
+        return None
+
+    async def get_response_body(self, request_id: str) -> str | None:
+        """Get response body."""
+        return None
+
+    async def modify_request(
+        self, pattern: dict[str, Any], modifications: dict[str, Any]
+    ) -> None:
+        """Modify request."""
+        pass
+
+    async def replay_har(self, har_path: str, url_filter: str = "") -> None:
+        """Replay har."""
+        pass
+
+    async def start_combined_trace(
+        self,
+        capture_screenshots: bool = True,
+        capture_network: bool = True,
+        capture_console: bool = True,
+    ) -> str:
+        """Start combined trace."""
+        return "trace-dummy"
+
+    async def stop_combined_trace(self, trace_id: str) -> dict[str, Any]:
+        """Stop combined trace."""
+        return {}
+
+    async def axe_audit(self) -> dict[str, Any]:
+        """Axe audit."""
+        return {}
+
+    async def subscribe_events(
+        self, event_types: list[str], callback: Any
+    ) -> str:
+        """Subscribe events."""
+        return "sub-dummy"
+
+    async def unsubscribe_events(self, subscription_id: str) -> None:
+        """Unsubscribe events."""
+        pass
+
 
 @pytest.mark.unit
 class TestBackendManager:

@@ -286,6 +286,30 @@ class FakeBackend(AbstractBackend):
         """Shadow click."""
     async def shadow_fill(self, selectors, value, auto_wait=True):
         """Shadow fill."""
+    async def get_request_body(self, request_id):
+        """Get request body."""
+    async def get_response_body(self, request_id):
+        """Get response body."""
+    async def modify_request(self, pattern, modifications):
+        """Modify request."""
+    async def replay_har(self, har_path, url_filter=""):
+        """Replay har."""
+    async def start_combined_trace(
+        self, capture_screenshots=True, capture_network=True, capture_console=True
+    ):
+        """Start combined trace."""
+        return "trace-fake"
+    async def stop_combined_trace(self, trace_id):
+        """Stop combined trace."""
+        return {}
+    async def axe_audit(self):
+        """Axe audit."""
+        return {}
+    async def subscribe_events(self, event_types, callback):
+        """Subscribe events."""
+        return "sub-fake"
+    async def unsubscribe_events(self, subscription_id):
+        """Unsubscribe events."""
 
 
 class TestBackendManager:

@@ -1491,6 +1491,386 @@ class BiDiBackend(AbstractBackend):
             contexts=[self._context] if self._context else None,
         )
 
+    # ── Network inspection (W3, W6, W7) ───────────────────
+
+    async def get_request_body(self, request_id: str) -> str | None:
+        """Get the body of a network request by ID via CDP bridge.
+
+        Args:
+            request_id: The network request ID.
+
+        Returns:
+            The request body as a string, or None if not available.
+        """
+        client = self._require_client()
+        try:
+            result = await client.cdp.send_command(
+                "Network.getRequestPostData",
+                {"requestId": request_id},
+            )
+            return str(result.get("postData")) if result.get("postData") is not None else None
+        except Exception:
+            return None
+
+    async def get_response_body(self, request_id: str) -> str | None:
+        """Get the body of a network response by ID via CDP bridge.
+
+        Args:
+            request_id: The network request ID.
+
+        Returns:
+            The response body as a string, or None if not available.
+        """
+        client = self._require_client()
+        try:
+            result = await client.cdp.send_command(
+                "Network.getResponseBody",
+                {"requestId": request_id},
+            )
+            return str(result.get("body")) if result.get("body") is not None else None
+        except Exception:
+            return None
+
+    async def modify_request(
+        self,
+        pattern: dict[str, Any],
+        modifications: dict[str, Any],
+    ) -> None:
+        """Intercept and modify requests matching a pattern via CDP Fetch domain.
+
+        Args:
+            pattern: Pattern dict with optional keys: urlPattern, resourceType,
+                requestStage.
+            modifications: Dict with optional keys: headers, url, method, post_data.
+        """
+        client = self._require_client()
+
+        async def on_request_paused(event_params: dict[str, Any]) -> None:
+            """Handle Fetch.requestPaused and continue with modifications."""
+            request_id = event_params.get("requestId", "")
+            await client.cdp.send_command(
+                "Fetch.continueRequest",
+                {
+                    "requestId": request_id,
+                    "url": modifications.get(
+                        "url", event_params.get("request", {}).get("url", "")
+                    ),
+                    "method": modifications.get(
+                        "method", event_params.get("request", {}).get("method", "GET")
+                    ),
+                    "headers": modifications.get(
+                        "headers", event_params.get("request", {}).get("headers", [])
+                    ),
+                    "postData": modifications.get("post_data"),
+                },
+            )
+
+        client.cdp.on("Fetch.requestPaused", on_request_paused)
+        await client.cdp.send_command("Fetch.enable", {"patterns": [pattern]})
+
+    async def replay_har(self, har_path: str, url_filter: str = "") -> None:
+        """Replay network requests from a HAR file.
+
+        Args:
+            har_path: Path to the HAR file.
+            url_filter: Optional URL pattern to filter which entries to replay.
+        """
+        client = self._require_client()
+        import asyncio as _asyncio
+        from pathlib import Path
+
+        content = await _asyncio.to_thread(Path(har_path).read_text, encoding="utf-8")
+        har_data = json.loads(content)
+
+        entries = har_data.get("log", {}).get("entries", [])
+        for entry in entries:
+            request = entry.get("request", {})
+            url = request.get("url", "")
+            if url_filter and url_filter not in url:
+                continue
+
+            method = request.get("method", "GET")
+            headers = {
+                h["name"]: h["value"]
+                for h in request.get("headers", [])
+                if "name" in h and "value" in h
+            }
+            post_data = request.get("postData", {}).get("text", "")
+
+            fetch_js = (
+                f"fetch({json.dumps(url)}, {{"
+                f"method: {json.dumps(method)},"
+                f"headers: {json.dumps(headers)},"
+                f"body: {json.dumps(post_data) if post_data else 'undefined'}"
+                f"}}).then(r => r.status).catch(e => e.message)"
+            )
+            await client.script.evaluate(
+                expression=fetch_js,
+                await_promise=True,
+                target=self._context,
+            )
+
+    # ── Combined trace (W8) ────────────────────────────────
+
+    async def start_combined_trace(
+        self,
+        capture_screenshots: bool = True,
+        capture_network: bool = True,
+        capture_console: bool = True,
+    ) -> str:
+        """Start a combined trace capturing screenshots, network, and console.
+
+        Returns:
+            A trace ID string for later stopping and collecting results.
+        """
+        import time as _time
+
+        client = self._require_client()
+        trace_id = f"trace-{int(_time.time() * 1000)}"
+
+        state: dict[str, Any] = {
+            "trace_events": [],
+            "screenshots": [],
+            "network": [],
+            "console": [],
+            "capture_screenshots": capture_screenshots,
+            "capture_network": capture_network,
+            "capture_console": capture_console,
+        }
+
+        if capture_network:
+            await client.cdp.send_command("Network.enable", {})
+
+            def on_network_request(params: dict[str, Any]) -> None:
+                state["network"].append({
+                    "type": "request",
+                    "url": params.get("request", {}).get("url", ""),
+                    "method": params.get("request", {}).get("method", ""),
+                    "requestId": params.get("requestId", ""),
+                    "timestamp": params.get("timestamp"),
+                })
+
+            def on_network_response(params: dict[str, Any]) -> None:
+                state["network"].append({
+                    "type": "response",
+                    "url": params.get("response", {}).get("url", ""),
+                    "status": params.get("response", {}).get("status", 0),
+                    "requestId": params.get("requestId", ""),
+                    "timestamp": params.get("timestamp"),
+                })
+
+            client.cdp.on("Network.requestWillBeSent", on_network_request)
+            client.cdp.on("Network.responseReceived", on_network_response)
+
+        if capture_console:
+            await client.cdp.send_command("Runtime.enable", {})
+
+            def on_console_api(params: dict[str, Any]) -> None:
+                state["console"].append({
+                    "type": params.get("type", "log"),
+                    "args": params.get("args", []),
+                    "timestamp": params.get("timestamp"),
+                })
+
+            client.cdp.on("Runtime.consoleAPICalled", on_console_api)
+
+        if capture_screenshots:
+            result = await client.cdp.send_command("Page.captureScreenshot", {})
+            if result.get("data"):
+                state["screenshots"].append({
+                    "timestamp": _time.time(),
+                    "data": result["data"],
+                })
+
+        await client.cdp.send_command("Tracing.start", {"traceType": "devtools-timeline"})
+
+        self._combined_traces: dict[str, dict[str, Any]] = getattr(
+            self, "_combined_traces", {}
+        )
+        self._combined_traces[trace_id] = state
+        return trace_id
+
+    async def stop_combined_trace(self, trace_id: str) -> dict[str, Any]:
+        """Stop a combined trace and return collected data.
+
+        Args:
+            trace_id: The trace ID returned by start_combined_trace.
+
+        Returns:
+            Dict with keys: trace_events, screenshots, network, console.
+        """
+        import io
+        import zipfile
+
+        client = self._require_client()
+        traces: dict[str, dict[str, Any]] = getattr(self, "_combined_traces", {})
+        state = traces.get(trace_id)
+        if state is None:
+            return {"error": f"Unknown trace_id: {trace_id}"}
+
+        trace_events: list[dict[str, Any]] = []
+
+        async def _on_tracing_complete(params: dict[str, Any]) -> None:
+            """Handle Tracing.tracingComplete and extract trace events."""
+            stream_handle = params.get("stream")
+            if stream_handle:
+                chunks: list[bytes] = []
+                while True:
+                    resp = await client.cdp.send_command(
+                        "IO.read", {"handle": stream_handle}
+                    )
+                    data = resp.get("data", "")
+                    if not data:
+                        break
+                    chunks.append(base64.b64decode(data))
+                    if not resp.get("base64Encoded", True):
+                        break
+                raw = b"".join(chunks)
+                try:
+                    zf = zipfile.ZipFile(io.BytesIO(raw))
+                    for name in zf.namelist():
+                        content = zf.read(name).decode("utf-8", errors="replace")
+                        trace_events.extend(
+                            json.loads(content).get("traceEvents", [])
+                        )
+                except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
+                    trace_events.append({"raw_size": len(raw)})
+
+        client.cdp.on("Tracing.tracingComplete", _on_tracing_complete)
+        await client.cdp.send_command("Tracing.end", {})
+
+        if state["capture_screenshots"]:
+            screenshot_result = await client.cdp.send_command("Page.captureScreenshot", {})
+            if screenshot_result.get("data"):
+                state["screenshots"].append({
+                    "timestamp": 0,
+                    "data": screenshot_result["data"],
+                })
+
+        import asyncio as _asyncio
+
+        await _asyncio.sleep(0.5)
+
+        result: dict[str, Any] = {
+            "trace_events": trace_events,
+            "screenshots": state["screenshots"],
+            "network": state["network"],
+            "console": state["console"],
+        }
+        del traces[trace_id]
+        return result
+
+    # ── axe-core audit (W9) ────────────────────────────────
+
+    async def axe_audit(self) -> dict[str, Any]:
+        """Run axe-core accessibility audit on the current page.
+
+        Returns:
+            Dict with violations, passes, incomplete, and inapplicable lists.
+        """
+        client = self._require_client()
+
+        axe_js = (
+            "if (typeof axe === 'undefined') { "
+            "  const s = document.createElement('script'); "
+            "  s.src = 'https://unpkg.com/axe-core@4.9.1/axe.min.js'; "
+            "  document.head.appendChild(s); "
+            "  await new Promise(r => s.onload = r); "
+            "} "
+            "await axe.run(document, { "
+            "  resultTypes: ['violations', 'passes', 'incomplete', 'inapplicable'] "
+            "})"
+        )
+        result = await client.script.evaluate(
+            expression=axe_js,
+            await_promise=True,
+            target=self._context,
+        )
+        value = getattr(result, "value", None)
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, str):
+            try:
+                return dict(json.loads(value))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {"error": "axe-core audit failed", "raw": str(result)}
+
+    # ── Event subscription (W11) ───────────────────────────
+
+    async def subscribe_events(
+        self,
+        event_types: list[str],
+        callback: Any,
+    ) -> str:
+        """Subscribe to real-time browser events.
+
+        Args:
+            event_types: List of event types to subscribe to.
+            callback: Callable that receives event dicts.
+
+        Returns:
+            A subscription ID for later unsubscription.
+        """
+        import time as _time
+
+        client = self._require_client()
+        sub_id = f"sub-{int(_time.time() * 1000)}"
+
+        if not hasattr(self, "_subscriptions"):
+            self._subscriptions: dict[str, dict[str, Any]] = {}
+
+        handlers: dict[str, Any] = {}
+
+        event_map = {
+            "console": ("Runtime.consoleAPICalled", "console"),
+            "network_request": ("Network.requestWillBeSent", "network_request"),
+            "network_response": ("Network.responseReceived", "network_response"),
+            "dialog": ("Page.javascriptDialogOpening", "dialog"),
+            "navigation": ("Page.frameNavigated", "navigation"),
+        }
+
+        for evt_type in event_types:
+            if evt_type in event_map:
+                cdp_event, label = event_map[evt_type]
+
+                def make_handler(lbl: str) -> Any:
+                    def _handler(params: dict[str, Any]) -> None:
+                        callback({"type": lbl, "data": params})
+                    return _handler
+
+                handler = make_handler(label)
+                client.cdp.on(cdp_event, handler)
+                handlers[cdp_event] = handler
+
+                if evt_type in ("network_request", "network_response"):
+                    import asyncio as _asyncio
+
+                    _asyncio.ensure_future(
+                        client.cdp.send_command("Network.enable", {})
+                    )
+                elif evt_type == "console":
+                    import asyncio as _asyncio
+
+                    _asyncio.ensure_future(
+                        client.cdp.send_command("Runtime.enable", {})
+                    )
+
+        self._subscriptions[sub_id] = handlers
+        return sub_id
+
+    async def unsubscribe_events(self, subscription_id: str) -> None:
+        """Unsubscribe from events by subscription ID.
+
+        Args:
+            subscription_id: The ID returned by subscribe_events.
+        """
+        client = self._require_client()
+        subs: dict[str, dict[str, Any]] = getattr(self, "_subscriptions", {})
+        handlers = subs.pop(subscription_id, {})
+        for cdp_event, handler in handlers.items():
+            client.cdp.off(cdp_event, handler)
+
     # ── Accessibility ──────────────────────────────────────
 
     async def a11y_tree(self) -> dict[str, Any]:
