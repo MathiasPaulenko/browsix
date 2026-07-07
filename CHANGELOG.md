@@ -2,6 +2,33 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.11.0 — 2026-07-08
+
+### Refactored
+
+- **Action registry pattern** — `_execute_action` in `multi.py` refactored from 15 if/elif blocks to a dict-based action registry with lazy factory functions
+- **Wildcard imports removed** — `cli/app.py` replaced 17 `import *` statements with explicit module imports for traceability
+- **`_handle_error` simplified** — 7 repetitive `isinstance` blocks in `cli/_shared.py` replaced with dict-based exception-to-exit-code mapping
+- **`_get_backend` event loop fix** — Removed fragile `get_running_loop` / `run_until_complete` pattern; added `select_with_fallback_sync` to `BackendManager` for clean sync backend selection
+- **`__all__` added to all public modules** — 13 root-level modules now declare their public API surface explicitly
+- **Spanish docstrings translated** — `__init__.py` and `backend/bidi.py` docstrings now in English
+
+### Security
+
+- **Plain-text credential warning** — `load_auth_context` in `auth.py` now emits a warning when a password is stored in plain-text JSON; suppressible via `WAVEXIS_AUTH_NO_WARN=1`
+
+### CI/CD
+
+- **Coverage threshold enforced** — `--cov-fail-under=80` added to pytest in unit-tests job
+- **BiDi integration CI** — New `bidi-integration-tests` job installs `.[dev,bidi]` and runs integration tests
+- **Multi-version mypy** — Typecheck job now runs on Python 3.11, 3.12, and 3.13
+- **Dependency upper bounds pinned** — All dependencies now have `<next-major` constraints (typer, pyyaml, aiohttp, cdpwave, bidiwave, rich, pytest, ruff, mypy, etc.)
+
+### Testing
+
+- **Shared test fixtures** — `MockBackend` class with AsyncMock stubs added to `tests/conftest.py` as `mock_backend` and `mock_backend_factory` fixtures
+- **Per-level conftest** — `tests/unit/conftest.py` and `tests/integration/conftest.py` with level-specific fixtures
+
 ## v2.10.1 — 2026-07-07
 
 ### Security

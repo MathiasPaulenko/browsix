@@ -1,23 +1,33 @@
 """wavexis CLI — thin orchestrator that imports domain modules."""
 
-from wavexis.cli._advanced import *  # noqa: F401, F403
-from wavexis.cli._capture import *  # noqa: F401, F403
-from wavexis.cli._config import *  # noqa: F401, F403
-from wavexis.cli._debug import *  # noqa: F401, F403
-from wavexis.cli._emulation import *  # noqa: F401, F403
-from wavexis.cli._experimental import *  # noqa: F401, F403
-from wavexis.cli._iframe import *  # noqa: F401, F403
-from wavexis.cli._input import *  # noqa: F401, F403
-from wavexis.cli._navigation import *  # noqa: F401, F403
-from wavexis.cli._network import *  # noqa: F401, F403
-from wavexis.cli._network_inspect import *  # noqa: F401, F403
-from wavexis.cli._nl import *  # noqa: F401, F403
-from wavexis.cli._perf import *  # noqa: F401, F403
-from wavexis.cli._serve import *  # noqa: F401, F403
-from wavexis.cli._session import *  # noqa: F401, F403
-from wavexis.cli._shadow import *  # noqa: F401, F403
-from wavexis.cli._shared import *  # noqa: F401, F403
-from wavexis.cli._shared import app  # noqa: F401
-from wavexis.cli._workflow import *  # noqa: F401, F403
+from wavexis.cli import _advanced  # noqa: F401
+from wavexis.cli import _capture  # noqa: F401
+from wavexis.cli import _config  # noqa: F401
+from wavexis.cli import _debug  # noqa: F401
+from wavexis.cli import _emulation  # noqa: F401
+from wavexis.cli import _experimental  # noqa: F401
+from wavexis.cli import _iframe  # noqa: F401
+from wavexis.cli import _input  # noqa: F401
+from wavexis.cli import _navigation  # noqa: F401
+from wavexis.cli import _network  # noqa: F401
+from wavexis.cli import _network_inspect  # noqa: F401
+from wavexis.cli import _nl  # noqa: F401
+from wavexis.cli import _perf  # noqa: F401
+from wavexis.cli import _serve  # noqa: F401
+from wavexis.cli import _session  # noqa: F401
+from wavexis.cli import _shadow  # noqa: F401
+from wavexis.cli import _workflow  # noqa: F401
+from wavexis.cli._capture import _check_assertion  # noqa: F401
+from wavexis.cli._shared import (  # noqa: F401
+    EXIT_BACKEND_ERROR,
+    EXIT_BROWSER_ERROR,
+    EXIT_CONFIG_ERROR,
+    EXIT_SUCCESS,
+    CLIContext,
+    _browser_options,
+    _load_global_config,
+    _ctx,
+    app,
+)
 
 __all__ = ["app"]

@@ -12,6 +12,8 @@ from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, ScreenshotParams, WaitStrategy
 from wavexis.exceptions import WavexisError
 
+__all__ = ["HELP_TEXT", "execute_repl_command", "parse_command", "repl_loop"]
+
 HELP_TEXT = """\
 Available commands:
   navigate <url>          Navigate to a URL

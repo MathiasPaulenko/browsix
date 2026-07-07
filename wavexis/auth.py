@@ -1,9 +1,16 @@
-"""Auth context for loading cookies, headers, and basic auth from JSON."""
+"""Auth context for loading cookies, headers, and basic auth from JSON.
+
+.. deprecated::
+    Storing passwords in plain-text JSON is insecure. Consider using
+    environment variables or an encrypted secrets manager instead.
+"""
 
 from __future__ import annotations
 
 import base64
 import json
+import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,6 +18,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from wavexis.backend.base import AbstractBackend
     from wavexis.config import WaitStrategy
+
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "AuthContext",
+    "apply_auth_context",
+    "load_auth",
+    "load_auth_context",
+    "load_headers",
+]
 
 
 @dataclass
@@ -44,11 +61,19 @@ def load_auth_context(path: str) -> AuthContext:
         json.JSONDecodeError: If the file is not valid JSON.
     """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    password = data.get("password")
+    if password and not os.environ.get("WAVEXIS_AUTH_NO_WARN"):
+        logger.warning(
+            "Auth context '%s' contains a plain-text password. "
+            "Consider using environment variables or an encrypted secrets manager. "
+            "Set WAVEXIS_AUTH_NO_WARN=1 to suppress this warning.",
+            path,
+        )
     return AuthContext(
         cookies=data.get("cookies", []),
         headers=data.get("headers", {}),
         username=data.get("username"),
-        password=data.get("password"),
+        password=password,
     )
 
 

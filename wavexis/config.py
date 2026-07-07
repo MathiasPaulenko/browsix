@@ -5,6 +5,34 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+__all__ = [
+    "PAPER_SIZES",
+    "WAIT_PRESETS",
+    "THROTTLE_PRESETS",
+    "DEVICE_PRESETS",
+    "BrowserOptions",
+    "WaitStrategy",
+    "ScreenshotParams",
+    "PDFParams",
+    "EvalParams",
+    "DOMParams",
+    "ScrapeParams",
+    "HarParams",
+    "CookieParams",
+    "NetworkParams",
+    "EmulationParams",
+    "InputParams",
+    "ThrottleParams",
+    "SensorParams",
+    "ScreencastParams",
+    "StorageParams",
+    "AnimationParams",
+    "CSSParams",
+    "DebugParams",
+    "CookieActionParams",
+    "HeaderParams",
+]
+
 PAPER_SIZES: dict[str, dict[str, float]] = {
     "a4": {"width": 8.27, "height": 11.69},
     "letter": {"width": 8.5, "height": 11.0},

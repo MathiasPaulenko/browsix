@@ -33,6 +33,18 @@ from typing import Any, Protocol, runtime_checkable
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 
+__all__ = [
+    "ActionFactory",
+    "ActionPlugin",
+    "MiddlewarePlugin",
+    "Plugin",
+    "PluginContext",
+    "PluginRegistry",
+    "get_registry",
+    "load_plugins",
+    "reset_registry",
+]
+
 logger = logging.getLogger(__name__)
 
 ENTRY_POINT_GROUP = "wavexis.plugins"

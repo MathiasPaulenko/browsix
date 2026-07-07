@@ -1,6 +1,6 @@
 """WebDriver BiDi backend using bidiwave.
 
-Supports launch, navigate, screenshot, eval, raw, close, and BiDi paridad
+Supports launch, navigate, screenshot, eval, raw, close, and BiDi parity
 for navigation, tabs, DOM, storage, contexts, window bounds, dialogs, and permissions.
 Experimental CDP domains (WebAuthn, WebAudio, Media, Cast, Bluetooth) raise
 NotImplementedError — use --backend cdp for those features.

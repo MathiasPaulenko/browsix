@@ -31,6 +31,15 @@ from wavexis.config import (
 )
 from wavexis.exceptions import WavexisError
 
+__all__ = [
+    "BackendPool",
+    "TokenBucket",
+    "create_app",
+    "serve",
+    "set_allowed_base_dir",
+    "set_ws_max_connections",
+]
+
 
 def _safe_params(cls: type, data: dict[str, Any]) -> Any:
     """Construct a dataclass from a dict, ignoring unknown keys.

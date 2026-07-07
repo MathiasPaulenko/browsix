@@ -223,40 +223,41 @@ def _progress(current: int, total: int, label: str = "") -> None:
     typer.echo(f"[{current}/{total}]{suffix}")
 
 
+_ERROR_EXIT_CODES: dict[type[Exception], int] = {
+    BackendNotAvailableError: EXIT_BACKEND_ERROR,
+    SessionNotInitializedError: EXIT_BROWSER_ERROR,
+    NavigationError: EXIT_BROWSER_ERROR,
+    WaitTimeoutError: EXIT_BROWSER_ERROR,
+    ElementNotFoundError: EXIT_BROWSER_ERROR,
+    MultiConfigError: EXIT_CONFIG_ERROR,
+    WavexisError: EXIT_BROWSER_ERROR,
+}
+
+_ERROR_MESSAGES: dict[type[Exception], str] = {
+    BackendNotAvailableError: (
+        "No backend available.\n"
+        "Hint: Install cdpwave with `pip install wavexis[cdp]`, "
+        "or bidiwave with `pip install wavexis[bidi]`."
+    ),
+    MultiConfigError: (
+        "Invalid multi config: {e}\n"
+        "Hint: Run `wavexis multi <config> --dry-run` to validate the config."
+    ),
+}
+
+
 def _handle_error(e: Exception) -> None:
     """Handle a WavexisError with the correct exit code and message.
 
     Args:
         e: The exception to handle.
     """
-    if isinstance(e, BackendNotAvailableError):
-        Output.error(
-            "No backend available.\n"
-            "Hint: Install cdpwave with `pip install wavexis[cdp]`, "
-            "or bidiwave with `pip install wavexis[bidi]`."
-        )
-        raise typer.Exit(EXIT_BACKEND_ERROR) from e
-    if isinstance(e, SessionNotInitializedError):
-        Output.error(str(e))
-        raise typer.Exit(EXIT_BROWSER_ERROR) from e
-    if isinstance(e, NavigationError):
-        Output.error(str(e))
-        raise typer.Exit(EXIT_BROWSER_ERROR) from e
-    if isinstance(e, WaitTimeoutError):
-        Output.error(str(e))
-        raise typer.Exit(EXIT_BROWSER_ERROR) from e
-    if isinstance(e, ElementNotFoundError):
-        Output.error(str(e))
-        raise typer.Exit(EXIT_BROWSER_ERROR) from e
-    if isinstance(e, MultiConfigError):
-        Output.error(
-            f"Invalid multi config: {e}\n"
-            "Hint: Run `wavexis multi <config> --dry-run` to validate the config."
-        )
-        raise typer.Exit(EXIT_CONFIG_ERROR) from e
-    if isinstance(e, WavexisError):
-        Output.error(str(e))
-        raise typer.Exit(EXIT_BROWSER_ERROR) from e
+    for exc_type, exit_code in _ERROR_EXIT_CODES.items():
+        if isinstance(e, exc_type):
+            template = _ERROR_MESSAGES.get(type(e))
+            message = template.format(e=e) if template else str(e)
+            Output.error(message)
+            raise typer.Exit(exit_code) from e
     raise e
 
 
@@ -282,19 +283,9 @@ def _get_backend() -> Any:
     Registers the backend for automatic cleanup on crash or signal.
     Falls back to another backend if the preferred one fails to launch.
     """
-    import asyncio
-
     manager = get_manager()
     preferred = _get_ctx().preferred_backend
-    try:
-        asyncio.get_running_loop()
-        backend = asyncio.get_event_loop().run_until_complete(
-            manager.select_with_fallback(preferred, _browser_options())
-        )
-    except RuntimeError:
-        backend = asyncio.run(
-            manager.select_with_fallback(preferred, _browser_options())
-        )
+    backend = manager.select_with_fallback_sync(preferred, _browser_options())
     register_backend(backend)
     return backend
 

@@ -15,6 +15,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["register_backend", "unregister_backend"]
+
 _registered_backends: list[Any] = []
 _cleanup_done = False
 

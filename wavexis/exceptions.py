@@ -1,5 +1,17 @@
 """Exception hierarchy for wavexis."""
 
+__all__ = [
+    "ActionError",
+    "BackendNotAvailableError",
+    "BackendNotSupportedError",
+    "ElementNotFoundError",
+    "MultiConfigError",
+    "NavigationError",
+    "SessionNotInitializedError",
+    "WaitTimeoutError",
+    "WavexisError",
+]
+
 
 class WavexisError(Exception):
     """Base exception for all wavexis errors."""

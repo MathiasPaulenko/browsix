@@ -118,6 +118,25 @@ class BackendManager:
         Raises:
             BackendNotAvailableError: If no backend can be created.
         """
+        return self.select_with_fallback_sync(preferred, options)
+
+    def select_with_fallback_sync(
+        self,
+        preferred: str | None = None,
+        options: BrowserOptions | None = None,
+    ) -> AbstractBackend:
+        """Synchronous version of select_with_fallback.
+
+        Args:
+            preferred: Preferred backend name. If None, tries all in order.
+            options: Unused (kept for API compatibility).
+
+        Returns:
+            A backend instance (not yet launched).
+
+        Raises:
+            BackendNotAvailableError: If no backend can be created.
+        """
         available = self.list_available()
         if not available:
             raise BackendNotAvailableError()

@@ -25,6 +25,8 @@ import yaml
 from wavexis.backend.base import AbstractBackend
 from wavexis.multi import execute_actions, parse_yaml
 
+__all__ = ["Recorder", "record_to_yaml", "replay_from_yaml"]
+
 
 class Recorder:
     """Wraps a backend and records method calls as action dicts.

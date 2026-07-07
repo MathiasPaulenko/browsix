@@ -6,6 +6,14 @@ from typing import Any
 
 import yaml
 
+__all__ = [
+    "TEMPLATES",
+    "TEMPLATE_NAMES",
+    "generate_config",
+    "interactive_init",
+    "list_templates",
+]
+
 TEMPLATES: dict[str, dict[str, Any]] = {
     "screenshot": {
         "description": "Take a screenshot of a URL",
