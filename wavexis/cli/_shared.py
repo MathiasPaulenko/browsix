@@ -11,6 +11,7 @@ from typing import Any
 import typer
 
 from wavexis.backend.manager import get_manager
+from wavexis.cleanup import register_backend, unregister_backend
 from wavexis.config import (
     DEVICE_PRESETS,
     BrowserOptions,
@@ -51,6 +52,7 @@ __all__ = [
     "_write_json_output",
     "app",
     "get_manager",
+    "unregister_backend",
 ]
 
 EXIT_SUCCESS = 0
@@ -229,8 +231,13 @@ def _run_async(coro: Any) -> Any:
 
 
 def _get_backend() -> Any:
-    """Select a backend using the preferred backend if set."""
-    return get_manager().select(_get_ctx().preferred_backend)
+    """Select a backend using the preferred backend if set.
+
+    Registers the backend for automatic cleanup on crash or signal.
+    """
+    backend = get_manager().select(_get_ctx().preferred_backend)
+    register_backend(backend)
+    return backend
 
 
 def _browser_options() -> BrowserOptions:

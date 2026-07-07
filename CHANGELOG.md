@@ -2,6 +2,14 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.2.3 — 2026-07-07
+
+### Added
+
+- Resource cleanup module (`wavexis.cleanup`) with `atexit` and signal handlers
+- Backends are automatically registered for cleanup on crash or signal (SIGINT, SIGTERM, SIGBREAK)
+- Orphaned browser processes are closed even when the process is killed unexpectedly
+
 ## v2.2.2 — 2026-07-07
 
 ### Added
