@@ -51,9 +51,27 @@ def serve(
     rate_limit: int = typer.Option(
         0, "--rate-limit", help="Max requests per minute (0 = no limit)"
     ),
+    base_dir: str = typer.Option(
+        None, "--base-dir",
+        help="Base directory for validating file paths in /multi and /auth requests",
+    ),
+    api_key: str = typer.Option(
+        None, "--api-key",
+        help="API key for authenticating requests (Bearer token or api_key query param)",
+    ),
+    cors_origins: str = typer.Option(
+        "", "--cors-origins",
+        help="Comma-separated allowed CORS origins (e.g. 'https://app.com,*')",
+    ),
+    max_concurrent: int = typer.Option(
+        5, "--max-concurrent",
+        help="Max concurrent browser backends (default 5)",
+    ),
 ) -> None:
     """Start the wavexis HTTP server."""
     from wavexis.serve import serve as _serve
+
+    origins = [o.strip() for o in cors_origins.split(",") if o.strip()] or None
 
     try:
         _serve(
@@ -61,6 +79,10 @@ def serve(
             host=host,
             backend=backend or _get_ctx().preferred_backend,
             rate_limit=rate_limit or None,
+            base_dir=base_dir,
+            api_key=api_key,
+            cors_origins=origins,
+            max_concurrent=max_concurrent,
         )
     except WavexisError as e:
         _handle_error(e)

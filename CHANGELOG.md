@@ -2,6 +2,32 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.10.1 — 2026-07-07
+
+### Security
+
+- **Path traversal fix** — `handle_multi` and `handle_auth` in serve mode now validate file paths against a configurable `--base-dir`. Without `--base-dir`, file path access is disabled by default.
+- **API key authentication** — New `--api-key` flag for serve mode. All requests must include the key as a Bearer token or `api_key` query parameter. `/health` is exempt.
+- **CORS middleware** — New `--cors-origins` flag for serve mode. Adds `Access-Control-Allow-*` headers for browser-based clients.
+
+### Performance
+
+- **Backend pool** — New `--max-concurrent` flag (default 5) limits simultaneous browser instances in serve mode via a semaphore-based pool.
+- **WebSocket connection limit** — `/ws` endpoint now caps concurrent connections at 20 (configurable via `set_ws_max_connections()`). Returns 503 when full.
+- **DOM mutation streaming** — Replaced `querySelectorAll('*')` polling with a `MutationObserver`-based approach in `_stream_dom_mutations`. Only collects actual mutations instead of scanning all elements.
+
+### Fixed
+
+- **TokenBucket race condition** — `retry_after()` is now async and uses the lock to prevent concurrent reads of `_tokens`.
+- **CI silent failures** — Removed `continue-on-error: true` from integration tests, serve tests, and Docker build in `ci.yml`. Failures are now reported correctly.
+- **Input validation** — All serve handlers now filter unknown JSON keys via `_safe_params()` before constructing dataclass params, preventing `TypeError` from unexpected fields.
+
+### Changed
+
+- `create_app()` and `serve()` accept `base_dir`, `api_key`, `cors_origins`, and `max_concurrent` parameters.
+- `serve` CLI command accepts `--base-dir`, `--api-key`, `--cors-origins`, and `--max-concurrent` flags.
+- Version synced between `pyproject.toml` and `wavexis/__init__.py`.
+
 ## v2.10.0 — 2026-07-07
 
 ### Added

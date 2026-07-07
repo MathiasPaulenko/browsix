@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import dataclasses
 import json
 import time
+from pathlib import Path
 from typing import Any
 
 from wavexis import __version__
@@ -28,6 +30,21 @@ from wavexis.config import (
     WaitStrategy,
 )
 from wavexis.exceptions import WavexisError
+
+
+def _safe_params(cls: type, data: dict[str, Any]) -> Any:
+    """Construct a dataclass from a dict, ignoring unknown keys.
+
+    Args:
+        cls: A dataclass type to construct.
+        data: Raw dict from the request JSON body.
+
+    Returns:
+        An instance of cls with only valid fields populated.
+    """
+    valid = {f.name for f in dataclasses.fields(cls)}
+    filtered = {k: v for k, v in data.items() if k in valid}
+    return cls(**filtered)
 
 
 class TokenBucket:
@@ -68,13 +85,14 @@ class TokenBucket:
                 return True
             return False
 
-    def retry_after(self) -> float:
+    async def retry_after(self) -> float:
         """Return seconds until the next token is available."""
-        if self._tokens >= 1:
-            return 0.0
-        if self._refill_rate <= 0:
-            return 1.0
-        return (1 - self._tokens) / self._refill_rate
+        async with self._lock:
+            if self._tokens >= 1:
+                return 0.0
+            if self._refill_rate <= 0:
+                return 1.0
+            return (1 - self._tokens) / self._refill_rate
 
 
 def _rate_limit_middleware(bucket: TokenBucket) -> Any:
@@ -90,7 +108,7 @@ def _rate_limit_middleware(bucket: TokenBucket) -> Any:
         allowed = await bucket.acquire()
         if not allowed:
             web = _import_aiohttp()
-            retry_after = bucket.retry_after()
+            retry_after = await bucket.retry_after()
             return web.Response(
                 status=429,
                 headers={"Retry-After": f"{retry_after:.1f}"},
@@ -99,6 +117,118 @@ def _rate_limit_middleware(bucket: TokenBucket) -> Any:
                 content_type="application/json",
             )
         return await handler(request)
+
+    return middleware
+
+
+_ALLOWED_BASE_DIR: Path | None = None
+
+
+def set_allowed_base_dir(path: str | None) -> None:
+    """Set the base directory that serve-mode file paths must be inside of.
+
+    Args:
+        path: Absolute path to the allowed base directory, or None to allow
+            any path (default, not recommended for production).
+    """
+    global _ALLOWED_BASE_DIR
+    if path:
+        _ALLOWED_BASE_DIR = Path(path).resolve()
+    else:
+        _ALLOWED_BASE_DIR = None
+
+
+def _validate_path(raw_path: str) -> Path:
+    """Validate that a user-supplied path is inside the allowed base directory.
+
+    Args:
+        raw_path: Raw path string from the request body.
+
+    Returns:
+        The resolved Path object.
+
+    Raises:
+        WavexisError: If the path is outside the allowed base directory or
+            if no base directory is configured.
+    """
+    if _ALLOWED_BASE_DIR is None:
+        raise WavexisError(
+            "File path access is disabled. Configure --base-dir when starting "
+            "the server to allow file path references."
+        )
+    resolved = Path(raw_path).resolve()
+    try:
+        resolved.relative_to(_ALLOWED_BASE_DIR)
+    except ValueError:
+        raise WavexisError(
+            f"Path '{raw_path}' is outside the allowed base directory."
+        ) from None
+    return resolved
+
+
+def _auth_middleware(api_key: str) -> Any:
+    """Create an aiohttp middleware that validates an API key.
+
+    The key may be provided as a Bearer token in the Authorization header
+    or as an ``api_key`` query parameter.
+
+    Args:
+        api_key: The expected API key.
+
+    Returns:
+        A middleware factory function for aiohttp.
+    """
+    async def middleware(request: Any, handler: Any) -> Any:
+        web = _import_aiohttp()
+
+        if request.path == "/health":
+            return await handler(request)
+
+        token = (
+            request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            or request.query.get("api_key", "")
+        )
+        if token != api_key:
+            return web.Response(
+                status=401,
+                text='{"error": "unauthorized"}',
+                content_type="application/json",
+            )
+        return await handler(request)
+
+    return middleware
+
+
+def _cors_middleware(allowed_origins: list[str]) -> Any:
+    """Create an aiohttp middleware that adds CORS headers.
+
+    Args:
+        allowed_origins: List of allowed origin patterns. Use ["*"] to allow all.
+
+    Returns:
+        A middleware factory function for aiohttp.
+    """
+    allow_all = "*" in allowed_origins
+
+    async def middleware(request: Any, handler: Any) -> Any:
+        web = _import_aiohttp()
+        origin = request.headers.get("Origin", "")
+
+        if request.method == "OPTIONS":
+            resp = web.Response(status=204)
+        else:
+            resp = await handler(request)
+
+        if origin and (allow_all or origin in allowed_origins):
+            resp.headers["Access-Control-Allow-Origin"] = origin if not allow_all else "*"
+            resp.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            resp.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Authorization, X-API-Key"
+            )
+            resp.headers["Access-Control-Max-Age"] = "3600"
+        return resp
 
     return middleware
 
@@ -118,13 +248,46 @@ def _import_aiohttp() -> Any:
 # ── Handlers ───────────────────────────────────────────────
 
 
+class BackendPool:
+    """Concurrency limiter for browser backends in serve mode.
+
+    Uses a semaphore to cap the number of simultaneous browser instances.
+    """
+
+    def __init__(self, max_concurrent: int = 5) -> None:
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def acquire(self) -> None:
+        """Acquire a slot, blocking if the pool is full."""
+        await self._semaphore.acquire()
+
+    def release(self) -> None:
+        """Release a slot back to the pool."""
+        self._semaphore.release()
+
+
+_backend_pool: BackendPool | None = None
+
+
+def _get_pool(request: Any) -> BackendPool:
+    """Get the backend pool from the app, or return a default."""
+    pool = request.app.get("backend_pool")
+    if pool is not None:
+        return pool
+    global _backend_pool
+    if _backend_pool is None:
+        _backend_pool = BackendPool()
+    return _backend_pool
+
+
 async def _get_backend(request: Any) -> AbstractBackend:
     """Create a fresh backend instance for this request.
 
-    Actions call launch() and close() internally, so we cannot share
-    a single backend across requests. Falls back to another backend
-    if the preferred one fails to launch.
+    Acquires a slot from the backend pool before creating the backend.
+    The caller is responsible for calling ``release`` after ``close``.
     """
+    pool = _get_pool(request)
+    await pool.acquire()
     preferred = request.app.get("backend_name")
     return await get_manager().select_with_fallback(preferred, BrowserOptions())
 
@@ -139,18 +302,31 @@ async def _run_action(request: Any, action: Any) -> Any:
     Returns:
         The result of action.execute().
     """
+    pool = _get_pool(request)
     backend = await _get_backend(request)
     try:
         return await action.execute(backend)
     finally:
         await backend.close()
+        pool.release()
+
+
+async def _release_backend(request: Any, backend: AbstractBackend) -> None:
+    """Close a backend and release its pool slot.
+
+    Args:
+        request: The aiohttp request.
+        backend: The backend instance to close.
+    """
+    await backend.close()
+    _get_pool(request).release()
 
 
 async def handle_screenshot(request: Any) -> Any:
     """Handle POST /screenshot — return PNG bytes."""
     web = _import_aiohttp()
     data = await request.json()
-    params = ScreenshotParams(**data)
+    params = _safe_params(ScreenshotParams, data)
     from wavexis.actions.screenshot import ScreenshotAction
 
     action = ScreenshotAction(params)
@@ -162,7 +338,7 @@ async def handle_pdf(request: Any) -> Any:
     """Handle POST /pdf — return PDF bytes."""
     web = _import_aiohttp()
     data = await request.json()
-    params = PDFParams(**data)
+    params = _safe_params(PDFParams, data)
     from wavexis.actions.pdf import PDFAction
 
     action = PDFAction(params)
@@ -174,7 +350,7 @@ async def handle_eval(request: Any) -> Any:
     """Handle POST /eval — return JSON result."""
     web = _import_aiohttp()
     data = await request.json()
-    params = EvalParams(**data)
+    params = _safe_params(EvalParams, data)
     from wavexis.actions.eval import EvalAction
 
     action = EvalAction(params)
@@ -186,7 +362,7 @@ async def handle_scrape(request: Any) -> Any:
     """Handle POST /scrape — return JSON or CSV."""
     web = _import_aiohttp()
     data = await request.json()
-    params = ScrapeParams(**data)
+    params = _safe_params(ScrapeParams, data)
     from wavexis.actions.scrape import ScrapeAction
 
     action = ScrapeAction(params)
@@ -200,7 +376,7 @@ async def handle_dom_get(request: Any) -> Any:
     """Handle POST /dom/get — return HTML as JSON."""
     web = _import_aiohttp()
     data = await request.json()
-    params = DOMParams(**data)
+    params = _safe_params(DOMParams, data)
     from wavexis.actions.dom import DOMAction
 
     action = DOMAction(params)
@@ -212,7 +388,7 @@ async def handle_dom_query(request: Any) -> Any:
     """Handle POST /dom/query — return elements as JSON."""
     web = _import_aiohttp()
     data = await request.json()
-    params = DOMParams(**data)
+    params = _safe_params(DOMParams, data)
     from wavexis.actions.dom import DOMAction
 
     action = DOMAction(params)
@@ -234,7 +410,7 @@ async def handle_navigate(request: Any) -> Any:
     try:
         await backend.navigate(url, strategy)
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok", "url": url})
 
 
@@ -242,7 +418,7 @@ async def handle_har(request: Any) -> Any:
     """Handle POST /har — return HAR data as JSON."""
     web = _import_aiohttp()
     data = await request.json()
-    params = HarParams(**data)
+    params = _safe_params(HarParams, data)
     from wavexis.actions.har import HARAction
 
     action = HARAction(params)
@@ -261,7 +437,7 @@ async def handle_cookies_get(request: Any) -> Any:
         await backend.navigate(url, WaitStrategy(strategy="load"))
         cookies = await backend.get_cookies()
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"cookies": cookies})
 
 
@@ -270,13 +446,13 @@ async def handle_cookies_set(request: Any) -> Any:
     web = _import_aiohttp()
     data = await request.json()
     cookie_data = data.get("cookie", data)
-    params = CookieParams(**cookie_data)
+    params = _safe_params(CookieParams, cookie_data)
     backend = await _get_backend(request)
     await backend.launch(BrowserOptions())
     try:
         await backend.set_cookie(params)
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok"})
 
 
@@ -284,7 +460,8 @@ async def handle_input_click(request: Any) -> Any:
     """Handle POST /input/click — click an element."""
     web = _import_aiohttp()
     data = await request.json()
-    params = InputParams(**data, action="click")
+    params = _safe_params(InputParams, data)
+    params.action = "click"
     from wavexis.actions.input import InputAction
 
     action = InputAction(params)
@@ -296,7 +473,8 @@ async def handle_input_type(request: Any) -> Any:
     """Handle POST /input/type — type text into an element."""
     web = _import_aiohttp()
     data = await request.json()
-    params = InputParams(**data, action="type")
+    params = _safe_params(InputParams, data)
+    params.action = "type"
     from wavexis.actions.input import InputAction
 
     action = InputAction(params)
@@ -386,15 +564,15 @@ async def handle_auth(request: Any) -> Any:
     from wavexis.auth import apply_auth_context, load_auth_context
 
     data = await request.json()
-    context_path = data.get("context", "")
+    context_path = _validate_path(data.get("context", ""))
     url = data.get("url", "")
-    ctx = load_auth_context(context_path)
+    ctx = load_auth_context(str(context_path))
     backend = await _get_backend(request)
     await backend.launch(BrowserOptions())
     try:
         await apply_auth_context(backend, ctx, url)
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok", "url": url})
 
 
@@ -410,7 +588,7 @@ async def handle_user_agent(request: Any) -> Any:
         await backend.set_user_agent(ua)
         await backend.navigate(url, WaitStrategy(strategy="load"))
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok", "user_agent": ua})
 
 
@@ -426,7 +604,7 @@ async def handle_headers(request: Any) -> Any:
         await backend.set_headers(headers)
         await backend.navigate(url, WaitStrategy(strategy="load"))
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok", "headers": headers})
 
 
@@ -442,7 +620,7 @@ async def handle_device(request: Any) -> Any:
         await backend.emulate_device(device)
         await backend.navigate(url, WaitStrategy(strategy="load"))
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok", "device": device})
 
 
@@ -464,7 +642,7 @@ async def handle_modify_request(request: Any) -> Any:
         if url:
             await backend.navigate(url, WaitStrategy(strategy="load"))
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok", "pattern": pattern})
 
 
@@ -486,25 +664,23 @@ async def handle_modify_response(request: Any) -> Any:
         if url:
             await backend.navigate(url, WaitStrategy(strategy="load"))
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({"status": "ok", "pattern": pattern})
 
 
 async def handle_multi(request: Any) -> Any:
     """Handle POST /multi — execute multiple actions from YAML."""
     web = _import_aiohttp()
-    from pathlib import Path
-
     from wavexis.record import replay_from_yaml
 
     data = await request.json()
-    yaml_path = data.get("config", "")
+    yaml_path = _validate_path(data.get("config", ""))
     backend = await _get_backend(request)
     await backend.launch(BrowserOptions(headless=True))
     try:
-        results = await replay_from_yaml(Path(yaml_path), backend)
+        results = await replay_from_yaml(yaml_path, backend)
     finally:
-        await backend.close()
+        await _release_backend(request, backend)
     return web.json_response({
         "status": "ok",
         "actions": len(results),
@@ -613,23 +789,52 @@ async def _stream_navigation(
 async def _stream_dom_mutations(
     ws: Any, backend: AbstractBackend, interval: float,
 ) -> None:
-    """Poll DOM mutations and stream new ones."""
-    seen: set[int] = set()
+    """Stream DOM mutations using a MutationObserver.
+
+    Injects a MutationObserver on first call, then polls the accumulated
+    mutation queue on each interval. Much lighter than scanning all elements.
+    """
+    installed = False
     while True:
         try:
+            if not installed:
+                await backend.eval(
+                    "window.__wavexisMutations = [];"
+                    "window.__wavexisObserver = new MutationObserver(muts => {"
+                    "  for (const m of muts) {"
+                    "    if (m.type === 'childList') {"
+                    "      for (const n of m.addedNodes) {"
+                    "        window.__wavexisMutations.push("
+                    "          {type:'added', tag:n.tagName, "
+                    "           html:(n.outerHTML||'').slice(0,200)});"
+                    "      }"
+                    "      for (const n of m.removedNodes) {"
+                    "        window.__wavexisMutations.push("
+                    "          {type:'removed', tag:n.tagName, "
+                    "           html:(n.outerHTML||'').slice(0,200)});"
+                    "      }"
+                    "    } else if (m.type === 'attributes') {"
+                    "      window.__wavexisMutations.push("
+                    "        {type:'attr', target:m.target.tagName, "
+                    "         attr:m.attributeName});"
+                    "    }"
+                    "  }"
+                    "});"
+                    "window.__wavexisObserver.observe(document.body || "
+                    "  document.documentElement,"
+                    "  {childList:true, subtree:true, attributes:true});"
+                )
+                installed = True
+
             mutations = await backend.eval(
-                "Array.from(document.querySelectorAll('*'))"
-                ".map(e => e.outerHTML.slice(0, 200)).join('\\n')"
+                "window.__wavexisMutations.splice(0, 50)"
             )
             if mutations:
-                key = hash(str(mutations))
-                if key not in seen:
-                    seen.add(key)
-                    await ws.send_json({
-                        "type": "dom_mutation",
-                        "data": {"summary": str(mutations)[:500]},
-                        "timestamp": time.time(),
-                    })
+                await ws.send_json({
+                    "type": "dom_mutation",
+                    "data": {"mutations": mutations[:50]},
+                    "timestamp": time.time(),
+                })
         except WavexisError as exc:
             await ws.send_json({
                 "type": "error",
@@ -672,6 +877,20 @@ async def _stream_perf_metrics(
         await asyncio.sleep(interval)
 
 
+_ws_connections: int = 0
+_ws_max_connections: int = 20
+
+
+def set_ws_max_connections(max_conn: int) -> None:
+    """Set the maximum number of concurrent WebSocket connections.
+
+    Args:
+        max_conn: Maximum concurrent WebSocket connections allowed.
+    """
+    global _ws_max_connections
+    _ws_max_connections = max_conn
+
+
 async def handle_websocket(request: Any) -> Any:
     """Handle GET /ws — WebSocket endpoint for real-time streaming.
 
@@ -687,116 +906,130 @@ async def handle_websocket(request: Any) -> Any:
     Server streams events as JSON messages until the client disconnects.
     """
     web = _import_aiohttp()
+
+    global _ws_connections
+    if _ws_connections >= _ws_max_connections:
+        return web.Response(
+            status=503,
+            text='{"error": "too many websocket connections"}',
+            content_type="application/json",
+        )
+    _ws_connections += 1
+
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
     try:
-        msg = await ws.receive()
-        if msg.type == web.WSMsgType.TEXT:
-            config = json.loads(msg.data)
-        else:
+        try:
+            msg = await ws.receive()
+            if msg.type == web.WSMsgType.TEXT:
+                config = json.loads(msg.data)
+            else:
+                await ws.close()
+                return ws
+        except (json.JSONDecodeError, KeyError, TypeError):
             await ws.close()
             return ws
-    except (json.JSONDecodeError, KeyError, TypeError):
-        await ws.close()
-        return ws
 
-    url = config.get("url", "about:blank")
-    events = config.get("events", ["screenshot"])
-    interval = float(config.get("interval", 1.0))
-    fmt = config.get("format", "png")
-    quality = int(config.get("quality", 80))
+        url = config.get("url", "about:blank")
+        events = config.get("events", ["screenshot"])
+        interval = float(config.get("interval", 1.0))
+        fmt = config.get("format", "png")
+        quality = int(config.get("quality", 80))
 
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    await backend.navigate(url, WaitStrategy(strategy="load"))
+        backend = await _get_backend(request)
+        await backend.launch(BrowserOptions())
+        await backend.navigate(url, WaitStrategy(strategy="load"))
 
-    await ws.send_json({
-        "type": "ready",
-        "url": url,
-        "events": events,
-        "timestamp": time.time(),
-    })
+        await ws.send_json({
+            "type": "ready",
+            "url": url,
+            "events": events,
+            "timestamp": time.time(),
+        })
 
-    tasks: list[asyncio.Task[None]] = []
-    if "screenshot" in events:
-        tasks.append(asyncio.create_task(
-            _stream_screenshots(ws, backend, interval, fmt, quality),
-        ))
-    if "console" in events:
-        tasks.append(asyncio.create_task(
-            _stream_console(ws, backend, max(interval, 0.5)),
-        ))
-    if "navigation" in events:
-        tasks.append(asyncio.create_task(
-            _stream_navigation(ws, backend, max(interval, 0.5)),
-        ))
-    if "dom_mutation" in events:
-        tasks.append(asyncio.create_task(
-            _stream_dom_mutations(ws, backend, max(interval, 0.5)),
-        ))
-    if "perf_metrics" in events:
-        tasks.append(asyncio.create_task(
-            _stream_perf_metrics(ws, backend, max(interval, 1.0)),
-        ))
+        tasks: list[asyncio.Task[None]] = []
+        if "screenshot" in events:
+            tasks.append(asyncio.create_task(
+                _stream_screenshots(ws, backend, interval, fmt, quality),
+            ))
+        if "console" in events:
+            tasks.append(asyncio.create_task(
+                _stream_console(ws, backend, max(interval, 0.5)),
+            ))
+        if "navigation" in events:
+            tasks.append(asyncio.create_task(
+                _stream_navigation(ws, backend, max(interval, 0.5)),
+            ))
+        if "dom_mutation" in events:
+            tasks.append(asyncio.create_task(
+                _stream_dom_mutations(ws, backend, max(interval, 0.5)),
+            ))
+        if "perf_metrics" in events:
+            tasks.append(asyncio.create_task(
+                _stream_perf_metrics(ws, backend, max(interval, 1.0)),
+            ))
 
-    subscribe_types = [
-        e for e in events if e in ("network_request", "network_response", "dialog")
-    ]
-    if subscribe_types:
-        async def _on_event(event: dict[str, Any]) -> None:
-            await ws.send_json({
-                "type": event.get("type", "event"),
-                "data": event.get("data", {}),
-                "timestamp": time.time(),
-            })
+        subscribe_types = [
+            e for e in events if e in ("network_request", "network_response", "dialog")
+        ]
+        if subscribe_types:
+            async def _on_event(event: dict[str, Any]) -> None:
+                await ws.send_json({
+                    "type": event.get("type", "event"),
+                    "data": event.get("data", {}),
+                    "timestamp": time.time(),
+                })
 
-        await backend.subscribe_events(subscribe_types, _on_event)
+            await backend.subscribe_events(subscribe_types, _on_event)
 
-    try:
-        async for msg in ws:
-            if msg.type == web.WSMsgType.TEXT:
-                try:
-                    cmd = json.loads(msg.data)
-                except json.JSONDecodeError:
-                    continue
-                action = cmd.get("action")
-                if action == "navigate":
-                    new_url = cmd.get("url", "")
-                    await backend.navigate(new_url, WaitStrategy(strategy="load"))
-                    await ws.send_json({
-                        "type": "navigated",
-                        "url": new_url,
-                        "timestamp": time.time(),
-                    })
-                elif action == "eval":
-                    expr = cmd.get("expression", "")
-                    result = await backend.eval(expr)
-                    await ws.send_json({
-                        "type": "eval_result",
-                        "result": result,
-                        "timestamp": time.time(),
-                    })
-                elif action == "screenshot":
-                    params = ScreenshotParams(url="", format=fmt, quality=quality)
-                    img = await backend.screenshot(params)
-                    b64 = base64.b64encode(img).decode("ascii")
-                    await ws.send_json({
-                        "type": "screenshot",
-                        "data": b64,
-                        "timestamp": time.time(),
-                    })
-                elif action == "close":
+        try:
+            async for msg in ws:
+                if msg.type == web.WSMsgType.TEXT:
+                    try:
+                        cmd = json.loads(msg.data)
+                    except json.JSONDecodeError:
+                        continue
+                    action = cmd.get("action")
+                    if action == "navigate":
+                        new_url = cmd.get("url", "")
+                        await backend.navigate(new_url, WaitStrategy(strategy="load"))
+                        await ws.send_json({
+                            "type": "navigated",
+                            "url": new_url,
+                            "timestamp": time.time(),
+                        })
+                    elif action == "eval":
+                        expr = cmd.get("expression", "")
+                        result = await backend.eval(expr)
+                        await ws.send_json({
+                            "type": "eval_result",
+                            "result": result,
+                            "timestamp": time.time(),
+                        })
+                    elif action == "screenshot":
+                        params = ScreenshotParams(url="", format=fmt, quality=quality)
+                        img = await backend.screenshot(params)
+                        b64 = base64.b64encode(img).decode("ascii")
+                        await ws.send_json({
+                            "type": "screenshot",
+                            "data": b64,
+                            "timestamp": time.time(),
+                        })
+                    elif action == "close":
+                        break
+                elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.CLOSING,
+                                   web.WSMsgType.CLOSED, web.WSMsgType.ERROR):
                     break
-            elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.CLOSING,
-                               web.WSMsgType.CLOSED, web.WSMsgType.ERROR):
-                break
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await _release_backend(request, backend)
+            await ws.close()
     finally:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await backend.close()
-        await ws.close()
+        global _ws_connections
+        _ws_connections -= 1
 
     return ws
 
@@ -819,6 +1052,10 @@ async def handle_plugins(request: Any) -> Any:
 def create_app(
     backend_name: str | None = None,
     rate_limit: int | None = None,
+    base_dir: str | None = None,
+    api_key: str | None = None,
+    cors_origins: list[str] | None = None,
+    max_concurrent: int = 5,
 ) -> Any:
     """Create and configure the aiohttp web application.
 
@@ -826,6 +1063,12 @@ def create_app(
         backend_name: Preferred backend name (e.g. "cdp", "bidi").
             If None, auto-detects the first available backend.
         rate_limit: Max requests per minute (0 or None = no limit).
+        base_dir: Base directory for validating file paths in requests.
+            If None, file path access is disabled.
+        api_key: If set, all requests must include this key as a Bearer
+            token or ``api_key`` query parameter.
+        cors_origins: List of allowed CORS origins. Use ["*"] for all.
+        max_concurrent: Max number of concurrent browser backends.
 
     Returns:
         aiohttp.web.Application with all routes registered.
@@ -837,8 +1080,16 @@ def create_app(
     web = _import_aiohttp()
     from wavexis.plugins import get_registry
 
+    set_allowed_base_dir(base_dir)
+
     registry = get_registry()
     middlewares: list[Any] = [m.factory(web) for m in registry.middleware]
+
+    if cors_origins:
+        middlewares.append(_cors_middleware(cors_origins))
+
+    if api_key:
+        middlewares.append(_auth_middleware(api_key))
 
     if rate_limit and rate_limit > 0:
         bucket = TokenBucket(capacity=rate_limit, refill_period=60.0)
@@ -848,6 +1099,7 @@ def create_app(
     manager = get_manager()
     app["backend_name"] = backend_name
     app["backends"] = manager.list_available()
+    app["backend_pool"] = BackendPool(max_concurrent=max_concurrent)
 
     app.router.add_post("/screenshot", handle_screenshot)
     app.router.add_post("/pdf", handle_pdf)
@@ -884,6 +1136,10 @@ def serve(
     host: str = "localhost",
     backend: str | None = None,
     rate_limit: int | None = None,
+    base_dir: str | None = None,
+    api_key: str | None = None,
+    cors_origins: list[str] | None = None,
+    max_concurrent: int = 5,
 ) -> None:
     """Start the wavexis HTTP server.
 
@@ -892,11 +1148,22 @@ def serve(
         host: Host to bind to (default "localhost").
         backend: Preferred backend name (default auto-detect).
         rate_limit: Max requests per minute (0 or None = no limit).
+        base_dir: Base directory for validating file paths in requests.
+        api_key: If set, all requests must include this key.
+        cors_origins: List of allowed CORS origins. Use ["*"] for all.
+        max_concurrent: Max concurrent browser backends (default 5).
 
     Raises:
         WavexisError: If aiohttp is not installed.
         BackendNotAvailableError: If no backend is available.
     """
     web = _import_aiohttp()
-    app = create_app(backend, rate_limit=rate_limit)
+    app = create_app(
+        backend,
+        rate_limit=rate_limit,
+        base_dir=base_dir,
+        api_key=api_key,
+        cors_origins=cors_origins,
+        max_concurrent=max_concurrent,
+    )
     web.run_app(app, host=host, port=port)
