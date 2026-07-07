@@ -19,6 +19,7 @@ from wavexis.cli._shared import (
     _echo,
     _get_backend,
     _handle_error,
+    _progress,
     _run_async,
     app,
 )
@@ -118,10 +119,20 @@ async def _multi(config_path: Any, parallel: bool = False) -> list[Any]:
     from wavexis.multi import execute_actions, parse_yaml
 
     actions = parse_yaml(config_path)
+    total = len(actions)
+    _echo(f"Executing {total} action(s)…")
     backend = _get_backend()
     await backend.launch(_browser_options())
     try:
-        return await execute_actions(actions, backend, parallel=parallel)
+        results: list[Any] = []
+        if parallel:
+            results = await execute_actions(actions, backend, parallel=True)
+        else:
+            for i, action in enumerate(actions):
+                _progress(i + 1, total, str(action))
+                result = await execute_actions([action], backend, parallel=False)
+                results.extend(result)
+        return results
     finally:
         await backend.close()
 
@@ -215,13 +226,22 @@ async def _batch(
         List of results (or exceptions) in the same order as urls.
     """
     semaphore = asyncio.Semaphore(parallel)
+    total = len(urls)
+    completed = 0
+    lock = asyncio.Lock()
 
     async def _run_one(url: str) -> Any:
+        nonlocal completed
         async with semaphore:
             try:
-                return await _batch_single(url, action, out_dir, expression)
+                result = await _batch_single(url, action, out_dir, expression)
+                return result
             except (WavexisError, OSError) as exc:
                 return exc
+            finally:
+                async with lock:
+                    completed += 1
+                    _progress(completed, total, url)
 
     tasks = [_run_one(u) for u in urls]
     return await asyncio.gather(*tasks)

@@ -2,6 +2,13 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.2.4 — 2026-07-07
+
+### Added
+
+- Progress reporting for long-running operations (`batch`, `multi`, `scrape`)
+- `_progress(current, total, label)` helper shows `[n/total] — label` unless `--quiet`
+
 ## v2.2.3 — 2026-07-07
 
 ### Added

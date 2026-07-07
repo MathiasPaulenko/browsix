@@ -48,6 +48,7 @@ __all__ = [
     "_get_ctx",
     "_handle_error",
     "_load_global_config",
+    "_progress",
     "_run_async",
     "_write_json_output",
     "app",
@@ -183,6 +184,21 @@ def _echo(msg: str) -> None:
     """Print a message unless quiet mode is active."""
     if not _get_ctx().quiet:
         typer.echo(msg)
+
+
+def _progress(current: int, total: int, label: str = "") -> None:
+    """Print a progress indicator unless quiet mode is active.
+
+    Args:
+        current: Current item index (1-based).
+        total: Total number of items.
+        label: Optional label to prepend (e.g. URL or action name).
+    """
+    ctx = _get_ctx()
+    if ctx.quiet:
+        return
+    suffix = f" — {label}" if label else ""
+    typer.echo(f"[{current}/{total}]{suffix}")
 
 
 def _handle_error(e: Exception) -> None:

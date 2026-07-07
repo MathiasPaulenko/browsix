@@ -18,7 +18,9 @@ from wavexis.actions.screenshot import ScreenshotAction
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _echo,
     _get_backend,
+    _progress,
     _run_async,
     _write_json_output,
     app,
@@ -376,17 +378,24 @@ async def _scrape(
 ) -> list[dict[str, Any]]:
     """Async helper for scraping."""
     backend = _get_backend()
+    total = len(urls)
+    _echo(f"Scraping {total} URL(s)…")
     try:
         await backend.launch(_browser_options())
-        params = ScrapeParams(
-            urls=urls,
-            expression=expression,
-            file=file,
-            output_format="json",
-            selector=selector,
-            wait=WaitStrategy(strategy="load"),
-        )
-        return await ScrapeAction(params).execute(backend)
+        results: list[dict[str, Any]] = []
+        for i, url in enumerate(urls):
+            _progress(i + 1, total, url)
+            params = ScrapeParams(
+                urls=[url],
+                expression=expression,
+                file=file,
+                output_format="json",
+                selector=selector,
+                wait=WaitStrategy(strategy="load"),
+            )
+            result = await ScrapeAction(params).execute(backend)
+            results.extend(result)
+        return results
     finally:
         await backend.close()
 
