@@ -23,8 +23,9 @@ _SIGNAL_NAMES: dict[int, str] = {
     signal.SIGTERM: "SIGTERM",
 }
 
-with contextlib.suppress(AttributeError):
-    _SIGNAL_NAMES[signal.SIGBREAK] = "SIGBREAK"
+_sigbreak = getattr(signal, "SIGBREAK", None)
+if _sigbreak is not None:
+    _SIGNAL_NAMES[_sigbreak] = "SIGBREAK"
 
 
 def register_backend(backend: Any) -> None:
