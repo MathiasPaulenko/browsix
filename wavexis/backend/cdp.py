@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -661,10 +662,12 @@ class CDPBackend(AbstractBackend):
         node_id = await self._find_node(selector)
         if outer:
             result = await session.dom.get_outer_html(node_id)
-        else:
-            result = await session.dom.get_inner_html(node_id)
-        html = result.get("outerHTML", "") if outer else result.get("innerHTML", "")
-        return str(html)
+            return str(result.get("outerHTML", ""))
+        result = await session.dom.get_outer_html(node_id)
+        outer_html = str(result.get("outerHTML", ""))
+        inner = re.sub(r"^<[^>]+>", "", outer_html, count=1)
+        inner = re.sub(r"<[^>]+>$", "", inner, count=1)
+        return inner
 
     async def dom_query(
         self, selector: str, all: bool = False
@@ -1464,11 +1467,11 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
         key_map = {
-            "Enter": {"key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13},
-            "Tab": {"key": "Tab", "code": "Tab", "windowsVirtualKeyCode": 9},
-            "Escape": {"key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27},
-            "Space": {"key": " ", "code": "Space", "windowsVirtualKeyCode": 32},
-            "Backspace": {"key": "Backspace", "code": "Backspace", "windowsVirtualKeyCode": 8},
+            "Enter": {"key": "Enter", "code": "Enter", "windows_virtual_key_code": 13},
+            "Tab": {"key": "Tab", "code": "Tab", "windows_virtual_key_code": 9},
+            "Escape": {"key": "Escape", "code": "Escape", "windows_virtual_key_code": 27},
+            "Space": {"key": " ", "code": "Space", "windows_virtual_key_code": 32},
+            "Backspace": {"key": "Backspace", "code": "Backspace", "windows_virtual_key_code": 8},
         }
         key_info = key_map.get(key, {"key": key, "code": key})
         await session.input.dispatch_key_event(
@@ -2633,6 +2636,7 @@ class CDPBackend(AbstractBackend):
             Dict containing inlineStyles and matchedStyles.
         """
         session = self._require_session()
+        await session.dom.enable()
         await session.send("CSS.enable", {})
         node_id = await self._find_node(selector)
         inline = await session.send(
@@ -2650,6 +2654,7 @@ class CDPBackend(AbstractBackend):
             List of stylesheet header dicts.
         """
         session = self._require_session()
+        await session.dom.enable()
         await session.send("CSS.enable", {})
         result = await session.send("CSS.getStyleSheetText", {})
         headers: list[dict[str, Any]] = []
@@ -2764,27 +2769,32 @@ class CDPBackend(AbstractBackend):
     async def debug_step_over(self) -> None:
         """Step over the current statement in the debugger."""
         session = self._require_session()
-        await session.send("Debugger.stepOver", {})
+        await session.debugger.enable()
+        await session.debugger.step_over()
 
     async def debug_step_into(self) -> None:
         """Step into the current function call in the debugger."""
         session = self._require_session()
-        await session.send("Debugger.stepInto", {})
+        await session.debugger.enable()
+        await session.debugger.step_into()
 
     async def debug_step_out(self) -> None:
         """Step out of the current function in the debugger."""
         session = self._require_session()
-        await session.send("Debugger.stepOut", {})
+        await session.debugger.enable()
+        await session.debugger.step_out()
 
     async def debug_pause(self) -> None:
         """Pause JavaScript execution."""
         session = self._require_session()
-        await session.send("Debugger.pause", {})
+        await session.debugger.enable()
+        await session.debugger.pause()
 
     async def debug_resume(self) -> None:
         """Resume JavaScript execution after a pause."""
         session = self._require_session()
-        await session.send("Debugger.resume", {})
+        await session.debugger.enable()
+        await session.debugger.resume()
 
     async def debug_get_listeners(self, selector: str) -> list[dict[str, Any]]:
         """Get event listeners attached to an element by CSS selector.
@@ -2842,8 +2852,12 @@ class CDPBackend(AbstractBackend):
         await session.overlay.enable()
         node_id = await self._find_node(selector)
         highlight_config: dict[str, Any] = {
+            "showInfo": True,
             "contentColor": color,
             "contentOutlineColor": "rgba(0,0,0,0)",
+            "borderColor": "rgba(0,0,0,0)",
+            "paddingColor": "rgba(0,0,0,0)",
+            "marginColor": "rgba(0,0,0,0)",
         }
         await session.overlay.highlight_node(
             highlight_config=highlight_config, node_id=node_id,
@@ -3117,12 +3131,17 @@ class CDPBackend(AbstractBackend):
             List of animation dicts (id, name, state, etc.).
         """
         session = self._require_session()
-        await session.send("Animation.enable", {})
-        result = await session.send("Animation.getCurrentTime", {})
-        animations: list[dict[str, Any]] = []
-        for anim in result.get("animations", []):
-            animations.append(dict(anim))
-        return animations
+        await session.animation.enable()
+        result = await session.runtime.evaluate(
+            expression=(
+                "Array.from(document.getAnimations()).map(a => "
+                "({id: a.id, name: a.animationName, "
+                "playState: a.playState, duration: a.effect?.timing?.duration || 0}))"
+            ),
+            return_by_value=True,
+        )
+        value = result.get("result", {}).get("value", [])
+        return [dict(a) for a in value] if isinstance(value, list) else []
 
     async def animation_pause(self, animation_id: str) -> None:
         """Pause an animation by ID.
@@ -3236,8 +3255,18 @@ class CDPBackend(AbstractBackend):
     async def media_get_players(self) -> list[dict[str, Any]]:
         """Get all media players via CDP Media domain."""
         session = self._require_session()
-        result = await session.media.get_players()
-        return list(result.get("players", []))
+        await session.send("Media.enable", {})
+        result = await session.runtime.evaluate(
+            expression=(
+                "Array.from(document.querySelectorAll('video, audio')).map(el => "
+                "({id: el.id || '', tagName: el.tagName, "
+                "src: el.src || '', currentTime: el.currentTime, "
+                "duration: el.duration, paused: el.paused}))"
+            ),
+            return_by_value=True,
+        )
+        value = result.get("result", {}).get("value", [])
+        return [dict(p) for p in value] if isinstance(value, list) else []
 
     async def media_get_messages(self, player_id: str) -> list[dict[str, Any]]:
         """Get messages for a specific media player via CDP Media domain."""

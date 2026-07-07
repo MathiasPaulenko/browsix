@@ -22,7 +22,7 @@ def browser_opts() -> BrowserOptions:
 
 
 async def test_debug_pause_resume(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
-    """Test debug pause resume."""
+    """Test debug pause and resume."""
     params = DebugActionParams(
         url="https://example.com",
         action="pause",
@@ -31,16 +31,28 @@ async def test_debug_pause_resume(backend: CDPBackend, browser_opts: BrowserOpti
     )
     await DebugAction(params).execute(backend)
 
+    params_resume = DebugActionParams(
+        action="resume",
+        browser=browser_opts,
+    )
+    await DebugAction(params_resume).execute(backend)
+
 
 async def test_debug_step_over(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
-    """Test debug step over."""
-    params = DebugActionParams(
+    """Test debug step over (requires pause first)."""
+    params_pause = DebugActionParams(
         url="https://example.com",
-        action="step_over",
+        action="pause",
         wait=WaitStrategy(strategy="load"),
         browser=browser_opts,
     )
-    await DebugAction(params).execute(backend)
+    await DebugAction(params_pause).execute(backend)
+
+    params_step = DebugActionParams(
+        action="step_over",
+        browser=browser_opts,
+    )
+    await DebugAction(params_step).execute(backend)
 
 
 async def test_debug_listeners(backend: CDPBackend, browser_opts: BrowserOptions) -> None:

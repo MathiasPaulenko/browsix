@@ -18,7 +18,7 @@ class TestDialogIntegration:
             await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<script>alert('test')</script>",
-                WaitStrategy(strategy="load"),
+                WaitStrategy(strategy="none"),
             )
             await backend.dialog_accept()
 
@@ -29,6 +29,6 @@ class TestDialogIntegration:
             await backend.launch(BrowserOptions(headless=True))
             await backend.navigate(
                 "data:text/html,<script>confirm('test')</script>",
-                WaitStrategy(strategy="load"),
+                WaitStrategy(strategy="none"),
             )
             await backend.dialog_dismiss()

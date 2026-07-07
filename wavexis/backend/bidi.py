@@ -126,6 +126,10 @@ class BiDiBackend(AbstractBackend):
         """
         if self._client is not None:
             return
+        if BiDiClient is None:
+            raise ImportError(
+                "bidiwave is not installed. Run: pip install wavexis[bidi]"
+            )
         if options.remote_url:
             ws_url = options.remote_url
         else:

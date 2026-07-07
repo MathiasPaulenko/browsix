@@ -41,24 +41,14 @@ async def test_webauthn_add_virtual_authenticator(
 async def test_webauthn_add_and_get_credentials(
     backend: CDPBackend, browser_opts: BrowserOptions
 ) -> None:
-    """Test webauthn add and get credentials."""
-    params_add = WebAuthnParams(
-        url="https://example.com",
-        action="add-virtual-authenticator",
-        protocol="ctap2",
-        transport="usb",
-        wait=WaitStrategy(strategy="load"),
-        browser=browser_opts,
-    )
-    auth_id = await WebAuthnAction(params_add).execute(backend)
-    assert isinstance(auth_id, str)
-
-    params_get = WebAuthnParams(
-        url="https://example.com",
-        action="get-credentials",
-        authenticator_id=auth_id,
-        wait=WaitStrategy(strategy="load"),
-        browser=browser_opts,
-    )
-    result = await WebAuthnAction(params_get).execute(backend)
-    assert isinstance(result, list)
+    """Test webauthn add and get credentials in a single session."""
+    await backend.launch(browser_opts)
+    try:
+        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        auth_id = await backend.webauthn_add_virtual_authenticator("ctap2", "usb")
+        assert isinstance(auth_id, str)
+        assert len(auth_id) > 0
+        result = await backend.webauthn_get_credentials(auth_id)
+        assert isinstance(result, list)
+    finally:
+        await backend.close()
