@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="docs/assets/images/logo-wide.svg" alt="wavexis" width="480">
+</p>
+
+<h3 align="center">Browser automation CLI — wraps cdpwave and bidiwave</h3>
+
+---
+
 # wavexis
 
 [![CI](https://github.com/MathiasPaulenko/wavexis/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasPaulenko/wavexis/actions/workflows/ci.yml)

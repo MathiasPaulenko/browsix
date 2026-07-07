@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 256" width="900" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3F51B5"/>
+      <stop offset="100%" stop-color="#1A237E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon -->
+  <rect x="8" y="8" width="240" height="240" rx="56" ry="56" fill="url(#bg)"/>
+  <path d="M 56 128 Q 88 88 120 128 T 184 128 T 200 128"
+        fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.4"/>
+  <path d="M 56 160 Q 88 120 120 160 T 184 160 T 200 160"
+        fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- Wordmark -->
+  <text x="280" y="170" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="110" font-weight="700" fill="#1A237E" letter-spacing="-3">
+    wave<tspan fill="#3F51B5">xis</tspan>
+  </text>
+</svg>

@@ -29,6 +29,8 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+  logo: assets/images/logo.svg
+  favicon: assets/images/logo.svg
   icon:
     repo: fontawesome/brands/github
 
