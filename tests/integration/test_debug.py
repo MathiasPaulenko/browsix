@@ -22,37 +22,25 @@ def browser_opts() -> BrowserOptions:
 
 
 async def test_debug_pause_resume(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
-    """Test debug pause and resume."""
-    params = DebugActionParams(
-        url="https://example.com",
-        action="pause",
-        wait=WaitStrategy(strategy="load"),
-        browser=browser_opts,
-    )
-    await DebugAction(params).execute(backend)
-
-    params_resume = DebugActionParams(
-        action="resume",
-        browser=browser_opts,
-    )
-    await DebugAction(params_resume).execute(backend)
+    """Test debug pause and resume in a single session."""
+    await backend.launch(browser_opts)
+    try:
+        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.debug_pause()
+        await backend.debug_resume()
+    finally:
+        await backend.close()
 
 
 async def test_debug_step_over(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
     """Test debug step over (requires pause first)."""
-    params_pause = DebugActionParams(
-        url="https://example.com",
-        action="pause",
-        wait=WaitStrategy(strategy="load"),
-        browser=browser_opts,
-    )
-    await DebugAction(params_pause).execute(backend)
-
-    params_step = DebugActionParams(
-        action="step_over",
-        browser=browser_opts,
-    )
-    await DebugAction(params_step).execute(backend)
+    await backend.launch(browser_opts)
+    try:
+        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.debug_pause()
+        await backend.debug_step_over()
+    finally:
+        await backend.close()
 
 
 async def test_debug_listeners(backend: CDPBackend, browser_opts: BrowserOptions) -> None:

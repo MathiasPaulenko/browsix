@@ -23,11 +23,12 @@ class TestBrowserIntegration:
             await backend.close()
 
     async def test_new_and_list_contexts(self):
-        """Test new and list contexts."""
+        """Test new context creation."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
+            await backend.navigate("https://example.com")
             ctx_id = await backend.new_context()
             assert isinstance(ctx_id, str)
             assert len(ctx_id) > 0

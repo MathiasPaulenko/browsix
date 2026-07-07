@@ -2,23 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from wavexis.config import ScreenshotParams
+from wavexis.config import BrowserOptions, ScreenshotParams
 
 
 @pytest.mark.unit
 class TestBiDiBackend:
     """Test suite for bidibackend."""
     def test_import_error(self) -> None:
-        """Test import error."""
+        """Test import error on launch when bidiwave not installed."""
         with patch("wavexis.backend.bidi.BiDiClient", None):
             from wavexis.backend.bidi import BiDiBackend
 
+            backend = BiDiBackend()
             with pytest.raises(ImportError, match="bidiwave"):
-                BiDiBackend()
+                asyncio.run(backend.launch(BrowserOptions()))
 
     async def test_implemented_methods_raise_runtime_without_launch(self) -> None:
         """Test implemented methods raise runtime without launch."""

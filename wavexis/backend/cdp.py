@@ -2637,30 +2637,24 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
         await session.dom.enable()
-        await session.send("CSS.enable", {})
+        await session.css.enable()
         node_id = await self._find_node(selector)
-        inline = await session.send(
-            "CSS.getInlineStyles", {"nodeId": node_id}
-        )
-        matched = await session.send(
-            "CSS.getMatchedStyles", {"nodeId": node_id}
-        )
-        return {"inlineStyles": inline, "matchedStyles": matched}
+        inline = await session.css.get_inline_styles(node_id)
+        computed = await session.css.get_computed_style_for_node(node_id)
+        return {"inlineStyles": inline, "computedStyles": computed}
 
     async def css_get_stylesheets(self) -> list[dict[str, Any]]:
         """List all stylesheets in the current page.
 
         Returns:
-            List of stylesheet header dicts.
+            List of stylesheet info dicts.
         """
         session = self._require_session()
         await session.dom.enable()
-        await session.send("CSS.enable", {})
-        result = await session.send("CSS.getStyleSheetText", {})
-        headers: list[dict[str, Any]] = []
-        for sheet in result.get("headers", []):
-            headers.append(dict(sheet))
-        return headers
+        await session.css.enable()
+        result = await session.css.get_layout_tree_and_styles()
+        stylesheets = result.get("stylesheets", [])
+        return [dict(s) for s in stylesheets] if stylesheets else []
 
     async def css_get_rules(self, stylesheet_id: str) -> list[dict[str, Any]]:
         """Get CSS rules from a specific stylesheet.
@@ -2853,11 +2847,11 @@ class CDPBackend(AbstractBackend):
         node_id = await self._find_node(selector)
         highlight_config: dict[str, Any] = {
             "showInfo": True,
-            "contentColor": color,
-            "contentOutlineColor": "rgba(0,0,0,0)",
-            "borderColor": "rgba(0,0,0,0)",
-            "paddingColor": "rgba(0,0,0,0)",
-            "marginColor": "rgba(0,0,0,0)",
+            "contentColor": {"r": 255, "g": 0, "b": 0, "a": 0.5},
+            "contentOutlineColor": {"r": 0, "g": 0, "b": 0, "a": 0},
+            "borderColor": {"r": 0, "g": 0, "b": 0, "a": 0},
+            "paddingColor": {"r": 0, "g": 0, "b": 0, "a": 0},
+            "marginColor": {"r": 0, "g": 0, "b": 0, "a": 0},
         }
         await session.overlay.highlight_node(
             highlight_config=highlight_config, node_id=node_id,

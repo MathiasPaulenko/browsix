@@ -75,15 +75,7 @@ class BiDiBackend(AbstractBackend):
     """
 
     def __init__(self) -> None:
-        """Initialize the BiDi backend.
-
-        Raises:
-            ImportError: If bidiwave is not installed.
-        """
-        if BiDiClient is None:
-            raise ImportError(
-                "bidiwave is not installed. Run: pip install wavexis[bidi]"
-            )
+        """Initialize the BiDi backend."""
         self._client: BiDiClient | None = None
         self._context: Any = None
 
