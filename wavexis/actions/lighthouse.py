@@ -22,12 +22,16 @@ class LighthouseParams:
             "best-practices", "seo". Empty = all.
         wait: Wait strategy after navigation.
         browser: Browser launch options.
+        budgets: Optional dict of metric → threshold value.
+            Supported keys: ttfb_ms, fcp_ms, lcp_ms, cls, inp_ms,
+            tbt_ms, load_ms, dom_size. Each value is the max acceptable.
     """
 
     url: str = ""
     categories: list[str] = field(default_factory=list)
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+    budgets: dict[str, float] = field(default_factory=dict)
 
 
 class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
@@ -118,6 +122,45 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
         load = perf.get("loadComplete", 0)
         dom_size = perf.get("domSize", 0)
 
+        cwv_js = """
+            (() => {
+                return new Promise(resolve => {
+                    let lcp = 0, cls = 0, inp = 0, tbt = 0;
+                    new PerformanceObserver(list => {
+                        for (const e of list.getEntries()) {
+                            lcp = e.startTime;
+                        }
+                    }).observe({type: 'largest-contentful-paint', buffered: true});
+                    new PerformanceObserver(list => {
+                        for (const e of list.getEntries()) {
+                            if (!e.hadRecentInput) cls += e.value;
+                        }
+                    }).observe({type: 'layout-shift', buffered: true});
+                    new PerformanceObserver(list => {
+                        for (const e of list.getEntries()) {
+                            inp = Math.max(inp, e.duration);
+                        }
+                    }).observe({type: 'event', buffered: true});
+                    new PerformanceObserver(list => {
+                        for (const e of list.getEntries()) {
+                            tbt += e.duration;
+                        }
+                    }).observe({type: 'longtask', buffered: true});
+                    setTimeout(() => resolve({lcp, cls, inp, tbt}), 500);
+                });
+            })()
+        """
+        cwv: dict[str, Any] = {}
+        with contextlib.suppress(Exception):
+            cwv_result = await backend.eval(cwv_js, await_promise=True)
+            if isinstance(cwv_result, dict):
+                cwv = cwv_result
+
+        lcp = cwv.get("lcp", 0)
+        cls = cwv.get("cls", 0)
+        inp = cwv.get("inp", 0)
+        tbt = cwv.get("tbt", 0)
+
         score = 100
         if ttfb > 800:
             score -= 10
@@ -127,6 +170,18 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
             score -= 15
         if fcp > 3000:
             score -= 15
+        if lcp > 2500:
+            score -= 10
+        if lcp > 4000:
+            score -= 10
+        if cls > 0.1:
+            score -= 10
+        if cls > 0.25:
+            score -= 10
+        if inp > 200:
+            score -= 5
+        if inp > 500:
+            score -= 10
         if load > 3000:
             score -= 10
         if load > 5000:
@@ -137,15 +192,24 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
             score -= 10
         score = max(0, score)
 
-        return {
+        result: dict[str, Any] = {
             "score": score,
             "ttfb_ms": ttfb,
             "fcp_ms": fcp,
+            "lcp_ms": lcp,
+            "cls": cls,
+            "inp_ms": inp,
+            "tbt_ms": tbt,
             "load_ms": load,
             "dom_size": dom_size,
             "transfer_size": perf.get("transferSize", 0),
             "raw_metrics": metrics,
         }
+
+        if self.params.budgets:
+            result["budgets"] = self._check_budgets(result, self.params.budgets)
+
+        return result
 
     async def _audit_accessibility(
         self, backend: AbstractBackend
@@ -310,4 +374,39 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
             "issues": issues,
             "is_https": bp.get("is_https", False),
             "console_errors": console_errors,
+        }
+
+    @staticmethod
+    def _check_budgets(
+        metrics: dict[str, Any], budgets: dict[str, float]
+    ) -> dict[str, Any]:
+        """Check metrics against performance budgets.
+
+        Args:
+            metrics: Collected performance metrics.
+            budgets: Dict of metric_name → max acceptable value.
+
+        Returns:
+            Dict with pass/fail per budget item and overall status.
+        """
+        results: list[dict[str, Any]] = []
+        all_pass = True
+
+        for key, threshold in budgets.items():
+            actual = metrics.get(key, 0)
+            if not isinstance(actual, (int, float)):
+                actual = 0
+            passed = actual <= threshold
+            if not passed:
+                all_pass = False
+            results.append({
+                "metric": key,
+                "actual": actual,
+                "budget": threshold,
+                "pass": passed,
+            })
+
+        return {
+            "pass": all_pass,
+            "results": results,
         }

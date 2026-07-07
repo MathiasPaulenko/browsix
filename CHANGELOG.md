@@ -2,6 +2,16 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.5.1 — 2026-07-07
+
+### Added
+
+- Core Web Vitals metrics in lighthouse performance audit: LCP, CLS, INP, TBT via PerformanceObserver
+- Performance budgets: `--budget` (JSON file) and `--threshold` (inline, repeatable) CLI options
+- Budget pass/fail reporting with per-metric breakdown in CLI output
+- `_check_budgets` method in `LighthouseAction` for programmatic budget checking
+- Scoring now includes LCP (>2500ms, >4000ms), CLS (>0.1, >0.25), INP (>200ms, >500ms) penalties
+
 ## v2.5.0 — 2026-07-07
 
 ### Added

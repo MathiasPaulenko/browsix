@@ -369,6 +369,7 @@ class TestLighthouseAction:
                     "transferSize": 50000,
                     "encodedBodySize": 48000,
                 },
+                {"lcp": 1200, "cls": 0.02, "inp": 50, "tbt": 100},
                 {
                     "issues": [],
                     "issue_count": 0,

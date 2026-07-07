@@ -224,6 +224,23 @@ def lighthouse(
         None, "--output", "-o", help="Output file path (.json)"
     ),
     format: str = typer.Option("json", "--format", "-f", help="Output format (json)"),
+    budget: str | None = typer.Option(
+        None,
+        "--budget",
+        "-b",
+        help="Path to JSON file with performance budgets (e.g. {\"ttfb_ms\": 800})",
+    ),
+    threshold: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--threshold",
+            "-t",
+            help=(
+                "Inline budget threshold: metric=value "
+                "(e.g. -t ttfb_ms=800 -t lcp_ms=2500). Repeatable."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run a Lighthouse-style audit (performance, accessibility, SEO, best practices).
 
@@ -231,10 +248,27 @@ def lighthouse(
     Examples:
         wavexis lighthouse https://example.com
         wavexis lighthouse https://example.com -c performance -c seo -o report.json
+        wavexis lighthouse https://example.com -t ttfb_ms=800 -t lcp_ms=2500
+        wavexis lighthouse https://example.com -b budgets.json
     """
     from wavexis.actions.lighthouse import LighthouseAction, LighthouseParams
 
     cats = categories or []
+    budgets: dict[str, float] = {}
+
+    if budget:
+        from pathlib import Path
+
+        budget_text = Path(budget).read_text(encoding="utf-8")
+        loaded = json.loads(budget_text)
+        if isinstance(loaded, dict):
+            budgets = {k: float(v) for k, v in loaded.items()}
+
+    if threshold:
+        for t in threshold:
+            if "=" in t:
+                key, val = t.split("=", 1)
+                budgets[key.strip()] = float(val.strip())
 
     async def _lighthouse() -> dict[str, Any]:
         backend = _get_backend()
@@ -242,6 +276,7 @@ def lighthouse(
             url=url,
             categories=cats,
             wait=WaitStrategy(strategy="load"),
+            budgets=budgets,
         )
         action = LighthouseAction(params)
         return await action.execute(backend)
@@ -256,7 +291,21 @@ def lighthouse(
         for cat, data in result.get("categories", {}).items()
     }
     score_str = ", ".join(f"{k}: {v}" for k, v in scores.items())
+
+    budget_str = ""
+    perf = result.get("categories", {}).get("performance", {})
+    budget_result = perf.get("budgets") if isinstance(perf, dict) else None
+    if budget_result and isinstance(budget_result, dict):
+        status = "PASS" if budget_result.get("pass") else "FAIL"
+        budget_str = f", budgets: {status}"
+        for br in budget_result.get("results", []):
+            mark = "✓" if br.get("pass") else "✗"
+            budget_str += (
+                f"\n  {mark} {br['metric']}: "
+                f"{br['actual']} / {br['budget']}"
+            )
+
     if output:
-        typer.echo(f"Audit complete ({score_str}), saved to {output}")
+        typer.echo(f"Audit complete ({score_str}){budget_str}, saved to {output}")
     else:
-        typer.echo(f"Audit complete ({score_str})")
+        typer.echo(f"Audit complete ({score_str}){budget_str}")
