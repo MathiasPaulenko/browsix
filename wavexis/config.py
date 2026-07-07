@@ -148,6 +148,8 @@ class BrowserOptions:
         timeout: Default navigation timeout in milliseconds.
         user_data_dir: Path to a persistent user data directory for browser profiles.
         browser_url: URL of an existing browser to connect to (e.g. ws://localhost:9222).
+        stealth: Enable anti-bot stealth mode (hides navigator.webdriver,
+            fakes plugins, languages, chrome runtime, permissions).
     """
 
     headless: bool = True
@@ -159,6 +161,7 @@ class BrowserOptions:
     timeout: int = 30000
     user_data_dir: str | None = None
     browser_url: str | None = None
+    stealth: bool = False
 
 
 @dataclass

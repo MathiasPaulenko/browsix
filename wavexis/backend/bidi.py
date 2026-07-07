@@ -114,6 +114,13 @@ class BiDiBackend(AbstractBackend):
         await self._client.session.new()
         self._context = await self._client.browsing.create_context()
 
+        if options.stealth:
+            from wavexis.actions.stealth import get_stealth_js
+
+            await self._client.script.evaluate(
+                self._context, get_stealth_js()
+            )
+
     async def close(self) -> None:
         """Close the BiDi client and release resources."""
         if self._client is not None:

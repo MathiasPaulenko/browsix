@@ -44,11 +44,20 @@ def multi(
         "--parallel",
         help="Execute all actions concurrently instead of sequentially",
     ),
+    cache_ttl: int = typer.Option(
+        0,
+        "--cache-ttl",
+        help=(
+            "Cache action results for N seconds (0=disabled). "
+            "Cacheable: screenshot, dom, scrape, eval, cookies, headers"
+        ),
+    ),
 ) -> None:
     """Execute multiple actions from a YAML config file.
 
     Use --watch to re-run automatically when the config file changes.
     Use --parallel to execute all actions concurrently on the same backend.
+    Use --cache-ttl to cache results and skip re-execution on repeated runs.
     """
     config_path = Path(config)
 
@@ -64,10 +73,10 @@ def multi(
         return
 
     if watch:
-        _multi_watch(config_path, parallel=parallel)
+        _multi_watch(config_path, parallel=parallel, cache_ttl=cache_ttl)
         return
 
-    results = _run_async(_multi(config_path, parallel=parallel))
+    results = _run_async(_multi(config_path, parallel=parallel, cache_ttl=cache_ttl))
     if results is None:
         return
 
@@ -81,7 +90,9 @@ def multi(
             typer.echo(f"  Action {i + 1}: {type(result).__name__}")
 
 
-def _multi_watch(config_path: Any, parallel: bool = False) -> None:
+def _multi_watch(
+    config_path: Any, parallel: bool = False, cache_ttl: int = 0
+) -> None:
     """Watch a config file and re-execute on change.
 
     Uses polling to detect file modifications (cross-platform compatible).
@@ -89,6 +100,7 @@ def _multi_watch(config_path: Any, parallel: bool = False) -> None:
     Args:
         config_path: Path to the YAML config file to watch.
         parallel: If True, execute actions concurrently.
+        cache_ttl: Cache TTL in seconds. 0 = no caching.
     """
     last_mtime: float = 0.0
     typer.echo(f"Watching {config_path} for changes (Ctrl+C to stop)…")
@@ -98,7 +110,9 @@ def _multi_watch(config_path: Any, parallel: bool = False) -> None:
             if mtime != last_mtime:
                 last_mtime = mtime
                 typer.echo(f"\n[{time.strftime('%H:%M:%S')}] Re-running actions…")
-                results = _run_async(_multi(config_path, parallel=parallel))
+                results = _run_async(
+                    _multi(config_path, parallel=parallel, cache_ttl=cache_ttl)
+                )
                 if results is not None:
                     typer.echo(f"Completed {len(results)} actions")
             time.sleep(1)
@@ -106,31 +120,40 @@ def _multi_watch(config_path: Any, parallel: bool = False) -> None:
         typer.echo("\nStopped.")
 
 
-async def _multi(config_path: Any, parallel: bool = False) -> list[Any]:
+async def _multi(
+    config_path: Any, parallel: bool = False, cache_ttl: int = 0
+) -> list[Any]:
     """Execute multiple actions from a YAML config file.
 
     Args:
         config_path: Path to the YAML config file.
         parallel: If True, execute actions concurrently on the same backend.
+        cache_ttl: Cache TTL in seconds. 0 = no caching.
 
     Returns:
         List of action results.
     """
+    from wavexis.actions.cache import ActionCache
     from wavexis.multi import execute_actions, parse_yaml
 
     actions = parse_yaml(config_path)
     total = len(actions)
     _echo(f"Executing {total} action(s)…")
+    cache = ActionCache(default_ttl=cache_ttl) if cache_ttl > 0 else None
     backend = _get_backend()
     await backend.launch(_browser_options())
     try:
         results: list[Any] = []
         if parallel:
-            results = await execute_actions(actions, backend, parallel=True)
+            results = await execute_actions(
+                actions, backend, parallel=True, cache=cache
+            )
         else:
             for i, action in enumerate(actions):
                 _progress(i + 1, total, str(action))
-                result = await execute_actions([action], backend, parallel=False)
+                result = await execute_actions(
+                    [action], backend, parallel=False, cache=cache
+                )
                 results.extend(result)
         return results
     finally:

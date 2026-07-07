@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from wavexis.actions.cache import ActionCache
 from wavexis.exceptions import MultiConfigError
 
 
@@ -92,6 +93,7 @@ async def execute_actions(
     actions: list[dict[str, Any]],
     backend: Any,
     parallel: bool = False,
+    cache: ActionCache | None = None,
 ) -> list[Any]:
     """Execute each action, reusing the same backend.
 
@@ -99,13 +101,16 @@ async def execute_actions(
         actions: List of action dicts from parse_yaml.
         backend: An launched AbstractBackend instance.
         parallel: If True, execute all actions concurrently.
+        cache: Optional ActionCache. If provided, cacheable actions
+            (screenshot, dom, scrape, eval, cookies, headers) will
+            be served from cache on repeated calls with same URL+params.
 
     Returns:
         List of results from each action, in the same order as actions.
     """
     if parallel:
         tasks = [
-            _dispatch(next(iter(ad)), ad[next(iter(ad))], backend)
+            _dispatch(next(iter(ad)), ad[next(iter(ad))], backend, cache=cache)
             for ad in actions
         ]
         return await asyncio.gather(*tasks)
@@ -114,20 +119,59 @@ async def execute_actions(
     for action_dict in actions:
         action_type = next(iter(action_dict))
         params = action_dict[action_type]
-        result = await _dispatch(action_type, params, backend)
+        result = await _dispatch(action_type, params, backend, cache=cache)
         results.append(result)
     return results
+
+
+_CACHEABLE_ACTIONS = frozenset({
+    "screenshot", "dom", "scrape", "eval", "cookies", "headers",
+})
 
 
 async def _dispatch(
     action_type: str,
     params: dict[str, Any],
     backend: Any,
+    cache: ActionCache | None = None,
 ) -> Any:
     """Dispatch a single action to the appropriate action class.
 
     Args:
         action_type: Action type name (e.g. 'screenshot', 'pdf', 'scrape').
+        params: Action parameters dict.
+        backend: An launched AbstractBackend instance.
+        cache: Optional ActionCache for cacheable actions.
+
+    Returns:
+        The result of the action.
+    """
+    if cache is not None and action_type in _CACHEABLE_ACTIONS:
+        url = params.get("url", "")
+        if url:
+            cached = cache.get(url, action_type, params)
+            if cached is not None:
+                return cached
+
+    result = await _execute_action(action_type, params, backend)
+
+    if cache is not None and action_type in _CACHEABLE_ACTIONS:
+        url = params.get("url", "")
+        if url:
+            cache.set(url, action_type, params, result)
+
+    return result
+
+
+async def _execute_action(
+    action_type: str,
+    params: dict[str, Any],
+    backend: Any,
+) -> Any:
+    """Execute a single action without caching.
+
+    Args:
+        action_type: Action type name.
         params: Action parameters dict.
         backend: An launched AbstractBackend instance.
 

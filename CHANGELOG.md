@@ -2,6 +2,18 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.6.0 — 2026-07-07
+
+### Added
+
+- Action caching: `ActionCache` class with TTL, per-URL invalidation, and global clear
+- `--cache-ttl` flag on `wavexis multi` to cache results for N seconds
+- Cacheable actions: screenshot, dom, scrape, eval, cookies, headers
+- Anti-bot stealth mode: `--stealth` global CLI flag
+- `BrowserOptions.stealth` field for programmatic use
+- Stealth JS injection in both CDP and BiDi backends on launch
+- Hides `navigator.webdriver`, fakes plugins, languages, chrome runtime, WebGL vendor, permissions, platform, hardware concurrency, device memory
+
 ## v2.5.1 — 2026-07-07
 
 ### Added

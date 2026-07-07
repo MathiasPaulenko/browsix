@@ -108,6 +108,13 @@ class CDPBackend(AbstractBackend):
                 options.extra_headers
             )
 
+        if options.stealth:
+            from wavexis.actions.stealth import get_stealth_js
+
+            await self._session.runtime.evaluate(
+                get_stealth_js(), await_promise=False
+            )
+
     async def close(self) -> None:
         """Close the browser client and release resources."""
         if self._session is not None:
@@ -2610,6 +2617,7 @@ class CDPBackend(AbstractBackend):
             Dict mapping CSS property names to computed values.
         """
         session = self._require_session()
+        await session.send("CSS.enable", {})
         node_id = await self._find_node(selector)
         resolved = await session.send(
             "DOM.resolveNode", {"nodeId": node_id}

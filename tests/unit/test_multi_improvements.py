@@ -231,7 +231,7 @@ class TestParallelExecution:
         backend = MagicMock()
 
         async def fake_dispatch(
-            action_type: str, params: dict, backend: Any
+            action_type: str, params: dict, backend: Any, cache: Any = None
         ) -> Any:
             if action_type == "navigate":
                 return "nav-result"
@@ -250,7 +250,7 @@ class TestParallelExecution:
         call_order: list[str] = []
 
         async def fake_dispatch(
-            action_type: str, params: dict, backend: Any
+            action_type: str, params: dict, backend: Any, cache: Any = None
         ) -> Any:
             call_order.append(action_type)
             return "result"
