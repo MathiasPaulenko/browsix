@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ from wavexis.config import WaitStrategy
 @app.command()
 def session(
     action: str = typer.Argument(
-        ..., help="Session action: save, load"
+        ..., help="Session action: save, load, list, delete"
     ),
     url: str = typer.Argument(
         "", help="URL to navigate to (for save) or load before navigating (for load)"
@@ -29,18 +30,60 @@ def session(
     output: str = typer.Option(
         "session.json", "--output", "-o", help="Session file path"
     ),
+    name: str = typer.Option(
+        "", "--name", "-n", help="Named session (stored in ~/.wavexis/sessions/)"
+    ),
 ) -> None:
     """Save or load browser session state (cookies + localStorage + sessionStorage).
 
     \b
     Save:  wavexis session save https://app.com -o mysession.json
     Load:  wavexis session load mysession.json https://app.com
+    Named: wavexis session save https://app.com --name mysession
+    List:  wavexis session list
+    Delete: wavexis session delete --name mysession
     """
     from wavexis.actions.session import SessionLoadAction, SessionSaveAction
 
-    session_path = Path(output)
+    sessions_dir = Path.home() / ".wavexis" / "sessions"
+
+    def _session_path() -> Path:
+        if name:
+            return sessions_dir / f"{name}.json"
+        return Path(output)
+
+    if action == "list":
+        if not sessions_dir.exists():
+            typer.echo("No saved sessions found.")
+            return
+        sessions = list(sessions_dir.glob("*.json"))
+        if not sessions:
+            typer.echo("No saved sessions found.")
+            return
+        typer.echo(f"Saved sessions ({len(sessions)}):")
+        for s in sorted(sessions):
+            stat = s.stat()
+            modified = time.strftime("%Y-%m-%d %H:%M", time.localtime(stat.st_mtime))
+            typer.echo(f"  {s.stem}  ({stat.st_size} bytes, {modified})")
+        return
+
+    if action == "delete":
+        if not name:
+            typer.echo("Error: --name required for delete", err=True)
+            raise typer.Exit(1)
+        target = _session_path()
+        if not target.exists():
+            typer.echo(f"Error: session '{name}' not found", err=True)
+            raise typer.Exit(1)
+        target.unlink()
+        typer.echo(f"Deleted session '{name}'")
+        return
+
+    session_path = _session_path()
 
     if action == "save":
+        if name:
+            sessions_dir.mkdir(parents=True, exist_ok=True)
         if not url:
             typer.echo("Error: URL required for session save", err=True)
             raise typer.Exit(1)
@@ -56,11 +99,11 @@ def session(
                 await backend.close()
 
         _run_async(_save_session())
-        typer.echo(f"Session saved to {output}")
+        typer.echo(f"Session saved to {session_path}")
 
     elif action == "load":
         if not session_path.exists():
-            typer.echo(f"Error: session file not found: {output}", err=True)
+            typer.echo(f"Error: session file not found: {session_path}", err=True)
             raise typer.Exit(1)
 
         async def _load_session() -> Any:
@@ -80,10 +123,13 @@ def session(
         result = _run_async(_load_session())
         if result is None:
             return
-        typer.echo(f"Session loaded from {output}: {result}")
+        typer.echo(f"Session loaded from {session_path}: {result}")
 
     else:
-        typer.echo(f"Error: unknown session action '{action}'. Use save or load.", err=True)
+        typer.echo(
+            f"Error: unknown session action '{action}'. Use save, load, list, or delete.",
+            err=True,
+        )
         raise typer.Exit(1)
 
 

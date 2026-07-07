@@ -2,6 +2,15 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.2.6 — 2026-07-07
+
+### Added
+
+- Named sessions: `--name` flag stores sessions in `~/.wavexis/sessions/`
+- `wavexis session list` — list all saved named sessions with size and modification date
+- `wavexis session delete --name <name>` — delete a named session
+- Named sessions persist between runs, enabling stateful workflows
+
 ## v2.2.5 — 2026-07-07
 
 ### Improved
