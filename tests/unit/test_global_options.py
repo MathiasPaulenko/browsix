@@ -31,6 +31,11 @@ class TestBrowserOptions:
         assert opts.proxy is None
         assert opts.timeout == 30000
         assert opts.user_data_dir is None
+        assert opts.browser_url is None
+
+    def test_with_browser_url(self) -> None:
+        opts = BrowserOptions(browser_url="ws://localhost:9222")
+        assert opts.browser_url == "ws://localhost:9222"
 
     def test_with_user_data_dir(self) -> None:
         opts = BrowserOptions(user_data_dir="/tmp/wavexis-profile")
@@ -63,6 +68,13 @@ class TestBrowserOptionsHelper:
         assert opts.timeout == 30000
         assert opts.proxy is None
         assert opts.user_data_dir is None
+        assert opts.browser_url is None
+
+    def test_browser_url_options(self) -> None:
+        ctx = _fresh_ctx()
+        ctx.browser_url = "ws://localhost:9222"
+        opts = _cli._browser_options()
+        assert opts.browser_url == "ws://localhost:9222"
 
     def test_user_data_dir_options(self) -> None:
         ctx = _fresh_ctx()
@@ -101,6 +113,7 @@ class TestLoadGlobalConfig:
         assert ctx.timeout == 30000
         assert ctx.proxy is None
         assert ctx.user_data_dir is None
+        assert ctx.browser_url is None
 
     def test_loads_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         config_dir = tmp_path / ".wavexis"
@@ -111,7 +124,8 @@ class TestLoadGlobalConfig:
             "headless: false\n"
             "timeout: 60000\n"
             "proxy: http://proxy:9090\n"
-            "user_data_dir: /tmp/profile\n",
+            "user_data_dir: /tmp/profile\n"
+            "browser_url: ws://localhost:9222\n",
             encoding="utf-8",
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -124,6 +138,7 @@ class TestLoadGlobalConfig:
         assert ctx.timeout == 60000
         assert ctx.proxy == "http://proxy:9090"
         assert ctx.user_data_dir == "/tmp/profile"
+        assert ctx.browser_url == "ws://localhost:9222"
 
     def test_cli_overrides_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

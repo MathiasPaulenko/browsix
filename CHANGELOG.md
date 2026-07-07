@@ -2,6 +2,15 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.2.1 — 2026-07-07
+
+### Added
+
+- `--browser-url` global flag to connect to an existing browser (e.g. `--browser-url ws://localhost:9222`)
+- `browser_url` field in `BrowserOptions` dataclass
+- `browser_url` support in `config.yml` (`browser_url: ws://localhost:9222`)
+- `CDPBackend.launch()` now uses `CDPClient.connect()` when `browser_url` is set instead of launching a new browser
+
 ## v2.2.0 — 2026-07-07
 
 ### Added

@@ -147,6 +147,7 @@ class BrowserOptions:
         proxy: Proxy server URL (e.g. http://proxy:8080 or socks5://proxy:1080).
         timeout: Default navigation timeout in milliseconds.
         user_data_dir: Path to a persistent user data directory for browser profiles.
+        browser_url: URL of an existing browser to connect to (e.g. ws://localhost:9222).
     """
 
     headless: bool = True
@@ -157,6 +158,7 @@ class BrowserOptions:
     proxy: str | None = None
     timeout: int = 30000
     user_data_dir: str | None = None
+    browser_url: str | None = None
 
 
 @dataclass

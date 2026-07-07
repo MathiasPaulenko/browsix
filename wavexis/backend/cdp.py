@@ -83,11 +83,19 @@ class CDPBackend(AbstractBackend):
         if options.proxy:
             extra_args.append(f"--proxy-server={options.proxy}")
 
-        self._client = await CDPClient.launch(
-            headless=options.headless,
-            user_data_dir=options.user_data_dir,  # type: ignore[call-arg]
-            extra_args=extra_args if extra_args else None,
-        )
+        if options.browser_url:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(options.browser_url)
+            host = parsed.hostname or "localhost"
+            port = parsed.port or 9222
+            self._client = await CDPClient.connect(host=host, port=port)  # type: ignore[attr-defined]
+        else:
+            self._client = await CDPClient.launch(
+                headless=options.headless,
+                user_data_dir=options.user_data_dir,  # type: ignore[call-arg]
+                extra_args=extra_args if extra_args else None,
+            )
         self._session = await self._client.new_page()
 
         if options.user_agent:
