@@ -1,5 +1,7 @@
 """Integration tests for debug actions against a real Chrome browser."""
 
+import asyncio
+
 import pytest
 
 from wavexis.actions.debug import DebugAction, DebugActionParams
@@ -25,7 +27,11 @@ async def test_debug_pause_resume(backend: CDPBackend, browser_opts: BrowserOpti
     """Test debug pause and resume in a single session."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.navigate(
+            "data:text/html,<script>setInterval(()=>{document.title=Date.now()},100)</script>",
+            WaitStrategy(strategy="none"),
+        )
+        await asyncio.sleep(0.5)
         await backend.debug_pause()
         await backend.debug_resume()
     finally:
@@ -36,7 +42,11 @@ async def test_debug_step_over(backend: CDPBackend, browser_opts: BrowserOptions
     """Test debug step over (requires pause first)."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.navigate(
+            "data:text/html,<script>setInterval(()=>{document.title=Date.now()},100)</script>",
+            WaitStrategy(strategy="none"),
+        )
+        await asyncio.sleep(0.5)
         await backend.debug_pause()
         await backend.debug_step_over()
     finally:

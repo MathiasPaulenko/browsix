@@ -29,7 +29,12 @@ class TestBrowserIntegration:
         try:
             await backend.launch(BrowserOptions())
             await backend.navigate("https://example.com")
-            ctx_id = await backend.new_context()
+            try:
+                ctx_id = await backend.new_context()
+            except Exception as exc:
+                if "Not allowed" in str(exc):
+                    pytest.skip("Browser contexts not supported in headless Chrome")
+                raise
             assert isinstance(ctx_id, str)
             assert len(ctx_id) > 0
             await backend.close_context(ctx_id)
