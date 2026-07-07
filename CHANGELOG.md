@@ -2,6 +2,16 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.1.1 — 2026-07-07
+
+### Refactored
+
+- Added `SessionNotInitializedError` to `exceptions.py` for proper session guard errors
+- Added `_require_session()` helper to `CDPBackend` — replaced 227 duplicated `if self._session is None: raise NavigationError(...)` guards
+- Added `_require_client()` helper to `BiDiBackend` — replaced 4 `RuntimeError` session guards
+- Removed 12 `type: ignore[union-attr]` comments in `cdp.py` (no longer needed after `_require_session()` returns `CDPSession`)
+- Updated docstrings to reference `SessionNotInitializedError` instead of `NavigationError`/`RuntimeError`
+
 ## v2.1.0 — 2026-07-07
 
 ### Refactored

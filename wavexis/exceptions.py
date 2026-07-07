@@ -38,6 +38,10 @@ class BackendNotSupportedError(WavexisError):
         super().__init__(f"Method '{method}' is not supported by {backend} backend.")
 
 
+class SessionNotInitializedError(WavexisError):
+    """Raised when a backend method is called before launch()."""
+
+
 class NavigationError(WavexisError):
     """Raised when navigation fails or times out."""
 

@@ -23,7 +23,12 @@ from wavexis.config import (
     ThrottleParams,
     WaitStrategy,
 )
-from wavexis.exceptions import ElementNotFoundError, NavigationError, WaitTimeoutError
+from wavexis.exceptions import (
+    ElementNotFoundError,
+    NavigationError,
+    SessionNotInitializedError,
+    WaitTimeoutError,
+)
 
 try:
     from cdpwave import CDPClient, CDPSession
@@ -50,6 +55,21 @@ class CDPBackend(AbstractBackend):
         self._console_entries: list[dict[str, Any]] = []
         self._log_entries: list[dict[str, Any]] = []
         self._current_url: str = ""
+
+    def _require_session(self) -> CDPSession:
+        """Return the current session or raise if not initialized.
+
+        Returns:
+            The active CDPSession instance.
+
+        Raises:
+            SessionNotInitializedError: If launch() has not been called.
+        """
+        if self._session is None:
+            raise SessionNotInitializedError(
+                "Session not initialized. Call launch() first."
+            )
+        return self._session
 
     async def launch(self, options: BrowserOptions) -> None:
         """Launch Chrome and create a new page session.
@@ -96,20 +116,19 @@ class CDPBackend(AbstractBackend):
             wait: Wait strategy to apply after navigation.
 
         Raises:
-            NavigationError: If the session is not initialized.
+            SessionNotInitializedError: If launch() has not been called.
             WaitTimeoutError: If the wait strategy times out.
         """
-        if self._session is None:
-            raise NavigationError(url, "Session not initialized. Call launch() first.")
+        session = self._require_session()
 
-        await self._session.page.enable()
-        await self._session.page.navigate(url)
+        await session.page.enable()
+        await session.page.navigate(url)
         self._current_url = url
 
         if wait is None or wait.strategy == "load":
             timeout_sec = (wait.timeout if wait else 30000) / 1000
             try:
-                await self._session.wait_for_event(
+                await session.wait_for_event(
                     "Page.loadEventFired", timeout=timeout_sec
                 )
             except TimeoutError:
@@ -119,7 +138,7 @@ class CDPBackend(AbstractBackend):
         elif wait.strategy == "domcontentloaded":
             timeout_sec = wait.timeout / 1000
             try:
-                await self._session.wait_for_event(
+                await session.wait_for_event(
                     "Page.domContentEventFired", timeout=timeout_sec
                 )
             except TimeoutError:
@@ -135,14 +154,13 @@ class CDPBackend(AbstractBackend):
             Screenshot image bytes (PNG or JPEG).
 
         Raises:
-            NavigationError: If the session is not initialized.
+            SessionNotInitializedError: If launch() has not been called.
         """
-        if self._session is None:
-            raise NavigationError(params.url, "Session not initialized.")
+        session = self._require_session()
 
         if params.device and params.device in DEVICE_PRESETS:
             preset = DEVICE_PRESETS[params.device]
-            await self._session.emulation.set_device_metrics_override(
+            await session.emulation.set_device_metrics_override(
                 width=preset["width"],
                 height=preset["height"],
                 device_scale_factor=preset["device_scale_factor"],
@@ -150,9 +168,9 @@ class CDPBackend(AbstractBackend):
                 user_agent=preset["user_agent"],
             )
             if preset.get("touch"):
-                await self._session.emulation.set_touch_emulation_enabled(True)
+                await session.emulation.set_touch_emulation_enabled(True)
 
-        result = await self._session.page.capture_screenshot(
+        result = await session.page.capture_screenshot(
             format=params.format,
             quality=params.quality,
             capture_beyond_viewport=params.full_page,
@@ -175,14 +193,13 @@ class CDPBackend(AbstractBackend):
         Returns:
             Screenshot image bytes.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
 
-        doc = await self._session.dom.get_document()
+        doc = await session.dom.get_document()
         root_node_id = doc.get("root", {}).get("nodeId", 0)
-        node = await self._session.dom.query_selector(root_node_id, selector)
+        node = await session.dom.query_selector(root_node_id, selector)
         node_id = node.get("nodeId", 0)
-        box = await self._session.dom.get_box_model(node_id)
+        box = await session.dom.get_box_model(node_id)
         model = box.get("model", {})
         borders = model.get("border", [])
         if len(borders) >= 8:
@@ -200,7 +217,7 @@ class CDPBackend(AbstractBackend):
             "height": height,
             "scale": 1,
         }
-        result = await self._session.page.capture_screenshot(
+        result = await session.page.capture_screenshot(
             format=format,
             quality=quality,
             clip=clip,
@@ -218,11 +235,10 @@ class CDPBackend(AbstractBackend):
         Returns:
             The evaluation result value.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
 
-        await self._session.runtime.enable()
-        result = await self._session.runtime.evaluate(
+        await session.runtime.enable()
+        result = await session.runtime.evaluate(
             expression,
             await_promise=await_promise,
         )
@@ -238,34 +254,31 @@ class CDPBackend(AbstractBackend):
         Returns:
             The CDP response result dict.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result: dict[str, Any] = await self._session.send(method, params)
+        session = self._require_session()
+        result: dict[str, Any] = await session.send(method, params)
         return result
 
     async def go_back(self) -> None:
         """Navigate back in browser history."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        history = await self._session.page.get_navigation_history()
+        session = self._require_session()
+        history = await session.page.get_navigation_history()
         current_idx = history.get("currentIndex", 0)
         entries = history.get("entries", [])
         if current_idx > 0 and entries:
             prev_entry = entries[current_idx - 1]
-            await self._session.page.navigate_to_history_entry(
+            await session.page.navigate_to_history_entry(
                 prev_entry.get("id", 0)
             )
 
     async def go_forward(self) -> None:
         """Navigate forward in browser history."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        history = await self._session.page.get_navigation_history()
+        session = self._require_session()
+        history = await session.page.get_navigation_history()
         current_idx = history.get("currentIndex", 0)
         entries = history.get("entries", [])
         if current_idx < len(entries) - 1:
             next_entry = entries[current_idx + 1]
-            await self._session.page.navigate_to_history_entry(
+            await session.page.navigate_to_history_entry(
                 next_entry.get("id", 0)
             )
 
@@ -275,15 +288,13 @@ class CDPBackend(AbstractBackend):
         Args:
             ignore_cache: If True, bypass the browser cache.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.page.reload(ignore_cache=ignore_cache)
+        session = self._require_session()
+        await session.page.reload(ignore_cache=ignore_cache)
 
     async def stop_loading(self) -> None:
         """Stop all pending navigations and resource loads."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.page.stop()
+        session = self._require_session()
+        await session.page.stop()
 
     async def wait_for(self, strategy: WaitStrategy) -> None:
         """Wait for a specific condition.
@@ -294,8 +305,7 @@ class CDPBackend(AbstractBackend):
         Raises:
             WaitTimeoutError: If the condition is not met within the timeout.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
 
         timeout_sec = strategy.timeout / 1000
         deadline = time.monotonic() + timeout_sec
@@ -304,7 +314,7 @@ class CDPBackend(AbstractBackend):
             escaped = strategy.selector.replace("'", "\\'")
             js = f"document.querySelector('{escaped}') !== null"
             while time.monotonic() < deadline:
-                result = await self._session.runtime.evaluate(js)
+                result = await session.runtime.evaluate(js)
                 if result.get("result", {}).get("value") is True:
                     return
                 await asyncio.sleep(0.1)
@@ -312,7 +322,7 @@ class CDPBackend(AbstractBackend):
 
         if strategy.strategy == "load":
             try:
-                await self._session.wait_for_event(
+                await session.wait_for_event(
                     "Page.loadEventFired", timeout=timeout_sec
                 )
             except TimeoutError:
@@ -321,7 +331,7 @@ class CDPBackend(AbstractBackend):
 
         if strategy.strategy == "url" and strategy.url_pattern:
             while time.monotonic() < deadline:
-                result = await self._session.runtime.evaluate("window.location.href")
+                result = await session.runtime.evaluate("window.location.href")
                 href = result.get("result", {}).get("value", "")
                 if strategy.url_pattern in href:
                     return
@@ -337,15 +347,14 @@ class CDPBackend(AbstractBackend):
         Returns:
             PDF bytes.
         """
-        if self._session is None:
-            raise NavigationError(params.url, "Session not initialized.")
+        session = self._require_session()
 
-        await self._session.emulation.set_emulated_media(media=params.media)
+        await session.emulation.set_emulated_media(media=params.media)
 
         paper_dims = PAPER_SIZES.get(params.paper, PAPER_SIZES["letter"])
         margin_val = float(params.margin.replace("in", ""))
 
-        result = await self._session.page.print_to_pdf(
+        result = await session.page.print_to_pdf(
             landscape=params.landscape,
             display_header_footer=not params.no_header_footer,
             print_background=True,
@@ -368,8 +377,7 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of frame image bytes.
         """
-        if self._session is None:
-            raise NavigationError(params.url, "Session not initialized.")
+        session = self._require_session()
 
         frames: list[bytes] = []
 
@@ -383,9 +391,9 @@ class CDPBackend(AbstractBackend):
             if data:
                 frames.append(base64.b64decode(data))
 
-        self._session.on("Page.screencastFrame", on_frame)
+        session.on("Page.screencastFrame", on_frame)
 
-        await self._session.send("Page.startScreencast", {
+        await session.send("Page.startScreencast", {
             "format": params.format,
             "quality": params.quality,
             "maxWidth": params.max_width,
@@ -394,7 +402,7 @@ class CDPBackend(AbstractBackend):
 
         await asyncio.sleep(params.duration)
 
-        await self._session.send("Page.stopScreencast")
+        await session.send("Page.stopScreencast")
 
         return frames
 
@@ -404,9 +412,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of target info dicts.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.target.get_targets()
+        session = self._require_session()
+        result = await session.target.get_targets()
         targets = result.get("targetInfos", [])
         return [t for t in targets if t.get("type") == "page"]
 
@@ -419,9 +426,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             The target ID of the new tab.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.target.create_target(url)
+        session = self._require_session()
+        result = await session.target.create_target(url)
         return str(result.get("targetId", ""))
 
     async def close_tab(self, tab_id: str) -> None:
@@ -430,9 +436,8 @@ class CDPBackend(AbstractBackend):
         Args:
             tab_id: The target ID of the tab to close.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.target.close_target(tab_id)
+        session = self._require_session()
+        await session.target.close_target(tab_id)
 
     async def activate_tab(self, tab_id: str) -> None:
         """Activate (focus) a tab by its target ID.
@@ -440,9 +445,8 @@ class CDPBackend(AbstractBackend):
         Args:
             tab_id: The target ID of the tab to activate.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.target.activate_target(tab_id)
+        session = self._require_session()
+        await session.target.activate_target(tab_id)
 
     async def capture_console(self, level: str = "all") -> list[dict[str, Any]]:
         """Capture console messages at or above the given level.
@@ -453,8 +457,7 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of console entry dicts with type, args, and timestamp.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
 
         entries: list[dict[str, Any]] = []
 
@@ -473,9 +476,9 @@ class CDPBackend(AbstractBackend):
                     "timestamp": event_params.get("timestamp"),
                 })
 
-        self._session.on("Runtime.consoleAPICalled", on_console_api)
+        session.on("Runtime.consoleAPICalled", on_console_api)
 
-        await self._session.runtime.enable()
+        await session.runtime.enable()
         await asyncio.sleep(0.5)
 
         return entries
@@ -486,8 +489,7 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of log entry dicts with level, text, and timestamp.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
 
         entries: list[dict[str, Any]] = []
 
@@ -507,9 +509,9 @@ class CDPBackend(AbstractBackend):
                 "stackTrace": entry.get("stackTrace", []),
             })
 
-        self._session.on("Log.entryAdded", on_log_entry)
+        session.on("Log.entryAdded", on_log_entry)
 
-        await self._session.log.enable()
+        await session.log.enable()
         await asyncio.sleep(0.5)
 
         return entries
@@ -518,12 +520,11 @@ class CDPBackend(AbstractBackend):
 
     async def _find_node(self, selector: str) -> int:
         """Find a node by CSS selector and return its nodeId."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.dom.enable()
-        doc = await self._session.dom.get_document()
+        session = self._require_session()
+        await session.dom.enable()
+        doc = await session.dom.get_document()
         root_node_id = doc.get("root", {}).get("nodeId", 0)
-        result = await self._session.dom.query_selector(root_node_id, selector)
+        result = await session.dom.query_selector(root_node_id, selector)
         node_id = result.get("nodeId", 0)
         if node_id == 0:
             raise ElementNotFoundError(selector)
@@ -539,11 +540,12 @@ class CDPBackend(AbstractBackend):
         Returns:
             The HTML string of the element.
         """
+        session = self._require_session()
         node_id = await self._find_node(selector)
         if outer:
-            result = await self._session.dom.get_outer_html(node_id)  # type: ignore[union-attr]
+            result = await session.dom.get_outer_html(node_id)
         else:
-            result = await self._session.dom.get_inner_html(node_id)  # type: ignore[union-attr]
+            result = await session.dom.get_inner_html(node_id)
         html = result.get("outerHTML", "") if outer else result.get("innerHTML", "")
         return str(html)
 
@@ -559,37 +561,38 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of node dicts when all=True, single dict when all=False.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.dom.enable()
-        doc = await self._session.dom.get_document()
+        session = self._require_session()
+        await session.dom.enable()
+        doc = await session.dom.get_document()
         root_node_id = doc.get("root", {}).get("nodeId", 0)
 
         if all:
-            result = await self._session.dom.query_selector_all(root_node_id, selector)
+            result = await session.dom.query_selector_all(root_node_id, selector)
             node_ids = result.get("nodeIds", [])
             nodes: list[dict[str, Any]] = []
             for nid in node_ids:
-                desc = await self._session.dom.describe_node(node_id=nid)
+                desc = await session.dom.describe_node(node_id=nid)
                 nodes.append(desc.get("node", {}))
             return nodes
 
-        result = await self._session.dom.query_selector(root_node_id, selector)
+        result = await session.dom.query_selector(root_node_id, selector)
         node_id = result.get("nodeId", 0)
         if node_id == 0:
             raise ElementNotFoundError(selector)
-        desc = await self._session.dom.describe_node(node_id=node_id)
+        desc = await session.dom.describe_node(node_id=node_id)
         return dict(desc.get("node", {}))
 
     async def dom_set_attr(self, selector: str, name: str, value: str) -> None:
         """Set an attribute on an element matching a CSS selector."""
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        await self._session.dom.set_attribute_value(node_id, name, value)  # type: ignore[union-attr]
+        await session.dom.set_attribute_value(node_id, name, value)
 
     async def dom_get_attr(self, selector: str, name: str) -> str:
         """Get an attribute value from an element matching a CSS selector."""
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        result = await self._session.dom.get_attribute(node_id, name)  # type: ignore[union-attr]
+        result = await session.dom.get_attribute(node_id, name)
         attrs = result.get("attributes", [])
         for i in range(0, len(attrs) - 1, 2):
             if attrs[i] == name:
@@ -598,18 +601,21 @@ class CDPBackend(AbstractBackend):
 
     async def dom_remove_attr(self, selector: str, name: str) -> None:
         """Remove an attribute from an element matching a CSS selector."""
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        await self._session.dom.remove_attribute(node_id, name)  # type: ignore[union-attr]
+        await session.dom.remove_attribute(node_id, name)
 
     async def dom_remove(self, selector: str) -> None:
         """Remove an element matching a CSS selector from the DOM."""
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        await self._session.dom.remove_node(node_id)  # type: ignore[union-attr]
+        await session.dom.remove_node(node_id)
 
     async def dom_focus(self, selector: str) -> None:
         """Focus an element matching a CSS selector."""
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        await self._session.dom.focus(node_id)  # type: ignore[union-attr]
+        await session.dom.focus(node_id)
 
     async def dom_scroll(
         self, selector: str | None = None, x: int = 0, y: int = 0
@@ -621,14 +627,13 @@ class CDPBackend(AbstractBackend):
             x: Horizontal scroll offset.
             y: Vertical scroll offset.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         if selector:
             escaped = selector.replace("'", "\\'")
             js = f"document.querySelector('{escaped}').scrollIntoView()"
         else:
             js = f"window.scrollBy({x}, {y})"
-        await self._session.runtime.evaluate(js)
+        await session.runtime.evaluate(js)
 
     # ── Network ────────────────────────────────────────────
 
@@ -641,8 +646,7 @@ class CDPBackend(AbstractBackend):
         Returns:
             HAR 1.2 compliant dict with log.entries.
         """
-        if self._session is None:
-            raise NavigationError(params.url, "Session not initialized.")
+        session = self._require_session()
 
         requests: dict[str, dict[str, Any]] = {}
         responses: dict[str, dict[str, Any]] = {}
@@ -711,11 +715,11 @@ class CDPBackend(AbstractBackend):
                 "encodedDataLength": event_params.get("encodedDataLength", 0),
             }
 
-        self._session.on("Network.requestWillBeSent", on_request)
-        self._session.on("Network.responseReceived", on_response)
-        self._session.on("Network.loadingFinished", on_loading_finished)
+        session.on("Network.requestWillBeSent", on_request)
+        session.on("Network.responseReceived", on_response)
+        session.on("Network.loadingFinished", on_loading_finished)
 
-        await self._session.network.enable()
+        await session.network.enable()
         await self.navigate(params.url, WaitStrategy(strategy="load"))
         await asyncio.sleep(params.wait / 1000)
 
@@ -779,9 +783,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of cookie dicts.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.network.get_cookies()
+        session = self._require_session()
+        result = await session.network.get_cookies()
         return list(result.get("cookies", []))
 
     async def set_cookie(self, params: CookieParams) -> None:
@@ -790,9 +793,8 @@ class CDPBackend(AbstractBackend):
         Args:
             params: Cookie parameters.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.set_cookie(
+        session = self._require_session()
+        await session.network.set_cookie(
             name=params.name,
             value=params.value,
             domain=params.domain or None,
@@ -809,15 +811,13 @@ class CDPBackend(AbstractBackend):
             name: Cookie name to delete.
             domain: Cookie domain to scope deletion.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.delete_cookies(name=name, domain=domain)
+        session = self._require_session()
+        await session.network.delete_cookies(name=name, domain=domain)
 
     async def clear_cookies(self) -> None:
         """Clear all browser cookies."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.clear_browser_cookies()
+        session = self._require_session()
+        await session.network.clear_browser_cookies()
 
     async def set_headers(self, headers: dict[str, str]) -> None:
         """Set extra HTTP headers for all requests.
@@ -825,9 +825,8 @@ class CDPBackend(AbstractBackend):
         Args:
             headers: Dict of header name to value.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.set_extra_request_headers(headers)
+        session = self._require_session()
+        await session.network.set_extra_request_headers(headers)
 
     async def set_user_agent(self, user_agent: str) -> None:
         """Override the browser's User-Agent string.
@@ -835,9 +834,8 @@ class CDPBackend(AbstractBackend):
         Args:
             user_agent: The User-Agent string to use.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.set_user_agent_override(user_agent=user_agent)
+        session = self._require_session()
+        await session.network.set_user_agent_override(user_agent=user_agent)
 
     # ── Browser management ─────────────────────────────────
 
@@ -847,9 +845,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             The browser context ID string.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.target.create_browser_context()
+        session = self._require_session()
+        result = await session.target.create_browser_context()
         return str(result.get("browserContextId", ""))
 
     async def list_contexts(self) -> list[dict[str, Any]]:
@@ -858,9 +855,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of context info dicts.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send("Target.getBrowserContexts")
+        session = self._require_session()
+        result = await session.send("Target.getBrowserContexts")
         contexts = result.get("browserContextIds", [])
         return [{"contextId": ctx} for ctx in contexts]
 
@@ -870,9 +866,8 @@ class CDPBackend(AbstractBackend):
         Args:
             context_id: The browser context ID to close.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.target.dispose_browser_context(context_id)
+        session = self._require_session()
+        await session.target.dispose_browser_context(context_id)
 
     async def get_window_bounds(self) -> dict[str, Any]:
         """Get the current window bounds.
@@ -937,12 +932,11 @@ class CDPBackend(AbstractBackend):
         Raises:
             ValueError: If the device name is not in DEVICE_PRESETS.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         preset = DEVICE_PRESETS.get(device)
         if preset is None:
             raise ValueError(f"Unknown device preset: {device}")
-        await self._session.emulation.set_device_metrics_override(
+        await session.emulation.set_device_metrics_override(
             width=int(preset["width"]),
             height=int(preset["height"]),
             device_scale_factor=float(preset["device_scale_factor"]),
@@ -950,7 +944,7 @@ class CDPBackend(AbstractBackend):
             user_agent=str(preset["user_agent"]),
         )
         if preset.get("touch"):
-            await self._session.emulation.set_touch_emulation_enabled(True)
+            await session.emulation.set_touch_emulation_enabled(True)
 
     async def set_viewport(
         self, width: int, height: int, device_scale_factor: float = 1.0
@@ -962,9 +956,8 @@ class CDPBackend(AbstractBackend):
             height: Viewport height in CSS pixels.
             device_scale_factor: Device pixel scale factor.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.emulation.set_device_metrics_override(
+        session = self._require_session()
+        await session.emulation.set_device_metrics_override(
             width=width,
             height=height,
             device_scale_factor=device_scale_factor,
@@ -981,9 +974,8 @@ class CDPBackend(AbstractBackend):
             longitude: Longitude in degrees.
             accuracy: Accuracy in meters.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.emulation.set_geolocation_override(
+        session = self._require_session()
+        await session.emulation.set_geolocation_override(
             latitude=latitude,
             longitude=longitude,
             accuracy=accuracy,
@@ -995,9 +987,8 @@ class CDPBackend(AbstractBackend):
         Args:
             timezone: IANA timezone ID (e.g. 'America/New_York').
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.emulation.set_timezone_override(timezone)
+        session = self._require_session()
+        await session.emulation.set_timezone_override(timezone)
 
     async def set_dark_mode(self, enabled: bool) -> None:
         """Enable or disable dark mode emulation.
@@ -1005,17 +996,17 @@ class CDPBackend(AbstractBackend):
         Args:
             enabled: True to enable dark mode, False to disable.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         features = [{"name": "prefers-color-scheme", "value": "dark" if enabled else "light"}]
-        await self._session.emulation.set_emulated_media(features=features)
+        await session.emulation.set_emulated_media(features=features)
 
     # ── Input ──────────────────────────────────────────────
 
     async def _get_box_center(self, selector: str) -> tuple[float, float]:
         """Find an element by selector and return the center of its bounding box."""
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        box = await self._session.dom.get_box_model(node_id)  # type: ignore[union-attr]
+        box = await session.dom.get_box_model(node_id)
         model = box.get("model", {})
         borders = model.get("border", [])
         if len(borders) < 8:
@@ -1036,16 +1027,15 @@ class CDPBackend(AbstractBackend):
             button: Mouse button — "left", "right", or "middle".
             click_count: Number of clicks to dispatch.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         x, y = await self._get_box_center(selector)
         btn_map = {"left": "left", "right": "right", "middle": "middle"}
         btn = btn_map.get(button, "left")
         for _ in range(click_count):
-            await self._session.input.dispatch_mouse_event(
+            await session.input.dispatch_mouse_event(
                 type_="mousePressed", x=x, y=y, button=btn, click_count=1
             )
-            await self._session.input.dispatch_mouse_event(
+            await session.input.dispatch_mouse_event(
                 type_="mouseReleased", x=x, y=y, button=btn, click_count=1
             )
 
@@ -1057,12 +1047,11 @@ class CDPBackend(AbstractBackend):
             text: Text to type character by character.
             delay: Delay between keystrokes in milliseconds.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        await self._session.dom.focus(node_id)
+        await session.dom.focus(node_id)
         for char in text:
-            await self._session.input.dispatch_key_event(
+            await session.input.dispatch_key_event(
                 type_="char", text=char
             )
             if delay > 0:
@@ -1075,8 +1064,7 @@ class CDPBackend(AbstractBackend):
             selector: CSS selector for the target element.
             value: Value to set in the input field.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         escaped = selector.replace("'", "\\'")
         js = (
             f"(function(){{var el=document.querySelector('{escaped}');"
@@ -1085,7 +1073,7 @@ class CDPBackend(AbstractBackend):
             f"el.dispatchEvent(new Event('change',{{bubbles:true}}));"
             f"return true;}})()"
         )
-        result = await self._session.runtime.evaluate(js)
+        result = await session.runtime.evaluate(js)
         if not result.get("result", {}).get("value"):
             raise ElementNotFoundError(selector)
 
@@ -1096,8 +1084,7 @@ class CDPBackend(AbstractBackend):
             selector: CSS selector for the <select> element.
             value: Option value to select.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         escaped = selector.replace("'", "\\'")
         escaped_val = value.replace("'", "\\'")
         js = (
@@ -1106,7 +1093,7 @@ class CDPBackend(AbstractBackend):
             f"el.dispatchEvent(new Event('change',{{bubbles:true}}));"
             f"return true;}})()"
         )
-        result = await self._session.runtime.evaluate(js)
+        result = await session.runtime.evaluate(js)
         if not result.get("result", {}).get("value"):
             raise ElementNotFoundError(selector)
 
@@ -1116,10 +1103,9 @@ class CDPBackend(AbstractBackend):
         Args:
             selector: CSS selector for the target element.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         x, y = await self._get_box_center(selector)
-        await self._session.input.dispatch_mouse_event(
+        await session.input.dispatch_mouse_event(
             type_="mouseMoved", x=x, y=y
         )
 
@@ -1129,8 +1115,7 @@ class CDPBackend(AbstractBackend):
         Args:
             key: Key name (e.g. 'Enter', 'Tab', 'Escape').
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         key_map = {
             "Enter": {"key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13},
             "Tab": {"key": "Tab", "code": "Tab", "windowsVirtualKeyCode": 9},
@@ -1139,10 +1124,10 @@ class CDPBackend(AbstractBackend):
             "Backspace": {"key": "Backspace", "code": "Backspace", "windowsVirtualKeyCode": 8},
         }
         key_info = key_map.get(key, {"key": key, "code": key})
-        await self._session.input.dispatch_key_event(
+        await session.input.dispatch_key_event(
             type_="keyDown", **key_info
         )
-        await self._session.input.dispatch_key_event(
+        await session.input.dispatch_key_event(
             type_="keyUp", **key_info
         )
 
@@ -1153,17 +1138,16 @@ class CDPBackend(AbstractBackend):
             source: CSS selector for the element to drag.
             target: CSS selector for the drop target.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         sx, sy = await self._get_box_center(source)
         tx, ty = await self._get_box_center(target)
-        await self._session.input.dispatch_mouse_event(
+        await session.input.dispatch_mouse_event(
             type_="mousePressed", x=sx, y=sy, button="left", click_count=1
         )
-        await self._session.input.dispatch_mouse_event(
+        await session.input.dispatch_mouse_event(
             type_="mouseMoved", x=tx, y=ty
         )
-        await self._session.input.dispatch_mouse_event(
+        await session.input.dispatch_mouse_event(
             type_="mouseReleased", x=tx, y=ty, button="left", click_count=1
         )
 
@@ -1173,13 +1157,12 @@ class CDPBackend(AbstractBackend):
         Args:
             selector: CSS selector for the target element.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         x, y = await self._get_box_center(selector)
-        await self._session.input.dispatch_touch_event(
+        await session.input.dispatch_touch_event(
             type_="touchStart", touch_points=[{"x": x, "y": y}]
         )
-        await self._session.input.dispatch_touch_event(
+        await session.input.dispatch_touch_event(
             type_="touchEnd", touch_points=[]
         )
 
@@ -1190,10 +1173,9 @@ class CDPBackend(AbstractBackend):
             selector: CSS selector for the <input type="file"> element.
             files: List of absolute file paths to upload.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        await self._session.send(
+        await session.send(
             "DOM.setFileInputFiles",
             {"files": files, "nodeId": node_id},
         )
@@ -1206,11 +1188,10 @@ class CDPBackend(AbstractBackend):
         Args:
             patterns: List of glob-style URL patterns to block.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.enable()
+        session = self._require_session()
+        await session.network.enable()
         for pattern in patterns:
-            await self._session.send(
+            await session.send(
                 "Network.setBlockedURLs",
                 {"urls": [pattern]},
             )
@@ -1221,10 +1202,9 @@ class CDPBackend(AbstractBackend):
         Args:
             params: Throttle parameters (offline, latency, throughput).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.enable()
-        await self._session.send(
+        session = self._require_session()
+        await session.network.enable()
+        await session.send(
             "Network.emulateNetworkConditions",
             {
                 "offline": params.offline,
@@ -1240,10 +1220,9 @@ class CDPBackend(AbstractBackend):
         Args:
             disabled: True to disable cache, False to enable.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.network.enable()
-        await self._session.network.set_cache_disabled(disabled)
+        session = self._require_session()
+        await session.network.enable()
+        await session.network.set_cache_disabled(disabled)
 
     async def intercept_requests(self, pattern: dict[str, Any]) -> None:
         """Intercept requests matching a pattern dict.
@@ -1251,9 +1230,8 @@ class CDPBackend(AbstractBackend):
         Args:
             pattern: Fetch.enable pattern dict (urlPattern, resourceType, requestStage).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Fetch.enable",
             {"patterns": [pattern]},
         )
@@ -1267,8 +1245,7 @@ class CDPBackend(AbstractBackend):
             url: URL pattern to intercept.
             response: Response dict with optional keys: status, headers, body.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
 
         body = response.get("body", "")
         if isinstance(body, (dict, list)):
@@ -1284,7 +1261,7 @@ class CDPBackend(AbstractBackend):
                 event_params: CDP event parameters with the paused request ID.
             """
             request_id = event_params.get("requestId", "")
-            await self._session.send(  # type: ignore[union-attr]
+            await session.send(
                 "Fetch.fulfillRequest",
                 {
                     "requestId": request_id,
@@ -1300,8 +1277,8 @@ class CDPBackend(AbstractBackend):
             )
             fulfilled[0] = True
 
-        self._session.on("Fetch.requestPaused", on_request_paused)
-        await self._session.send(
+        session.on("Fetch.requestPaused", on_request_paused)
+        await session.send(
             "Fetch.enable",
             {"patterns": [{"urlPattern": url, "requestStage": "Response"}]},
         )
@@ -1314,9 +1291,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict with the accessibility tree nodes.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send("Accessibility.getFullAXTree")
+        session = self._require_session()
+        result = await session.send("Accessibility.getFullAXTree")
         return dict(result)
 
     async def a11y_node(self, node_id: str) -> dict[str, Any]:
@@ -1328,9 +1304,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict with the node's accessibility properties.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send("Accessibility.getFullAXTree")
+        session = self._require_session()
+        result = await session.send("Accessibility.getFullAXTree")
         nodes = result.get("nodes", [])
         for node in nodes:
             if node.get("nodeId") == node_id:
@@ -1346,9 +1321,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of ancestor node dicts.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send("Accessibility.getFullAXTree")
+        session = self._require_session()
+        result = await session.send("Accessibility.getFullAXTree")
         nodes = result.get("nodes", [])
         ancestors: list[dict[str, Any]] = []
         for node in nodes:
@@ -1367,12 +1341,11 @@ class CDPBackend(AbstractBackend):
         Returns:
             Downloaded file bytes.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         import tempfile
 
         download_dir = tempfile.mkdtemp()
-        await self._session.send(
+        await session.send(
             "Page.setDownloadBehavior",
             {"behavior": "allow", "downloadPath": download_dir},
         )
@@ -1396,18 +1369,16 @@ class CDPBackend(AbstractBackend):
         Args:
             prompt_text: Text to enter in a prompt dialog (optional).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Page.handleJavaScriptDialog",
             {"accept": True, "promptText": prompt_text or ""},
         )
 
     async def dialog_dismiss(self) -> None:
         """Dismiss a JavaScript dialog."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Page.handleJavaScriptDialog",
             {"accept": False},
         )
@@ -1420,18 +1391,16 @@ class CDPBackend(AbstractBackend):
         Args:
             permission: Permission name (e.g. 'geolocation', 'notifications').
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Browser.grantPermissions",
             {"permissions": [permission]},
         )
 
     async def reset_permissions(self) -> None:
         """Reset all granted permissions."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Browser.resetPermissions", {})
+        session = self._require_session()
+        await session.send("Browser.resetPermissions", {})
 
     # ── Security ───────────────────────────────────────────
 
@@ -1441,9 +1410,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict with security state info (secure, explanations, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send("Security.setIgnoreCertificateErrors", {"ignore": False})
+        session = self._require_session()
+        result = await session.send("Security.setIgnoreCertificateErrors", {"ignore": False})
         return dict(result) if result else {}
 
     async def ignore_cert_errors(self, ignore: bool = True) -> None:
@@ -1452,9 +1420,8 @@ class CDPBackend(AbstractBackend):
         Args:
             ignore: True to ignore cert errors, False to enforce.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Security.setIgnoreCertificateErrors",
             {"ignore": ignore},
         )
@@ -1467,9 +1434,8 @@ class CDPBackend(AbstractBackend):
         Args:
             locale: Locale string (e.g. 'en-US', 'fr-FR').
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Emulation.setLocaleOverride",
             {"locale": locale},
         )
@@ -1480,9 +1446,8 @@ class CDPBackend(AbstractBackend):
         Args:
             rate: Throttle rate (e.g. 4 = 4x slower than normal).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Emulation.setCPUThrottlingRate",
             {"rate": rate},
         )
@@ -1493,9 +1458,8 @@ class CDPBackend(AbstractBackend):
         Args:
             enabled: True to enable touch emulation, False to disable.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.emulation.set_touch_emulation_enabled(enabled)
+        session = self._require_session()
+        await session.emulation.set_touch_emulation_enabled(enabled)
 
     async def set_sensors(self, sensors: SensorParams) -> None:
         """Override sensor values.
@@ -1503,10 +1467,9 @@ class CDPBackend(AbstractBackend):
         Args:
             sensors: Sensor parameters with type and values.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         if sensors.type == "device-orientation":
-            await self._session.send(
+            await session.send(
                 "DeviceOrientation.setDeviceOrientationOverride",
                 {
                     "alpha": sensors.values.get("alpha", 0),
@@ -1515,7 +1478,7 @@ class CDPBackend(AbstractBackend):
                 },
             )
         elif sensors.type == "geolocation":
-            await self._session.emulation.set_geolocation_override(
+            await session.emulation.set_geolocation_override(
                 latitude=sensors.values.get("latitude", 0),
                 longitude=sensors.values.get("longitude", 0),
                 accuracy=sensors.values.get("accuracy", 100),
@@ -1530,10 +1493,9 @@ class CDPBackend(AbstractBackend):
             Dict mapping metric names to values (e.g. Timestamp, Documents,
             Frames, JSEventListeners, JSHeapUsedSize, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Performance.enable", {})
-        result = await self._session.send("Performance.getMetrics", {})
+        session = self._require_session()
+        await session.send("Performance.enable", {})
+        result = await session.send("Performance.getMetrics", {})
         metrics: dict[str, Any] = {}
         for m in result.get("metrics", []):
             metrics[m["name"]] = m["value"]
@@ -1548,8 +1510,7 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict containing trace events collected during the capture period.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         trace_events: list[dict[str, Any]] = []
 
         async def _on_tracing_complete(params: dict[str, Any]) -> None:
@@ -1565,7 +1526,7 @@ class CDPBackend(AbstractBackend):
             if stream_handle:
                 chunks: list[bytes] = []
                 while True:
-                    resp = await self._session.send(  # type: ignore[union-attr]
+                    resp = await session.send(
                         "IO.read",
                         {"handle": stream_handle},
                     )
@@ -1586,13 +1547,13 @@ class CDPBackend(AbstractBackend):
             else:
                 trace_events.append({"error": "No stream handle in tracingComplete"})
 
-        self._session.on("Tracing.tracingComplete", _on_tracing_complete)
-        await self._session.send(
+        session.on("Tracing.tracingComplete", _on_tracing_complete)
+        await session.send(
             "Tracing.start",
             {"traceType": "devtools-timeline"},
         )
         await asyncio.sleep(duration_ms / 1000)
-        await self._session.send("Tracing.end", {})
+        await session.send("Tracing.end", {})
         return {"traceEvents": trace_events}
 
     async def perf_profile(self, duration_ms: int = 3000) -> dict[str, Any]:
@@ -1604,12 +1565,11 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict containing CPU profile data (nodes, samples, timeDeltas, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Profiler.enable", {})
-        await self._session.send("Profiler.start", {})
+        session = self._require_session()
+        await session.send("Profiler.enable", {})
+        await session.send("Profiler.start", {})
         await asyncio.sleep(duration_ms / 1000)
-        result = await self._session.send("Profiler.stop", {})
+        result = await session.send("Profiler.stop", {})
         profile = result.get("profile", result)
         return dict(profile) if profile else {}
 
@@ -1619,10 +1579,9 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict containing heap snapshot data (nodes, edges, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("HeapProfiler.enable", {})
-        result = await self._session.send(
+        session = self._require_session()
+        await session.send("HeapProfiler.enable", {})
+        result = await session.send(
             "HeapProfiler.takeHeapSnapshot",
             {"reportProgress": False},
         )
@@ -1634,14 +1593,13 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict with 'result' key containing a list of script coverage entries.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Profiler.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("Profiler.enable", {})
+        await session.send(
             "Profiler.startPreciseCoverage",
             {"callCount": True, "detailed": True},
         )
-        result = await self._session.send("Profiler.takePreciseCoverage", {})
+        result = await session.send("Profiler.takePreciseCoverage", {})
         return dict(result) if result else {}
 
     async def perf_css_coverage(self) -> dict[str, Any]:
@@ -1650,12 +1608,11 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict with 'result' key containing a list of CSS coverage entries.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("CSS.enable", {})
-        await self._session.send("CSS.startRuleUsageTracking", {})
+        session = self._require_session()
+        await session.send("CSS.enable", {})
+        await session.send("CSS.startRuleUsageTracking", {})
         await asyncio.sleep(1)
-        result = await self._session.send("CSS.stopRuleUsageTracking", {})
+        result = await session.send("CSS.stopRuleUsageTracking", {})
         return dict(result) if result else {}
 
     # ── CSS ────────────────────────────────────────────────
@@ -1669,14 +1626,13 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict containing inlineStyles and matchedStyles.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("CSS.enable", {})
+        session = self._require_session()
+        await session.send("CSS.enable", {})
         node_id = await self._find_node(selector)
-        inline = await self._session.send(
+        inline = await session.send(
             "CSS.getInlineStyles", {"nodeId": node_id}
         )
-        matched = await self._session.send(
+        matched = await session.send(
             "CSS.getMatchedStyles", {"nodeId": node_id}
         )
         return {"inlineStyles": inline, "matchedStyles": matched}
@@ -1687,10 +1643,9 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of stylesheet header dicts.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("CSS.enable", {})
-        result = await self._session.send("CSS.getStyleSheetText", {})
+        session = self._require_session()
+        await session.send("CSS.enable", {})
+        result = await session.send("CSS.getStyleSheetText", {})
         headers: list[dict[str, Any]] = []
         for sheet in result.get("headers", []):
             headers.append(dict(sheet))
@@ -1705,10 +1660,9 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of CSS rule dicts.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("CSS.enable", {})
-        result = await self._session.send(
+        session = self._require_session()
+        await session.send("CSS.enable", {})
+        result = await session.send(
             "CSS.getStyleSheetText", {"styleSheetId": stylesheet_id}
         )
         text = result.get("text", "")
@@ -1730,16 +1684,15 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict mapping CSS property names to computed values.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        resolved = await self._session.send(
+        resolved = await session.send(
             "DOM.resolveNode", {"nodeId": node_id}
         )
         object_id = resolved.get("object", {}).get("objectId", "")
         if not object_id:
             raise ElementNotFoundError(selector)
-        result = await self._session.send(
+        result = await session.send(
             "CSS.getComputedStyleForNode", {"nodeId": node_id}
         )
         computed: dict[str, Any] = {}
@@ -1762,13 +1715,12 @@ class CDPBackend(AbstractBackend):
         Returns:
             The breakpoint ID string.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Debugger.enable", {})
+        session = self._require_session()
+        await session.send("Debugger.enable", {})
         params: dict[str, Any] = {"url": url, "lineNumber": line}
         if condition:
             params["condition"] = condition
-        result = await self._session.send(
+        result = await session.send(
             "Debugger.setBreakpointByUrl", params
         )
         return str(result.get("breakpointId", ""))
@@ -1782,10 +1734,9 @@ class CDPBackend(AbstractBackend):
         Returns:
             The breakpoint ID string.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Debugger.enable", {})
-        result = await self._session.send(
+        session = self._require_session()
+        await session.send("Debugger.enable", {})
+        result = await session.send(
             "Debugger.setBreakpointOnFunctionCall",
             {"functionName": function_name},
         )
@@ -1797,41 +1748,35 @@ class CDPBackend(AbstractBackend):
         Args:
             breakpoint_id: The breakpoint ID returned from set_breakpoint.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "Debugger.removeBreakpoint", {"breakpointId": breakpoint_id}
         )
 
     async def debug_step_over(self) -> None:
         """Step over the current statement in the debugger."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Debugger.stepOver", {})
+        session = self._require_session()
+        await session.send("Debugger.stepOver", {})
 
     async def debug_step_into(self) -> None:
         """Step into the current function call in the debugger."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Debugger.stepInto", {})
+        session = self._require_session()
+        await session.send("Debugger.stepInto", {})
 
     async def debug_step_out(self) -> None:
         """Step out of the current function in the debugger."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Debugger.stepOut", {})
+        session = self._require_session()
+        await session.send("Debugger.stepOut", {})
 
     async def debug_pause(self) -> None:
         """Pause JavaScript execution."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Debugger.pause", {})
+        session = self._require_session()
+        await session.send("Debugger.pause", {})
 
     async def debug_resume(self) -> None:
         """Resume JavaScript execution after a pause."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Debugger.resume", {})
+        session = self._require_session()
+        await session.send("Debugger.resume", {})
 
     async def debug_get_listeners(self, selector: str) -> list[dict[str, Any]]:
         """Get event listeners attached to an element by CSS selector.
@@ -1842,16 +1787,15 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of listener dicts (type, useCapture, passive, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
+        session = self._require_session()
         node_id = await self._find_node(selector)
-        resolved = await self._session.send(
+        resolved = await session.send(
             "DOM.resolveNode", {"nodeId": node_id}
         )
         object_id = resolved.get("object", {}).get("objectId", "")
         if not object_id:
             raise ElementNotFoundError(selector)
-        result = await self._session.send(
+        result = await session.send(
             "DOMDebugger.getEventListeners", {"objectId": object_id}
         )
         listeners: list[dict[str, Any]] = []
@@ -1867,9 +1811,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict containing the raw DOM snapshot (documents, strings, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send(
+        session = self._require_session()
+        result = await session.send(
             "DOMSnapshot.captureSnapshot",
             {"computedStyles": [], "includePaintOrder": True, "includeDOMRects": False},
         )
@@ -1886,24 +1829,22 @@ class CDPBackend(AbstractBackend):
             selector: CSS selector for the element to highlight.
             color: RGBA color string for the highlight overlay.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Overlay.enable", {})
+        session = self._require_session()
+        await session.send("Overlay.enable", {})
         node_id = await self._find_node(selector)
         highlight_config: dict[str, Any] = {
             "contentColor": color,
             "contentOutlineColor": "rgba(0,0,0,0)",
         }
-        await self._session.send(
+        await session.send(
             "Overlay.highlightNode",
             {"highlightConfig": highlight_config, "nodeId": node_id},
         )
 
     async def overlay_clear(self) -> None:
         """Clear all highlight overlays from the page."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Overlay.clearHighlight", {})
+        session = self._require_session()
+        await session.send("Overlay.clearHighlight", {})
 
     # ── Storage ────────────────────────────────────────────
 
@@ -1937,11 +1878,10 @@ class CDPBackend(AbstractBackend):
         Returns:
             The stored value as a string, or empty string if not found.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("DOMStorage.enable", {})
+        session = self._require_session()
+        await session.send("DOMStorage.enable", {})
         storage_id = await self._get_storage_id(storage_type)
-        result = await self._session.send(
+        result = await session.send(
             "DOMStorage.getDOMStorageItems", {"storageId": storage_id}
         )
         for entry in result.get("entries", []):
@@ -1959,11 +1899,10 @@ class CDPBackend(AbstractBackend):
             value: The value to store.
             storage_type: "local" or "session".
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("DOMStorage.enable", {})
+        session = self._require_session()
+        await session.send("DOMStorage.enable", {})
         storage_id = await self._get_storage_id(storage_type)
-        await self._session.send(
+        await session.send(
             "DOMStorage.setDOMStorageItem",
             {"storageId": storage_id, "key": key, "value": value},
         )
@@ -1974,11 +1913,10 @@ class CDPBackend(AbstractBackend):
         Args:
             storage_type: "local" or "session".
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("DOMStorage.enable", {})
+        session = self._require_session()
+        await session.send("DOMStorage.enable", {})
         storage_id = await self._get_storage_id(storage_type)
-        await self._session.send(
+        await session.send(
             "DOMStorage.clearDOMStorageItems", {"storageId": storage_id}
         )
 
@@ -1991,11 +1929,10 @@ class CDPBackend(AbstractBackend):
         Returns:
             Dict mapping keys to values.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("DOMStorage.enable", {})
+        session = self._require_session()
+        await session.send("DOMStorage.enable", {})
         storage_id = await self._get_storage_id(storage_type)
-        result = await self._session.send(
+        result = await session.send(
             "DOMStorage.getDOMStorageItems", {"storageId": storage_id}
         )
         items: dict[str, str] = {}
@@ -2010,9 +1947,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of cache names.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send(
+        session = self._require_session()
+        result = await session.send(
             "CacheStorage.requestCacheNames",
             {"securityOrigin": self._get_origin()},
         )
@@ -2032,9 +1968,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of cache entry dicts (url, status, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send(
+        session = self._require_session()
+        result = await session.send(
             "CacheStorage.requestEntries",
             {"cacheId": f"{self._get_origin()}_{cache_name}", "skipCount": 0, "pageSize": 1000},
         )
@@ -2049,9 +1984,8 @@ class CDPBackend(AbstractBackend):
         Args:
             cache_name: Name of the cache to delete.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "CacheStorage.deleteCache",
             {"cacheId": f"{self._get_origin()}_{cache_name}"},
         )
@@ -2062,9 +1996,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of database info dicts (name, version, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send(
+        session = self._require_session()
+        result = await session.send(
             "IndexedDB.requestDatabaseNames",
             {"securityOrigin": self._get_origin()},
         )
@@ -2086,9 +2019,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             The stored data, or list of all entries if key is empty.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        result = await self._session.send(
+        session = self._require_session()
+        result = await session.send(
             "IndexedDB.requestObjectStoreData",
             {
                 "securityOrigin": self._get_origin(),
@@ -2117,9 +2049,8 @@ class CDPBackend(AbstractBackend):
             database: Database name.
             store: Object store name.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send(
+        session = self._require_session()
+        await session.send(
             "IndexedDB.clearObjectStore",
             {
                 "securityOrigin": self._get_origin(),
@@ -2136,10 +2067,9 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of service worker registration dicts.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("ServiceWorker.enable", {})
-        result = await self._session.send(
+        session = self._require_session()
+        await session.send("ServiceWorker.enable", {})
+        result = await session.send(
             "ServiceWorker.getRegistrations", {}
         )
         registrations: list[dict[str, Any]] = []
@@ -2153,10 +2083,9 @@ class CDPBackend(AbstractBackend):
         Args:
             registration_id: The service worker registration ID.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("ServiceWorker.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("ServiceWorker.enable", {})
+        await session.send(
             "ServiceWorker.unregister", {"registrationId": registration_id}
         )
 
@@ -2166,10 +2095,9 @@ class CDPBackend(AbstractBackend):
         Args:
             registration_id: The service worker registration ID.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("ServiceWorker.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("ServiceWorker.enable", {})
+        await session.send(
             "ServiceWorker.updateRegistration", {"registrationId": registration_id}
         )
 
@@ -2181,10 +2109,9 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of animation dicts (id, name, state, etc.).
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Animation.enable", {})
-        result = await self._session.send("Animation.getCurrentTime", {})
+        session = self._require_session()
+        await session.send("Animation.enable", {})
+        result = await session.send("Animation.getCurrentTime", {})
         animations: list[dict[str, Any]] = []
         for anim in result.get("animations", []):
             animations.append(dict(anim))
@@ -2196,10 +2123,9 @@ class CDPBackend(AbstractBackend):
         Args:
             animation_id: The animation ID to pause.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Animation.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("Animation.enable", {})
+        await session.send(
             "Animation.setPaused", {"animations": [animation_id], "paused": True}
         )
 
@@ -2209,10 +2135,9 @@ class CDPBackend(AbstractBackend):
         Args:
             animation_id: The animation ID to play.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Animation.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("Animation.enable", {})
+        await session.send(
             "Animation.setPaused", {"animations": [animation_id], "paused": False}
         )
 
@@ -2223,10 +2148,9 @@ class CDPBackend(AbstractBackend):
             animation_id: The animation ID to seek.
             time_ms: Target time in milliseconds.
         """
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Animation.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("Animation.enable", {})
+        await session.send(
             "Animation.seekTo",
             {"animations": [animation_id], "currentTime": time_ms},
         )
@@ -2237,10 +2161,9 @@ class CDPBackend(AbstractBackend):
         self, protocol: str, transport: str
     ) -> str:
         """Add a virtual authenticator via CDP WebAuthn domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("WebAuthn.enable", {})
-        result = await self._session.send(
+        session = self._require_session()
+        await session.send("WebAuthn.enable", {})
+        result = await session.send(
             "WebAuthn.addVirtualAuthenticator",
             {"protocol": protocol, "transport": transport},
         )
@@ -2248,10 +2171,9 @@ class CDPBackend(AbstractBackend):
 
     async def webauthn_remove_authenticator(self, authenticator_id: str) -> None:
         """Remove a virtual authenticator via CDP WebAuthn domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("WebAuthn.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("WebAuthn.enable", {})
+        await session.send(
             "WebAuthn.removeVirtualAuthenticator",
             {"authenticatorId": authenticator_id},
         )
@@ -2260,10 +2182,9 @@ class CDPBackend(AbstractBackend):
         self, authenticator_id: str, credential: dict[str, Any]
     ) -> None:
         """Add a credential to a virtual authenticator via CDP WebAuthn domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("WebAuthn.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("WebAuthn.enable", {})
+        await session.send(
             "WebAuthn.addCredential",
             {"authenticatorId": authenticator_id, "credential": credential},
         )
@@ -2272,10 +2193,9 @@ class CDPBackend(AbstractBackend):
         self, authenticator_id: str
     ) -> list[dict[str, Any]]:
         """Get credentials from a virtual authenticator via CDP WebAuthn domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("WebAuthn.enable", {})
-        result = await self._session.send(
+        session = self._require_session()
+        await session.send("WebAuthn.enable", {})
+        result = await session.send(
             "WebAuthn.getCredentials",
             {"authenticatorId": authenticator_id},
         )
@@ -2285,18 +2205,16 @@ class CDPBackend(AbstractBackend):
 
     async def webaudio_get_contexts(self) -> list[dict[str, Any]]:
         """Get all WebAudio contexts via CDP WebAudio domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("WebAudio.enable", {})
-        result = await self._session.send("WebAudio.getRealtimeData", {})
+        session = self._require_session()
+        await session.send("WebAudio.enable", {})
+        result = await session.send("WebAudio.getRealtimeData", {})
         return list(result.get("contexts", []))
 
     async def webaudio_get_context(self, context_id: str) -> dict[str, Any]:
         """Get a specific WebAudio context by ID via CDP WebAudio domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("WebAudio.enable", {})
-        result = await self._session.send("WebAudio.getRealtimeData", {})
+        session = self._require_session()
+        await session.send("WebAudio.enable", {})
+        result = await session.send("WebAudio.getRealtimeData", {})
         for ctx in result.get("contexts", []):
             if ctx.get("contextId") == context_id:
                 return dict(ctx)
@@ -2306,12 +2224,11 @@ class CDPBackend(AbstractBackend):
 
     async def media_get_players(self) -> list[dict[str, Any]]:
         """Get all media players via CDP Media domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Media.enable", {})
+        session = self._require_session()
+        await session.send("Media.enable", {})
         players: list[dict[str, Any]] = []
         try:
-            events = await self._session.collect_events(
+            events = await session.collect_events(
                 "Media.playerCreated", timeout=1000
             )
             for ev in events:
@@ -2322,12 +2239,11 @@ class CDPBackend(AbstractBackend):
 
     async def media_get_messages(self, player_id: str) -> list[dict[str, Any]]:
         """Get messages for a specific media player via CDP Media domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Media.enable", {})
+        session = self._require_session()
+        await session.send("Media.enable", {})
         messages: list[dict[str, Any]] = []
         try:
-            events = await self._session.collect_events(
+            events = await session.collect_events(
                 "Media.playerMessage", timeout=1000
             )
             for ev in events:
@@ -2341,29 +2257,26 @@ class CDPBackend(AbstractBackend):
 
     async def cast_list(self) -> list[dict[str, Any]]:
         """List available cast sinks via CDP Cast domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Cast.enable", {})
-        result = await self._session.send("Cast.getSupportedSinks", {})
+        session = self._require_session()
+        await session.send("Cast.enable", {})
+        result = await session.send("Cast.getSupportedSinks", {})
         sinks = result.get("sinks", [])
         return [dict(s) for s in sinks] if sinks else []
 
     async def cast_start_tab(self, sink_name: str) -> None:
         """Start tab mirroring to a cast sink via CDP Cast domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Cast.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("Cast.enable", {})
+        await session.send(
             "Cast.startTabMirroring",
             {"sinkName": sink_name},
         )
 
     async def cast_stop(self) -> None:
         """Stop active cast mirroring via CDP Cast domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("Cast.enable", {})
-        await self._session.send("Cast.stopCasting", {})
+        session = self._require_session()
+        await session.send("Cast.enable", {})
+        await session.send("Cast.stopCasting", {})
 
     # ── Bluetooth (experimental) ───────────────────────────
 
@@ -2371,19 +2284,17 @@ class CDPBackend(AbstractBackend):
         self, name: str, address: str = "00:00:00:00:00:01"
     ) -> None:
         """Emulate a Bluetooth Low Energy device via CDP BluetoothEmulation domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("BluetoothEmulation.enable", {})
-        await self._session.send(
+        session = self._require_session()
+        await session.send("BluetoothEmulation.enable", {})
+        await session.send(
             "BluetoothEmulation.simulatePreconnected",
             {"name": name, "address": address},
         )
 
     async def bluetooth_stop(self) -> None:
         """Stop Bluetooth emulation via CDP BluetoothEmulation domain."""
-        if self._session is None:
-            raise NavigationError("", "Session not initialized.")
-        await self._session.send("BluetoothEmulation.disable", {})
+        session = self._require_session()
+        await session.send("BluetoothEmulation.disable", {})
 
     async def __aenter__(self) -> CDPBackend:
         """Enter async context manager, returning self.

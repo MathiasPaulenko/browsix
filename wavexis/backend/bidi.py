@@ -26,6 +26,7 @@ from wavexis.config import (
     ThrottleParams,
     WaitStrategy,
 )
+from wavexis.exceptions import SessionNotInitializedError
 
 try:
     from bidiwave import BiDiClient
@@ -80,6 +81,21 @@ class BiDiBackend(AbstractBackend):
             )
         self._client: BiDiClient | None = None
         self._context: Any = None
+
+    def _require_client(self) -> BiDiClient:
+        """Return the current client or raise if not initialized.
+
+        Returns:
+            The active BiDiClient instance.
+
+        Raises:
+            SessionNotInitializedError: If launch() has not been called.
+        """
+        if self._client is None:
+            raise SessionNotInitializedError(
+                "Session not initialized. Call launch() first."
+            )
+        return self._client
 
     async def launch(self, options: BrowserOptions) -> None:
         """Launch a browser via ChromeDriver WebSocket BiDi endpoint.
@@ -1612,16 +1628,15 @@ class BiDiBackend(AbstractBackend):
             The stored value as a string, or empty string if not found.
 
         Raises:
-            RuntimeError: If the session is not initialized.
+            SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
         """
-        if self._client is None:
-            raise RuntimeError("Session not initialized.")
+        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(
                 f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'."
             )
-        result = await self._client.send(
+        result = await client.send(
             "storage.getDOMStorageItems",
             {"storageType": storage_type, "key": key},
         )
@@ -1638,16 +1653,15 @@ class BiDiBackend(AbstractBackend):
             storage_type: Storage type ("local" or "session").
 
         Raises:
-            RuntimeError: If the session is not initialized.
+            SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
         """
-        if self._client is None:
-            raise RuntimeError("Session not initialized.")
+        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(
                 f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'."
             )
-        await self._client.send(
+        await client.send(
             "storage.setDOMStorageItem",
             {"storageType": storage_type, "key": key, "value": value},
         )
@@ -1659,16 +1673,15 @@ class BiDiBackend(AbstractBackend):
             storage_type: Storage type ("local" or "session").
 
         Raises:
-            RuntimeError: If the session is not initialized.
+            SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
         """
-        if self._client is None:
-            raise RuntimeError("Session not initialized.")
+        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(
                 f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'."
             )
-        await self._client.send(
+        await client.send(
             "storage.clearDOMStorageItems",
             {"storageType": storage_type},
         )
@@ -1683,16 +1696,15 @@ class BiDiBackend(AbstractBackend):
             Dict mapping storage keys to their string values.
 
         Raises:
-            RuntimeError: If the session is not initialized.
+            SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
         """
-        if self._client is None:
-            raise RuntimeError("Session not initialized.")
+        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(
                 f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'."
             )
-        result = await self._client.send(
+        result = await client.send(
             "storage.getDOMStorageItems",
             {"storageType": storage_type},
         )
