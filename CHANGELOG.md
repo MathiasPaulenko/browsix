@@ -2,6 +2,15 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.1.3 — 2026-07-07
+
+### Improved
+
+- Fixed `_multi_watch()` bypassing `_run_async()` error handling — now uses `_run_async()` for proper `WavexisError` propagation
+- Narrowed 3 `except Exception` handlers in `serve.py` WebSocket streams to `WavexisError` and `(ConnectionError, OSError)`
+- Narrowed `except Exception` in `plugins.py` to `(ImportError, AttributeError, ValueError, TypeError)` for plugin loading isolation
+- Verified `.gitignore` excludes `screenshot.png`
+
 ## v2.1.2 — 2026-07-07
 
 ### Refactored

@@ -198,7 +198,7 @@ def _discover_entry_points() -> PluginRegistry:
     for ep in eps:
         try:
             obj = ep.load()
-        except Exception as exc:
+        except (ImportError, AttributeError, ValueError, TypeError) as exc:
             logger.warning("Failed to load plugin %s: %s", ep.name, exc)
             continue
 

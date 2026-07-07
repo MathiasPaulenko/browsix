@@ -389,7 +389,13 @@ async def _stream_screenshots(
                 "data": b64,
                 "timestamp": time.time(),
             })
-        except Exception as exc:
+        except WavexisError as exc:
+            await ws.send_json({
+                "type": "error",
+                "source": "screenshot",
+                "message": str(exc),
+            })
+        except (ConnectionError, OSError) as exc:
             await ws.send_json({
                 "type": "error",
                 "source": "screenshot",
@@ -415,7 +421,13 @@ async def _stream_console(
                         "data": msg,
                         "timestamp": time.time(),
                     })
-        except Exception as exc:
+        except WavexisError as exc:
+            await ws.send_json({
+                "type": "error",
+                "source": "console",
+                "message": str(exc),
+            })
+        except (ConnectionError, OSError) as exc:
             await ws.send_json({
                 "type": "error",
                 "source": "console",
@@ -440,7 +452,13 @@ async def _stream_navigation(
                     "url": current_url,
                     "timestamp": time.time(),
                 })
-        except Exception as exc:
+        except WavexisError as exc:
+            await ws.send_json({
+                "type": "error",
+                "source": "navigation",
+                "message": str(exc),
+            })
+        except (ConnectionError, OSError) as exc:
             await ws.send_json({
                 "type": "error",
                 "source": "navigation",

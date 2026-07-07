@@ -97,8 +97,9 @@ def _multi_watch(config_path: Any, parallel: bool = False) -> None:
             if mtime != last_mtime:
                 last_mtime = mtime
                 typer.echo(f"\n[{time.strftime('%H:%M:%S')}] Re-running actions…")
-                results = asyncio.run(_multi(config_path, parallel=parallel))
-                typer.echo(f"Completed {len(results)} actions")
+                results = _run_async(_multi(config_path, parallel=parallel))
+                if results is not None:
+                    typer.echo(f"Completed {len(results)} actions")
             time.sleep(1)
     except KeyboardInterrupt:
         typer.echo("\nStopped.")
