@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import dataclasses
+import hmac
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,8 @@ from wavexis.config import (
     WaitStrategy,
 )
 from wavexis.exceptions import WavexisError
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "BackendPool",
@@ -102,6 +106,31 @@ class TokenBucket:
             if self._refill_rate <= 0:
                 return 1.0
             return (1 - self._tokens) / self._refill_rate
+
+
+def _json_error_middleware(request: Any, handler: Any) -> Any:
+    """Middleware that catches JSON decode errors and returns 400.
+
+    Catches json.JSONDecodeError and aiohttp.ContentTypeError raised when
+    request.json() fails, returning a consistent 400 response.
+    """
+    web = _import_aiohttp()
+    try:
+        return await handler(request)
+    except (json.JSONDecodeError, ValueError):
+        return web.Response(
+            status=400,
+            text='{"error": "invalid JSON body"}',
+            content_type="application/json",
+        )
+    except Exception as exc:
+        if "ContentTypeError" in type(exc).__name__ or "400" in str(exc):
+            return web.Response(
+                status=400,
+                text='{"error": "invalid or missing JSON content-type"}',
+                content_type="application/json",
+            )
+        raise
 
 
 def _rate_limit_middleware(bucket: TokenBucket) -> Any:
@@ -194,7 +223,7 @@ def _auth_middleware(api_key: str) -> Any:
             request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
             or request.query.get("api_key", "")
         )
-        if token != api_key:
+        if not hmac.compare_digest(token.encode(), api_key.encode()):
             return web.Response(
                 status=401,
                 text='{"error": "unauthorized"}',
@@ -255,13 +284,18 @@ def _import_aiohttp() -> Any:
 
 
 class BackendPool:
-    """Concurrency limiter for browser backends in serve mode.
+    """Concurrency limiter and connection pool for browser backends.
 
     Uses a semaphore to cap the number of simultaneous browser instances.
+    Maintains a pool of reusable backend instances to avoid launching a
+    new browser per request.
     """
 
     def __init__(self, max_concurrent: int = 5) -> None:
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._pool: asyncio.Queue[AbstractBackend] = asyncio.Queue()
+        self._created: int = 0
+        self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
         """Acquire a slot, blocking if the pool is full."""
@@ -270,6 +304,45 @@ class BackendPool:
     def release(self) -> None:
         """Release a slot back to the pool."""
         self._semaphore.release()
+
+    async def get_backend(
+        self,
+        preferred: str | None = None,
+    ) -> AbstractBackend:
+        """Get a backend from the pool or create a new one.
+
+        Reuses an idle backend if available, otherwise creates a new one.
+
+        Args:
+            preferred: Preferred backend name for new instances.
+
+        Returns:
+            A backend instance (may or may not be launched yet).
+        """
+        if not self._pool.empty():
+            return self._pool.get_nowait()
+        async with self._lock:
+            self._created += 1
+        return await get_manager().select_with_fallback(preferred)
+
+    async def return_backend(self, backend: AbstractBackend) -> None:
+        """Return a backend to the pool for reuse.
+
+        Args:
+            backend: The backend instance to return.
+        """
+        await self._pool.put(backend)
+
+    async def close_all(self) -> None:
+        """Close all pooled backends and clear the pool."""
+        while not self._pool.empty():
+            backend = self._pool.get_nowait()
+            try:
+                await backend.close()
+            except Exception:
+                pass
+        async with self._lock:
+            self._created = 0
 
 
 _backend_pool: BackendPool | None = None
@@ -287,19 +360,19 @@ def _get_pool(request: Any) -> BackendPool:
 
 
 async def _get_backend(request: Any) -> AbstractBackend:
-    """Create a fresh backend instance for this request.
+    """Acquire a backend from the pool for this request.
 
-    Acquires a slot from the backend pool before creating the backend.
-    The caller is responsible for calling ``release`` after ``close``.
+    Reuses an idle backend if available, otherwise creates a new one.
+    The caller is responsible for calling ``_release_backend`` after use.
     """
     pool = _get_pool(request)
     await pool.acquire()
     preferred = request.app.get("backend_name")
-    return await get_manager().select_with_fallback(preferred, BrowserOptions())
+    return await pool.get_backend(preferred)
 
 
 async def _run_action(request: Any, action: Any) -> Any:
-    """Launch backend, execute action, and close backend.
+    """Launch backend, execute action, and return backend to pool.
 
     Args:
         request: The aiohttp request.
@@ -314,19 +387,58 @@ async def _run_action(request: Any, action: Any) -> Any:
         await backend.launch(BrowserOptions())
         return await action.execute(backend)
     finally:
-        await backend.close()
+        await pool.return_backend(backend)
         pool.release()
 
 
 async def _release_backend(request: Any, backend: AbstractBackend) -> None:
-    """Close a backend and release its pool slot.
+    """Return a backend to the pool and release its slot.
 
     Args:
         request: The aiohttp request.
-        backend: The backend instance to close.
+        backend: The backend instance to return.
     """
-    await backend.close()
-    _get_pool(request).release()
+    pool = _get_pool(request)
+    await pool.return_backend(backend)
+    pool.release()
+
+
+def with_backend(
+    launch_options: BrowserOptions | None = None,
+) -> Any:
+    """Decorator that manages backend lifecycle for serve handlers.
+
+    Acquires a backend from the pool, launches it, calls the handler
+    with the backend, and ensures cleanup in a finally block.
+
+    Args:
+        launch_options: BrowserOptions to pass to launch(). Defaults to
+            a plain BrowserOptions().
+
+    Returns:
+        A decorator function.
+    """
+    def decorator(handler: Any) -> Any:
+        async def wrapper(request: Any) -> Any:
+            web = _import_aiohttp()
+            opts = launch_options or BrowserOptions()
+            backend = await _get_backend(request)
+            await backend.launch(opts)
+            try:
+                return await handler(request, backend)
+            except WavexisError as exc:
+                return web.json_response(
+                    {"error": str(exc)}, status=500,
+                )
+            except Exception as exc:
+                logger.exception("Unhandled error in %s: %s", handler.__name__, exc)
+                return web.json_response(
+                    {"error": "internal server error"}, status=500,
+                )
+            finally:
+                await _release_backend(request, backend)
+        return wrapper
+    return decorator
 
 
 async def handle_screenshot(request: Any) -> Any:
@@ -403,7 +515,8 @@ async def handle_dom_query(request: Any) -> Any:
     return web.json_response({"result": result})
 
 
-async def handle_navigate(request: Any) -> Any:
+@with_backend()
+async def handle_navigate(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /navigate — navigate and return status."""
     web = _import_aiohttp()
     data = await request.json()
@@ -412,12 +525,7 @@ async def handle_navigate(request: Any) -> Any:
     strategy = WaitStrategy(
         strategy="selector", selector=wait_for
     ) if wait_for else WaitStrategy(strategy="load")
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.navigate(url, strategy)
-    finally:
-        await _release_backend(request, backend)
+    await backend.navigate(url, strategy)
     return web.json_response({"status": "ok", "url": url})
 
 
@@ -433,33 +541,25 @@ async def handle_har(request: Any) -> Any:
     return web.json_response(result)
 
 
-async def handle_cookies_get(request: Any) -> Any:
+@with_backend()
+async def handle_cookies_get(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /cookies/get — return cookies as JSON."""
     web = _import_aiohttp()
     data = await request.json()
     url = data.get("url", "")
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.navigate(url, WaitStrategy(strategy="load"))
-        cookies = await backend.get_cookies()
-    finally:
-        await _release_backend(request, backend)
+    await backend.navigate(url, WaitStrategy(strategy="load"))
+    cookies = await backend.get_cookies()
     return web.json_response({"cookies": cookies})
 
 
-async def handle_cookies_set(request: Any) -> Any:
+@with_backend()
+async def handle_cookies_set(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /cookies/set — set a cookie and return status."""
     web = _import_aiohttp()
     data = await request.json()
     cookie_data = data.get("cookie", data)
     params = _safe_params(CookieParams, cookie_data)
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.set_cookie(params)
-    finally:
-        await _release_backend(request, backend)
+    await backend.set_cookie(params)
     return web.json_response({"status": "ok"})
 
 
@@ -565,7 +665,8 @@ async def handle_cwv(request: Any) -> Any:
     return web.json_response(result)
 
 
-async def handle_auth(request: Any) -> Any:
+@with_backend()
+async def handle_auth(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /auth — apply auth context and navigate."""
     web = _import_aiohttp()
     from wavexis.auth import apply_auth_context, load_auth_context
@@ -574,64 +675,48 @@ async def handle_auth(request: Any) -> Any:
     context_path = _validate_path(data.get("context", ""))
     url = data.get("url", "")
     ctx = load_auth_context(str(context_path))
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await apply_auth_context(backend, ctx, url)
-    finally:
-        await _release_backend(request, backend)
+    await apply_auth_context(backend, ctx, url)
     return web.json_response({"status": "ok", "url": url})
 
 
-async def handle_user_agent(request: Any) -> Any:
+@with_backend()
+async def handle_user_agent(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /user-agent — set custom user agent."""
     web = _import_aiohttp()
     data = await request.json()
     ua = data.get("user_agent", "")
     url = data.get("url", "")
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.set_user_agent(ua)
-        await backend.navigate(url, WaitStrategy(strategy="load"))
-    finally:
-        await _release_backend(request, backend)
+    await backend.set_user_agent(ua)
+    await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "user_agent": ua})
 
 
-async def handle_headers(request: Any) -> Any:
+@with_backend()
+async def handle_headers(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /headers — set custom HTTP headers."""
     web = _import_aiohttp()
     data = await request.json()
     headers = data.get("headers", {})
     url = data.get("url", "")
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.set_headers(headers)
-        await backend.navigate(url, WaitStrategy(strategy="load"))
-    finally:
-        await _release_backend(request, backend)
+    await backend.set_headers(headers)
+    await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "headers": headers})
 
 
-async def handle_device(request: Any) -> Any:
+@with_backend()
+async def handle_device(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /device — emulate a device preset."""
     web = _import_aiohttp()
     data = await request.json()
     device = data.get("device", "")
     url = data.get("url", "")
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.emulate_device(device)
-        await backend.navigate(url, WaitStrategy(strategy="load"))
-    finally:
-        await _release_backend(request, backend)
+    await backend.emulate_device(device)
+    await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "device": device})
 
 
-async def handle_modify_request(request: Any) -> Any:
+@with_backend()
+async def handle_modify_request(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /modify-request — intercept and modify requests in-flight.
 
     Body: {"url": "...", "pattern": "*/api/*",
@@ -642,18 +727,14 @@ async def handle_modify_request(request: Any) -> Any:
     url = data.get("url", "")
     pattern = data.get("pattern", "*")
     modifications = data.get("modifications", {})
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.modify_request({"urlPattern": pattern}, modifications)
-        if url:
-            await backend.navigate(url, WaitStrategy(strategy="load"))
-    finally:
-        await _release_backend(request, backend)
+    await backend.modify_request({"urlPattern": pattern}, modifications)
+    if url:
+        await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "pattern": pattern})
 
 
-async def handle_modify_response(request: Any) -> Any:
+@with_backend()
+async def handle_modify_response(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /modify-response — intercept and modify responses in-flight.
 
     Body: {"url": "...", "pattern": "*/api/*",
@@ -664,30 +745,21 @@ async def handle_modify_response(request: Any) -> Any:
     url = data.get("url", "")
     pattern = data.get("pattern", "*")
     modifications = data.get("modifications", {})
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions())
-    try:
-        await backend.modify_response({"urlPattern": pattern}, modifications)
-        if url:
-            await backend.navigate(url, WaitStrategy(strategy="load"))
-    finally:
-        await _release_backend(request, backend)
+    await backend.modify_response({"urlPattern": pattern}, modifications)
+    if url:
+        await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "pattern": pattern})
 
 
-async def handle_multi(request: Any) -> Any:
+@with_backend(launch_options=BrowserOptions(headless=True))
+async def handle_multi(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /multi — execute multiple actions from YAML."""
     web = _import_aiohttp()
     from wavexis.record import replay_from_yaml
 
     data = await request.json()
     yaml_path = _validate_path(data.get("config", ""))
-    backend = await _get_backend(request)
-    await backend.launch(BrowserOptions(headless=True))
-    try:
-        results = await replay_from_yaml(yaml_path, backend)
-    finally:
-        await _release_backend(request, backend)
+    results = await replay_from_yaml(yaml_path, backend)
     return web.json_response({
         "status": "ok",
         "actions": len(results),
@@ -886,6 +958,8 @@ async def _stream_perf_metrics(
 
 _ws_connections: int = 0
 _ws_max_connections: int = 20
+_ws_lock: asyncio.Lock = asyncio.Lock()
+_ws_max_messages_per_minute: int = 120
 
 
 def set_ws_max_connections(max_conn: int) -> None:
@@ -915,13 +989,14 @@ async def handle_websocket(request: Any) -> Any:
     web = _import_aiohttp()
 
     global _ws_connections
-    if _ws_connections >= _ws_max_connections:
-        return web.Response(
-            status=503,
-            text='{"error": "too many websocket connections"}',
-            content_type="application/json",
-        )
-    _ws_connections += 1
+    async with _ws_lock:
+        if _ws_connections >= _ws_max_connections:
+            return web.Response(
+                status=503,
+                text='{"error": "too many websocket connections"}',
+                content_type="application/json",
+            )
+        _ws_connections += 1
 
     ws = web.WebSocketResponse()
     await ws.prepare(request)
@@ -990,9 +1065,21 @@ async def handle_websocket(request: Any) -> Any:
 
             await backend.subscribe_events(subscribe_types, _on_event)
 
+        ws_bucket = TokenBucket(
+            capacity=_ws_max_messages_per_minute, refill_period=60.0
+        )
+
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
+                    allowed = await ws_bucket.acquire()
+                    if not allowed:
+                        await ws.send_json({
+                            "type": "error",
+                            "message": "rate limited: too many messages",
+                            "timestamp": time.time(),
+                        })
+                        continue
                     try:
                         cmd = json.loads(msg.data)
                     except json.JSONDecodeError:
@@ -1035,7 +1122,8 @@ async def handle_websocket(request: Any) -> Any:
             await _release_backend(request, backend)
             await ws.close()
     finally:
-        _ws_connections -= 1
+        async with _ws_lock:
+            _ws_connections -= 1
 
     return ws
 
@@ -1091,8 +1179,16 @@ def create_app(
 
     registry = get_registry()
     middlewares: list[Any] = [m.factory(web) for m in registry.middleware]
+    middlewares.append(_json_error_middleware)
 
     if cors_origins:
+        if "*" in cors_origins and api_key:
+            logger.warning(
+                "CORS is configured to allow all origins ('*') while API key "
+                "authentication is enabled. This allows any website to make "
+                "authenticated requests. Consider restricting --cors-origins "
+                "to specific domains."
+            )
         middlewares.append(_cors_middleware(cors_origins))
 
     if api_key:

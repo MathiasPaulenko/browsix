@@ -2,6 +2,27 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.11.3 — 2026-07-08
+
+### Security
+
+- **JSON parse error handling** — New `_json_error_middleware` catches `json.JSONDecodeError` and returns 400 instead of unhandled 500 on invalid JSON bodies.
+- **API key timing attack** — `serve.py` now uses `hmac.compare_digest()` instead of `!=` for API key comparison, preventing timing side-channel attacks.
+- **CORS `*` warning** — `create_app()` now emits a warning when `--cors-origins *` is combined with `--api-key`, alerting about the security risk.
+- **WebSocket rate limiting** — Each WebSocket connection now has a per-connection `TokenBucket` (120 msgs/min). Messages exceeding the limit receive an error response.
+- **`_ws_connections` race condition** — WebSocket connection counter now protected by `asyncio.Lock`, preventing concurrent connections from exceeding the limit.
+
+### Refactored
+
+- **`@with_backend` decorator** — New decorator centralizes backend lifecycle (acquire → launch → handler → release) with consistent error handling. 10 handlers refactored to eliminate ~100 lines of boilerplate.
+- **`handle_navigate` error handling** — Now uses `@with_backend()` which catches exceptions and returns JSON 500 instead of raw traceback.
+- **`BackendPool` connection reuse** — Pool now maintains a queue of idle backends. `_run_action` and `_release_backend` return backends to the pool instead of closing them, enabling browser reuse across requests.
+
+### Fixed
+
+- **`select_with_fallback` misleading async** — Removed unused `options` parameter from async wrapper to clarify it delegates to sync.
+- **`BackendNotAvailableError` message corruption** — `select_with_fallback_sync` now raises `WavexisError` instead of `BackendNotAvailableError` when all backends fail, avoiding confusing `Backend 'All backends failed...' is not installed` messages.
+
 ## v2.11.2 — 2026-07-08
 
 ### Fixed

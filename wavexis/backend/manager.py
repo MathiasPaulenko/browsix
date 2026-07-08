@@ -6,7 +6,11 @@ import logging
 
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions
-from wavexis.exceptions import BackendNotAvailableError, BackendNotSupportedError
+from wavexis.exceptions import (
+    BackendNotAvailableError,
+    BackendNotSupportedError,
+    WavexisError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +122,7 @@ class BackendManager:
         Raises:
             BackendNotAvailableError: If no backend can be created.
         """
-        return self.select_with_fallback_sync(preferred, options)
+        return self.select_with_fallback_sync(preferred)
 
     def select_with_fallback_sync(
         self,
@@ -157,7 +161,7 @@ class BackendManager:
                 logger.warning("Backend '%s' could not be created: %s", name, exc)
                 continue
 
-        raise BackendNotAvailableError(
+        raise WavexisError(
             f"All backends failed to initialize. Last error: {last_error}"
         )
 
