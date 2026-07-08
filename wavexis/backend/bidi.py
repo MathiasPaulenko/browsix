@@ -110,6 +110,18 @@ class BiDiBackend(AbstractBackend):
             )
         return self._client
 
+    def _require_launched(self) -> None:
+        """Raise if the backend has not been launched with a browsing context.
+
+        Raises:
+            SessionNotInitializedError: If launch() has not been called
+                or the browsing context was not created.
+        """
+        if self._client is None or self._context is None:
+            raise SessionNotInitializedError(
+                "BiDiBackend not launched. Call launch() first."
+            )
+
     async def launch(self, options: BrowserOptions) -> None:
         """Launch a browser via ChromeDriver WebSocket BiDi endpoint.
 
@@ -184,10 +196,7 @@ class BiDiBackend(AbstractBackend):
             url: The URL to navigate to.
             wait: Wait strategy (ignored — BiDi navigate has its own wait param).
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.browsing.navigate(self._context, url, wait="complete")
 
     async def screenshot(self, params: ScreenshotParams) -> bytes:
@@ -199,10 +208,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             PNG or JPEG image bytes.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.browsing.navigate(
             self._context, params.url, wait="complete"
         )
@@ -228,10 +234,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Image bytes of the element screenshot.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         js = (
             f"var el=document.querySelector('{escaped}');"
@@ -347,10 +350,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             The evaluated result value.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.script.evaluate(
             self._context, expression, await_promise=await_promise
         )
@@ -370,18 +370,12 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Response dict from the BiDi command.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         return dict(await self._client._connection.send_command(method, params or {}))
 
     async def go_back(self) -> None:
         """Navigate back via browsingContext.traverse."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.traverse",
             {"context": self._context, "direction": "back"},
@@ -389,10 +383,7 @@ class BiDiBackend(AbstractBackend):
 
     async def go_forward(self) -> None:
         """Navigate forward via browsingContext.traverse."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.traverse",
             {"context": self._context, "direction": "forward"},
@@ -400,10 +391,7 @@ class BiDiBackend(AbstractBackend):
 
     async def reload(self, ignore_cache: bool = False) -> None:
         """Reload the current page via browsingContext.reload."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.reload",
             {"context": self._context, "ignoreCache": ignore_cache},
@@ -411,10 +399,7 @@ class BiDiBackend(AbstractBackend):
 
     async def stop_loading(self) -> None:
         """Stop loading via browsingContext.cancelNavigation."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.cancelNavigation",
             {"context": self._context},
@@ -422,10 +407,7 @@ class BiDiBackend(AbstractBackend):
 
     async def wait_for(self, strategy: WaitStrategy) -> None:
         """Wait for a condition via polling script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         import asyncio as _asyncio
         import time as _time
         deadline = _time.monotonic() + strategy.timeout / 1000
@@ -454,10 +436,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             PDF bytes.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.browsing.navigate(
             self._context, params.url, wait="complete"
         )
@@ -494,10 +473,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of image bytes (one per frame).
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.browsing.navigate(
             self._context, params.url, wait="complete",
         )
@@ -519,10 +495,7 @@ class BiDiBackend(AbstractBackend):
 
     async def list_tabs(self) -> list[dict[str, Any]]:
         """List browsing contexts (tabs) via browsingContext.getTree."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client._connection.send_command(
             "browsingContext.getTree", {}
         )
@@ -530,10 +503,7 @@ class BiDiBackend(AbstractBackend):
 
     async def new_tab(self, url: str = "about:blank") -> str:
         """Create a new browsing context (tab) via browsingContext.create."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client._connection.send_command(
             "browsingContext.create",
             {"type": "tab", "url": url},
@@ -542,10 +512,7 @@ class BiDiBackend(AbstractBackend):
 
     async def close_tab(self, tab_id: str) -> None:
         """Close a browsing context via browsingContext.close."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.close",
             {"context": tab_id},
@@ -557,10 +524,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             tab_id: The browsing context ID to activate.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.browsing.activate(tab_id)
 
     async def capture_console(self, level: str = "all") -> list[dict[str, Any]]:
@@ -575,10 +539,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of console entry dicts with type, level, text, timestamp.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         import asyncio as _asyncio
         entries: list[dict[str, Any]] = []
         level_order = {"all": 0, "debug": 0, "info": 1, "warning": 2, "error": 3}
@@ -615,10 +576,7 @@ class BiDiBackend(AbstractBackend):
 
     async def dom_get(self, selector: str, outer: bool = True) -> str:
         """Get outerHTML of an element via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         prop = "outerHTML" if outer else "innerHTML"
         js = f"document.querySelector('{escaped}').{prop}"
@@ -629,10 +587,7 @@ class BiDiBackend(AbstractBackend):
         self, selector: str, all: bool = False
     ) -> list[dict[str, Any]] | dict[str, Any]:
         """Query elements via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         if all:
             js = (
@@ -650,10 +605,7 @@ class BiDiBackend(AbstractBackend):
 
     async def dom_set_attr(self, selector: str, name: str, value: str) -> None:
         """Set an attribute on an element via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         escaped_name = name.replace("'", "\\'")
         escaped_val = value.replace("\\", "\\\\").replace("'", "\\'")
@@ -665,10 +617,7 @@ class BiDiBackend(AbstractBackend):
 
     async def dom_get_attr(self, selector: str, name: str) -> str:
         """Get an attribute from an element via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         escaped_name = name.replace("'", "\\'")
         js = (
@@ -680,10 +629,7 @@ class BiDiBackend(AbstractBackend):
 
     async def dom_remove_attr(self, selector: str, name: str) -> None:
         """Remove an attribute from an element via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         escaped_name = name.replace("'", "\\'")
         js = (
@@ -694,20 +640,14 @@ class BiDiBackend(AbstractBackend):
 
     async def dom_remove(self, selector: str) -> None:
         """Remove an element via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         js = f"document.querySelector('{escaped}')?.remove()"
         await self._client.script.evaluate(self._context, js)
 
     async def dom_focus(self, selector: str) -> None:
         """Focus an element via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         js = f"document.querySelector('{escaped}')?.focus()"
         await self._client.script.evaluate(self._context, js)
@@ -716,10 +656,7 @@ class BiDiBackend(AbstractBackend):
         self, selector: str | None = None, x: int = 0, y: int = 0
     ) -> None:
         """Scroll to a position or element via script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         if selector:
             escaped = selector.replace("'", "\\'")
             js = f"document.querySelector('{escaped}')?.scrollIntoView()"
@@ -904,10 +841,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with HAR log entries.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Network.enable", {})
         await self._client.browsing.navigate(
             self._context, params.url, wait="complete",
@@ -940,10 +874,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of cookie dicts with name, value, domain, path, etc.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         cookies = await self._client.storage.get_cookies(self._context)
         return [
             c.model_dump() if hasattr(c, "model_dump") else dict(c)
@@ -956,10 +887,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             params: Cookie parameters (name, value, domain, path, etc.).
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         from bidiwave import Cookie as BiDiCookie
         cookie = BiDiCookie(
             name=params.name,
@@ -979,18 +907,12 @@ class BiDiBackend(AbstractBackend):
             name: Cookie name to delete.
             domain: Cookie domain (ignored by BiDi — uses context).
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.storage.delete_cookie(self._context, name)
 
     async def clear_cookies(self) -> None:
         """Clear all cookies for the current browsing context."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.storage.delete_cookies(self._context)
 
     async def set_headers(self, headers: dict[str, str]) -> None:
@@ -1001,10 +923,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             headers: Dict of header name to value.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         header_list = [{"name": k, "value": v} for k, v in headers.items()]
         await self._client.cdp.send_command(
             "Network.setExtraRequestHeaders", {"headers": header_list}
@@ -1016,20 +935,14 @@ class BiDiBackend(AbstractBackend):
         Args:
             user_agent: The User-Agent string to set.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.emulation.set_user_agent(
             user_agent, contexts=[self._context] if self._context else None
         )
 
     async def new_context(self) -> str:
         """Create a new browsing context via browsingContext.create."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client._connection.send_command(
             "browsingContext.create",
             {"type": "window"},
@@ -1038,10 +951,7 @@ class BiDiBackend(AbstractBackend):
 
     async def list_contexts(self) -> list[dict[str, Any]]:
         """List browsing contexts via browsingContext.getTree."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client._connection.send_command(
             "browsingContext.getTree", {}
         )
@@ -1049,10 +959,7 @@ class BiDiBackend(AbstractBackend):
 
     async def close_context(self, context_id: str) -> None:
         """Close a browsing context via browsingContext.close."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.close",
             {"context": context_id},
@@ -1060,10 +967,7 @@ class BiDiBackend(AbstractBackend):
 
     async def get_window_bounds(self) -> dict[str, Any]:
         """Get window bounds via browsingContext.getTree."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client._connection.send_command(
             "browsingContext.getTree",
             {"root": self._context},
@@ -1077,10 +981,7 @@ class BiDiBackend(AbstractBackend):
         self, width: int, height: int, x: int = 0, y: int = 0
     ) -> None:
         """Set window bounds via browsingContext.setViewport."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.setViewport",
             {
@@ -1095,10 +996,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Browser version string (e.g. 'Chrome/120.0.6099.109').
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command("Browser.getVersion", {})
         return str(result.get("product", "unknown"))
 
@@ -1111,10 +1009,7 @@ class BiDiBackend(AbstractBackend):
         Raises:
             ValueError: If the device name is not in DEVICE_PRESETS.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         preset = DEVICE_PRESETS.get(device)
         if preset is None:
             raise ValueError(f"Unknown device preset: {device}")
@@ -1142,10 +1037,7 @@ class BiDiBackend(AbstractBackend):
             height: Viewport height in pixels.
             device_scale_factor: Device pixel ratio.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.browsing.set_viewport(
             self._context,
             viewport={"width": width, "height": height},
@@ -1162,10 +1054,7 @@ class BiDiBackend(AbstractBackend):
             longitude: Longitude in degrees.
             accuracy: Position accuracy in meters.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.emulation.set_geolocation(
             coordinates={"latitude": latitude, "longitude": longitude, "accuracy": accuracy},
             contexts=[self._context] if self._context else None,
@@ -1177,10 +1066,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             timezone: IANA timezone ID (e.g. 'America/New_York').
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.emulation.set_timezone(
             timezone, contexts=[self._context] if self._context else None
         )
@@ -1191,10 +1077,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             enabled: True to enable dark mode, False to disable.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         feature = 'dark' if enabled else 'light'
         await self._client.cdp.send_command(
             'Emulation.setEmulatedMedia',
@@ -1279,10 +1162,7 @@ class BiDiBackend(AbstractBackend):
         """Type text into an element via BiDi."""
         import asyncio as _asyncio
 
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         await self._client.script.evaluate(
             self._context, f"document.querySelector('{escaped}').focus()"
@@ -1318,10 +1198,7 @@ class BiDiBackend(AbstractBackend):
 
     async def select_option(self, selector: str, value: str) -> None:
         """Select an option in a <select> element by value via BiDi."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         escaped_val = value.replace("\\", "\\\\").replace("'", "\\'")
         js = f"document.querySelector('{escaped}').value = '{escaped_val}'"
@@ -1348,10 +1225,7 @@ class BiDiBackend(AbstractBackend):
 
     async def key_press(self, key: str) -> None:
         """Press a keyboard key via BiDi script.evaluate."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped_key = key.replace("\\", "\\\\").replace("'", "\\'")
         js = (
             f"document.dispatchEvent(new KeyboardEvent('keydown',{{key:'{escaped_key}'}}));"
@@ -1361,10 +1235,7 @@ class BiDiBackend(AbstractBackend):
 
     async def drag(self, source: str, target: str) -> None:
         """Drag from source to target via BiDi script.evaluate (simulated)."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped_src = source.replace("'", "\\'")
         escaped_tgt = target.replace("'", "\\'")
         js = (
@@ -1387,10 +1258,7 @@ class BiDiBackend(AbstractBackend):
             selector: CSS selector for the <input type="file"> element.
             files: List of absolute file paths to upload.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         files_json = json.dumps(files)
         js = (
@@ -1661,10 +1529,7 @@ class BiDiBackend(AbstractBackend):
 
     async def block_requests(self, patterns: list[str]) -> None:
         """Block requests matching URL patterns (partial BiDi support)."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         for pattern in patterns:
             await self._client._connection.send_command(
                 "network.setBlockedURLs", {"urls": [pattern]}
@@ -1676,10 +1541,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             params: Throttle parameters (offline, latency, download/upload throughput).
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.emulation.set_network_conditions(
             offline=params.offline,
             download_throughput=params.download_bps,
@@ -1694,20 +1556,14 @@ class BiDiBackend(AbstractBackend):
         Args:
             disabled: True to disable cache, False to enable.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             'Network.setCacheDisabled', {'cacheDisabled': disabled},
         )
 
     async def intercept_requests(self, pattern: dict[str, Any]) -> None:
         """Intercept requests matching a pattern (partial BiDi support)."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "network.addIntercept", {"patterns": [pattern]}
         )
@@ -1719,10 +1575,7 @@ class BiDiBackend(AbstractBackend):
             url: URL pattern to match.
             response: Response dict with status, headers, body.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         status = response.get('status', 200)
         headers = [
             {'name': k, 'value': v} for k, v in response.get('headers', {}).items()
@@ -2175,10 +2028,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with AX tree nodes.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "Accessibility.getFullAXTree", {},
         )
@@ -2193,10 +2043,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with AX node data.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "Accessibility.getPartialAXTree",
             {"nodeId": node_id},
@@ -2212,10 +2059,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of ancestor AX node dicts.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "Accessibility.getPartialAXTree",
             {"nodeId": node_id, "fetchRelatives": True},
@@ -2238,10 +2082,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Empty bytes placeholder.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Page.setDownloadBehavior",
             {"behavior": "allow", "downloadPath": "/tmp/wavexis-downloads"},
@@ -2252,10 +2093,7 @@ class BiDiBackend(AbstractBackend):
 
     async def dialog_accept(self, prompt_text: str | None = None) -> None:
         """Accept a JavaScript dialog via BiDi."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.handleUserPrompt",
             {"accept": True, "userText": prompt_text or ""},
@@ -2263,10 +2101,7 @@ class BiDiBackend(AbstractBackend):
 
     async def dialog_dismiss(self) -> None:
         """Dismiss a JavaScript dialog via BiDi."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browsingContext.handleUserPrompt",
             {"accept": False},
@@ -2276,10 +2111,7 @@ class BiDiBackend(AbstractBackend):
 
     async def grant_permission(self, permission: str) -> None:
         """Grant a browser permission via BiDi."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browser.grantPermissions",
             {"permissions": [permission]},
@@ -2287,10 +2119,7 @@ class BiDiBackend(AbstractBackend):
 
     async def reset_permissions(self) -> None:
         """Reset all granted permissions via BiDi."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client._connection.send_command(
             "browser.resetPermissions", {}
         )
@@ -2303,10 +2132,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Security state dict.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command("Security.getState", {})
         return dict(result)
 
@@ -2316,10 +2142,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             ignore: True to ignore cert errors, False to enforce them.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Security.setIgnoreCertificateErrors", {"ignore": ignore},
         )
@@ -2332,10 +2155,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             locale: Locale string (e.g. 'en-US', 'es-ES').
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             'Emulation.setLocaleOverride', {'locale': locale},
         )
@@ -2346,10 +2166,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             rate: Throttling rate (1.0 = normal, 4.0 = 4x slower).
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Emulation.setCPUThrottlingRate", {"rate": rate},
         )
@@ -2360,10 +2177,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             enabled: True to enable touch emulation, False to disable.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             'Emulation.setTouchEmulationEnabled', {'enabled': enabled},
         )
@@ -2374,10 +2188,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             sensors: Sensor parameters with type and values.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         if sensors.type == "device-orientation":
             await self._client.cdp.send_command(
                 "DeviceOrientation.setDeviceOrientationOverride",
@@ -2408,10 +2219,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict mapping metric names to values.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         js = (
             "JSON.stringify({"
             "  navigationStart: performance.timing.navigationStart,"
@@ -2442,10 +2250,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with trace data.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Tracing.start",
             {"traceConfig": {"recordMode": "recordUntilFull"}},
@@ -2464,10 +2269,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with profile data.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Profiler.enable", {})
         await self._client.cdp.send_command("Profiler.start", {})
         import asyncio as _asyncio
@@ -2481,10 +2283,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with heap snapshot data.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("HeapProfiler.enable", {})
         result = await self._client.cdp.send_command(
             "HeapProfiler.takeHeapSnapshot", {},
@@ -2499,10 +2298,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with 'result' key containing script coverage entries.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Profiler.enable", {})
         await self._client.cdp.send_command(
             "Profiler.startPreciseCoverage",
@@ -2519,10 +2315,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with CSS coverage data.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("CSS.enable", {})
         await self._client.cdp.send_command("CSS.startRuleUsageTracking", {})
         import asyncio as _asyncio
@@ -2546,10 +2339,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict containing inlineStyles and matchedStyles.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         js = (
             f"(function(){{"
@@ -2586,10 +2376,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of stylesheet dicts with href, media, and rules count.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         js = (
             "JSON.stringify(Array.from(document.styleSheets)"
             ".map(function(s){{"
@@ -2614,10 +2401,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of CSS rule dicts with selectorText and cssText.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         idx = int(stylesheet_id) if stylesheet_id.isdigit() else 0
         js = (
             f"(function(){{"
@@ -2642,10 +2426,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict mapping CSS property names to computed values.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         js = (
             f"(function(){{"
@@ -2681,10 +2462,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Breakpoint ID as string.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Debugger.enable", {})
         params: dict[str, Any] = {"url": url, "lineNumber": line}
         if condition:
@@ -2703,10 +2481,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Breakpoint ID as string.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Debugger.enable", {})
         result = await self._client.cdp.send_command(
             "Debugger.setBreakpointOnFunctionCall",
@@ -2720,10 +2495,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             breakpoint_id: Breakpoint ID to remove.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Debugger.removeBreakpoint",
             {"breakpointId": breakpoint_id},
@@ -2731,42 +2503,27 @@ class BiDiBackend(AbstractBackend):
 
     async def debug_step_over(self) -> None:
         """Step over in debugger via CDP."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Debugger.stepOver", {})
 
     async def debug_step_into(self) -> None:
         """Step into in debugger via CDP."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Debugger.stepInto", {})
 
     async def debug_step_out(self) -> None:
         """Step out in debugger via CDP."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Debugger.stepOut", {})
 
     async def debug_pause(self) -> None:
         """Pause execution via CDP Debugger."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Debugger.pause", {})
 
     async def debug_resume(self) -> None:
         """Resume execution via CDP Debugger."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Debugger.resume", {})
 
     async def debug_get_listeners(self, selector: str) -> list[dict[str, Any]]:
@@ -2778,10 +2535,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of listener dicts.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         js = (
             f"(function(){{"
@@ -2809,10 +2563,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict containing 'html' with the full outerHTML.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         js = "document.documentElement.outerHTML"
         result = await self._client.script.evaluate(self._context, js)
         html = result.value if hasattr(result, "value") else result
@@ -2829,10 +2580,7 @@ class BiDiBackend(AbstractBackend):
             selector: CSS selector for the element to highlight.
             color: RGBA color string for the outline.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = selector.replace("'", "\\'")
         js = (
             f"(function(){{"
@@ -2847,10 +2595,7 @@ class BiDiBackend(AbstractBackend):
 
     async def overlay_clear(self) -> None:
         """Clear all highlight overlays via JS."""
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         js = (
             "(function(){"
             "  document.querySelectorAll('[data-wavexis-highlight]')"
@@ -2967,10 +2712,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of cache names.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         js = (
             "caches.keys().then(function(names){"
             "  return JSON.stringify(names);"
@@ -2991,10 +2733,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of entry dicts with url and status.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = cache_name.replace("'", "\\'")
         js = (
             f"caches.open('{escaped}').then(function(cache){{"
@@ -3015,10 +2754,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             cache_name: Name of the cache to delete.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = cache_name.replace("'", "\\'")
         js = f"caches.delete('{escaped}')"
         await self._client.script.evaluate(self._context, js)
@@ -3029,10 +2765,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of database dicts with name and version.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "IndexedDB.requestDatabaseNames",
             {"securityOrigin": "*"},
@@ -3053,10 +2786,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of data entries.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "IndexedDB.requestData",
             {
@@ -3077,10 +2807,7 @@ class BiDiBackend(AbstractBackend):
             database: Database name.
             store: Object store name.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "IndexedDB.clearObjectStore",
             {
@@ -3098,10 +2825,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of registration dicts with scope and scriptURL.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         js = (
             "navigator.serviceWorker.getRegistrations()"
             ".then(function(regs){"
@@ -3120,10 +2844,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             registration_id: Scope URL of the registration to unregister.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = registration_id.replace("'", "\\'")
         js = (
             f"navigator.serviceWorker.getRegistrations()"
@@ -3141,10 +2862,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             registration_id: Scope URL of the registration to update.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         escaped = registration_id.replace("'", "\\'")
         js = (
             f"navigator.serviceWorker.getRegistrations()"
@@ -3164,10 +2882,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of animation dicts with id, playState, and duration.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         js = (
             "document.getAnimations().then(function(anims){"
             "  return JSON.stringify(anims.map(function(a,i){"
@@ -3190,10 +2905,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             animation_id: Index of the animation (as string).
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         idx = int(animation_id) if animation_id.isdigit() else 0
         js = (
             f"document.getAnimations().then(function(anims){{"
@@ -3208,10 +2920,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             animation_id: Index of the animation (as string).
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         idx = int(animation_id) if animation_id.isdigit() else 0
         js = (
             f"document.getAnimations().then(function(anims){{"
@@ -3227,10 +2936,7 @@ class BiDiBackend(AbstractBackend):
             animation_id: Index of the animation (as string).
             time_ms: Time in milliseconds to seek to.
         """
-        if self._client is None or self._context is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         idx = int(animation_id) if animation_id.isdigit() else 0
         js = (
             f"document.getAnimations().then(function(anims){{"
@@ -3253,10 +2959,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Authenticator ID as string.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("WebAuthn.enable", {})
         result = await self._client.cdp.send_command(
             "WebAuthn.addVirtualAuthenticator",
@@ -3270,10 +2973,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             authenticator_id: Authenticator ID to remove.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "WebAuthn.removeVirtualAuthenticator",
             {"authenticatorId": authenticator_id},
@@ -3288,10 +2988,7 @@ class BiDiBackend(AbstractBackend):
             authenticator_id: Authenticator ID.
             credential: Credential dict.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "WebAuthn.addCredential",
             {"authenticatorId": authenticator_id, "credential": credential},
@@ -3308,10 +3005,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of credential dicts.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "WebAuthn.getCredentials",
             {"authenticatorId": authenticator_id},
@@ -3326,10 +3020,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of AudioContext dicts.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("WebAudio.enable", {})
         result = await self._client.cdp.send_command(
             "WebAudio.getRealtimeData", {},
@@ -3345,10 +3036,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with context info.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "WebAudio.getContextInfo",
             {"contextId": context_id},
@@ -3363,10 +3051,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of player dicts.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Media.enable", {})
         result = await self._client.cdp.send_command(
             "Media.getPlayerInfo", {},
@@ -3382,10 +3067,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of player message dicts.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "Media.getPlayerMessages",
             {"playerId": player_id},
@@ -3400,10 +3082,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of sink dicts.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "Cast.getSinks", {},
         )
@@ -3415,10 +3094,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             sink_name: Name of the sink to cast to.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Cast.startTabMirroring",
             {"sinkName": sink_name},
@@ -3426,10 +3102,7 @@ class BiDiBackend(AbstractBackend):
 
     async def cast_stop(self) -> None:
         """Stop Cast mirroring via CDP."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("Cast.stopCasting", {})
 
     # ── Bluetooth (experimental) — via CDP bridge ──────────
@@ -3443,10 +3116,7 @@ class BiDiBackend(AbstractBackend):
             name: Adapter name.
             address: Bluetooth address.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("BluetoothEmulation.enable", {})
         await self._client.cdp.send_command(
             "BluetoothEmulation.setSimulatedCentralState",
@@ -3455,10 +3125,7 @@ class BiDiBackend(AbstractBackend):
 
     async def bluetooth_stop(self) -> None:
         """Stop Bluetooth emulation via CDP."""
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command("BluetoothEmulation.disable", {})
 
     # ── WebExtensions — via CDP bridge ─────────────────────
@@ -3475,10 +3142,7 @@ class BiDiBackend(AbstractBackend):
         import hashlib
         import os
 
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         is_dir = await asyncio.to_thread(os.path.isdir, path)
         if is_dir:
             abs_path = await asyncio.to_thread(os.path.abspath, path)
@@ -3504,10 +3168,7 @@ class BiDiBackend(AbstractBackend):
         Args:
             extension_id: The extension ID returned by extension_install.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Extensions.uninstall",
             {"id": extension_id},
@@ -3519,10 +3180,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             List of extension dicts (id, name, version, enabled).
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command("Extensions.getInfo", {})
         extensions = result.get("extensions", [])
         return [
@@ -3546,10 +3204,7 @@ class BiDiBackend(AbstractBackend):
         Returns:
             The preference value.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         result = await self._client.cdp.send_command(
             "Browser.getPreference",
             {"name": key},
@@ -3563,10 +3218,7 @@ class BiDiBackend(AbstractBackend):
             key: The preference key.
             value: The value to set.
         """
-        if self._client is None:
-            raise SessionNotInitializedError(
-                "BiDiBackend not launched. Call launch() first."
-            )
+        self._require_launched()
         await self._client.cdp.send_command(
             "Browser.setPreference",
             {"name": key, "value": value},

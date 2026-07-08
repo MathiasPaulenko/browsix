@@ -8,6 +8,7 @@ from wavexis.cli._shared import (
     DEVICE_PRESETS,
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -55,7 +56,7 @@ async def _emulation_device(url: str, device: str) -> bytes:
         params = ScreenshotParams(url=url, full_page=True)
         return bytes(await backend.screenshot(params))
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @emulation_app.command("viewport")
 def emulation_viewport(
@@ -84,7 +85,7 @@ async def _emulation_viewport(url: str, width: int, height: int) -> bytes:
         params = ScreenshotParams(url=url, full_page=True)
         return bytes(await backend.screenshot(params))
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @emulation_app.command("geolocation")
 def emulation_geolocation(
@@ -113,7 +114,7 @@ async def _emulation_geolocation(url: str, lat: float, lon: float) -> bytes:
         params = ScreenshotParams(url=url, full_page=True)
         return bytes(await backend.screenshot(params))
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @emulation_app.command("timezone")
 def emulation_timezone(
@@ -141,7 +142,7 @@ async def _emulation_timezone(url: str, tz: str) -> bytes:
         params = ScreenshotParams(url=url, full_page=True)
         return bytes(await backend.screenshot(params))
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @emulation_app.command("dark_mode")
 def emulation_dark_mode(
@@ -168,5 +169,5 @@ async def _emulation_dark_mode(url: str) -> bytes:
         params = ScreenshotParams(url=url, full_page=True)
         return bytes(await backend.screenshot(params))
     finally:
-        await backend.close()
+        await _close_backend(backend)
 

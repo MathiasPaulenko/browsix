@@ -11,6 +11,7 @@ import typer
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -103,7 +104,7 @@ async def _shadow_click(
         await backend.navigate(url, WaitStrategy(strategy="load"))
         await backend.shadow_click(selectors, auto_wait=auto_wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _shadow_fill(
@@ -119,7 +120,7 @@ async def _shadow_fill(
         await backend.navigate(url, WaitStrategy(strategy="load"))
         await backend.shadow_fill(selectors, value, auto_wait=auto_wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _shadow_eval(
@@ -132,4 +133,4 @@ async def _shadow_eval(
         await backend.navigate(url, WaitStrategy(strategy="load"))
         return await backend.shadow_eval(selectors, expression, await_promise)
     finally:
-        await backend.close()
+        await _close_backend(backend)

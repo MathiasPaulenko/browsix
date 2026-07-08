@@ -13,6 +13,7 @@ from wavexis.cli._shared import (
     EXIT_CONFIG_ERROR,
     Output,
     _browser_options,
+    _close_backend,
     _echo,
     _get_backend,
     _run_async,
@@ -84,7 +85,7 @@ def auth(
                 ),
             )
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     result = _run_async(_run_auth())
     if result is None:

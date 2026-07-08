@@ -18,6 +18,7 @@ from wavexis.actions.screenshot import ScreenshotAction
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _echo,
     _get_backend,
     _progress,
@@ -115,7 +116,7 @@ async def _take_annotated(
         )
         return result
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _take_screenshot(
@@ -143,7 +144,7 @@ async def _take_screenshot(
         action = ScreenshotAction(params)
         return await action.execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def pdf(
@@ -197,7 +198,7 @@ async def _generate_pdf(
         action = PDFAction(params)
         return await action.execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def eval(
@@ -314,7 +315,7 @@ async def _eval(url: str, expression: str, await_promise: bool, file: str | None
         action = EvalAction(params)
         return await action.execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def dom(
@@ -401,7 +402,7 @@ async def _dom(
         )
         return await DOMAction(params).execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def scrape(
@@ -506,7 +507,7 @@ async def _scrape(
             results_seq.extend(result)
         return results_seq
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def crawl(
@@ -580,7 +581,7 @@ async def _crawl(
         )
         return await CrawlAction(params).execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def har(
@@ -614,7 +615,7 @@ async def _har(url: str, wait: int, filter: str | None) -> Any:
         params = HarParams(url=url, wait=wait, filter=filter)
         return await HARAction(params).execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def screencast(

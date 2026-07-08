@@ -10,6 +10,7 @@ import typer
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -324,7 +325,7 @@ def extension_install(
             result: str = await backend.extension_install(path)
             return result
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     ext_id: Any = _run_async(_run())
     if ext_id is not None:
@@ -342,7 +343,7 @@ def extension_uninstall(
         try:
             await backend.extension_uninstall(extension_id)
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     _run_async(_run())
     typer.echo(f"Uninstalled extension: {extension_id}")
@@ -358,7 +359,7 @@ def extension_list() -> None:
             result: list[dict[str, Any]] = await backend.extension_list()
             return result
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     extensions: Any = _run_async(_run())
     if extensions is None:
@@ -384,7 +385,7 @@ def pref_get(
         try:
             return await backend.get_pref(key)
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     value: Any = _run_async(_run())
     if value is not None:
@@ -403,7 +404,7 @@ def pref_set(
         try:
             await backend.set_pref(key, value)
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     _run_async(_run())
     typer.echo(f"Set {key} = {value}")

@@ -17,6 +17,7 @@ from wavexis.actions.webaudio import WebAudioAction, WebAudioParams
 from wavexis.actions.webauthn import WebAuthnAction, WebAuthnParams
 from wavexis.cli._shared import (
     _browser_options,
+    _close_backend,
     _echo,
     _get_backend,
     _run_async,
@@ -304,7 +305,7 @@ def raw(
             result: dict[str, Any] = await backend.raw(method, raw_params)
             return result
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     result = _run_async(_raw())
     if result is None:

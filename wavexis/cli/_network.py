@@ -11,6 +11,7 @@ from wavexis.actions.browser import BrowserAction
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -78,7 +79,7 @@ async def _cookies(
             await backend.clear_cookies()
         return None
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def headers(
@@ -103,7 +104,7 @@ async def _headers(headers: dict[str, str]) -> None:
         await backend.launch(_browser_options())
         await backend.set_headers(headers)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def user_agent(
@@ -120,7 +121,7 @@ async def _user_agent(ua: str) -> None:
         await backend.launch(_browser_options())
         await backend.set_user_agent(ua)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def browser(
@@ -147,7 +148,7 @@ async def _browser(action: str) -> Any:
         await backend.launch(_browser_options())
         return await BrowserAction(action).execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @network_app.command("block")
 def network_block(
@@ -168,7 +169,7 @@ async def _network_block(patterns: list[str]) -> None:
         await backend.launch(_browser_options())
         await backend.block_requests(patterns)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @network_app.command("throttle")
 def network_throttle(
@@ -195,7 +196,7 @@ async def _network_throttle(params: ThrottleParams) -> None:
         await backend.launch(_browser_options())
         await backend.throttle_network(params)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @network_app.command("cache")
 def network_cache(
@@ -216,7 +217,7 @@ async def _network_cache(disabled: bool) -> None:
         await backend.launch(_browser_options())
         await backend.set_cache_disabled(disabled)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @network_app.command("intercept")
 def network_intercept(
@@ -241,7 +242,7 @@ async def _network_intercept(pattern: dict[str, Any]) -> None:
         await backend.launch(_browser_options())
         await backend.intercept_requests(pattern)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @network_app.command("mock")
 def network_mock(
@@ -269,5 +270,5 @@ async def _network_mock(url: str, response: dict[str, Any]) -> None:
         await backend.launch(_browser_options())
         await backend.mock_response(url, response)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 

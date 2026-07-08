@@ -8,6 +8,7 @@ import typer
 
 from wavexis.cli._shared import (
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -74,7 +75,7 @@ async def _nl_click(url: str, query: str, auto_wait: bool) -> None:
         await backend.navigate(url, WaitStrategy(strategy="load"))
         await backend.nl_click(query, auto_wait=auto_wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _nl_fill(
@@ -87,7 +88,7 @@ async def _nl_fill(
         await backend.navigate(url, WaitStrategy(strategy="load"))
         await backend.nl_fill(query, value, auto_wait=auto_wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _nl_find(url: str, query: str, all: bool) -> list[str] | str:
@@ -99,4 +100,4 @@ async def _nl_find(url: str, query: str, all: bool) -> list[str] | str:
         result: list[str] | str = await backend.find_by_text(query, all=all)
         return result
     finally:
-        await backend.close()
+        await _close_backend(backend)

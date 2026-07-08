@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavexis"
-version = "2.11.3"
+version = "2.11.4"
 description = "Browser automation CLI — wraps cdpwave and bidiwave, no Node.js, no Chromium download"
 readme = "README.md"
 license = { text = "MIT" }
@@ -92,10 +92,6 @@ markers = [
 ]
 
 [tool.coverage.run]
-omit = [
-    "wavexis/backend/cdp.py",
-    "wavexis/backend/bidi.py",
-]
 
 [tool.hatch.build.targets.wheel]
 packages = ["wavexis"]

@@ -2,6 +2,17 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.11.4 — 2026-07-08
+
+### Code Quality & Cleanup
+
+- **`unregister_backend` now called after close** — New `_close_backend()` helper in `cli/_shared.py` calls `unregister_backend()` after `backend.close()`, preventing stale backends from lingering in the cleanup registry. All 59 `backend.close()` call sites across 14 CLI modules updated.
+- **BiDi launch-check deduplication** — Extracted `_require_launched()` helper in `BiDiBackend`, replacing 80+ repetitions of the 3-line `if self._client is None or self._context is None: raise` boilerplate with a single method call.
+- **Non-deterministic `hash()` in `_stream_console`** — Replaced `hash(json.dumps(...))` (randomized per process via `PYTHONHASHSEED`) with the raw JSON string as the deduplication set key.
+- **Watch mode debounce** — Added 500ms debounce to watch mode: after detecting a file change, waits 500ms and re-checks mtime before executing, preventing 2-3 redundant executions on rapid saves.
+- **Coverage exclusion removed** — Removed `cdp.py` and `bidi.py` from the coverage `omit` list in `pyproject.toml`, enabling coverage reporting for core backends.
+- **Structured logging for serve mode** — New `_request_logging_middleware` assigns `X-Request-ID` headers and logs JSON-structured request info (method, path, status, elapsed_ms). `serve()` configures JSON log format for production correlation.
+
 ## v2.11.3 — 2026-07-08
 
 ### Security

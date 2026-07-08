@@ -11,6 +11,7 @@ import typer
 
 from wavexis.cli._shared import (
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -56,7 +57,7 @@ async def _inspect(url: str, request_id: str, body_type: str) -> str | None:
             result = await backend.get_response_body(request_id)
         return result
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 @app.command()
@@ -126,7 +127,7 @@ async def _modify(
         if wait > 0:
             await asyncio.sleep(wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 @app.command()
@@ -191,7 +192,7 @@ async def _modify_response(
         if wait > 0:
             await asyncio.sleep(wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 @app.command()
@@ -223,7 +224,7 @@ async def _har_replay(har_path: str, url: str, url_filter: str) -> None:
             await backend.navigate(url, WaitStrategy(strategy="load"))
         await backend.replay_har(har_path, url_filter)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 @app.command()
@@ -306,7 +307,7 @@ async def _trace_start(
         )
         return trace_id
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _trace_stop(trace_id: str) -> dict[str, Any]:
@@ -317,7 +318,7 @@ async def _trace_stop(trace_id: str) -> dict[str, Any]:
         result: dict[str, Any] = await backend.stop_combined_trace(trace_id)
         return result
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 @app.command()
@@ -352,7 +353,7 @@ async def _axe(url: str) -> dict[str, Any]:
         result: dict[str, Any] = await backend.axe_audit()
         return result
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 @app.command()
@@ -409,4 +410,4 @@ async def _events_subscribe(
         await backend.unsubscribe_events(sub_id)
         typer.echo("Unsubscribed")
     finally:
-        await backend.close()
+        await _close_backend(backend)

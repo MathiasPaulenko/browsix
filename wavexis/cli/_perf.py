@@ -11,6 +11,7 @@ import typer
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     _write_json_output,
@@ -225,7 +226,7 @@ async def _perf(url: str, metric: str, duration: int) -> Any:
             return await backend.perf_css_coverage()
         return {}
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 @app.command()

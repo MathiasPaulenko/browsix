@@ -22,6 +22,7 @@ from wavexis.actions.tabs import TabsAction, TabsParams
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -51,7 +52,7 @@ async def _navigate(url: str, wait: WaitStrategy) -> None:
         action = NavigateAction(NavigateParams(url=url, wait=wait))
         await action.execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def back() -> None:
@@ -86,7 +87,7 @@ async def _nav_simple(action_fn: Any) -> None:
         await backend.launch(_browser_options())
         await action_fn(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def tabs(
@@ -116,7 +117,7 @@ async def _tabs(action: str, url: str, tab_id: str) -> Any:
         params = TabsParams(action=action, url=url, tab_id=tab_id)
         return await TabsAction(params).execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def console(
@@ -158,7 +159,7 @@ async def _console(url: str, level: str, capture: str = "console") -> Any:
         )
         return await ConsoleAction(params).execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 @app.command()
 def logs(
@@ -190,5 +191,5 @@ async def _logs(url: str) -> Any:
         )
         return await ConsoleAction(params).execute(backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 

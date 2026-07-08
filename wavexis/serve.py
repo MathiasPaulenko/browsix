@@ -13,6 +13,7 @@ import hmac
 import json
 import logging
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -106,6 +107,45 @@ class TokenBucket:
             if self._refill_rate <= 0:
                 return 1.0
             return (1 - self._tokens) / self._refill_rate
+
+
+async def _request_logging_middleware(request: Any, handler: Any) -> Any:
+    """Middleware that assigns a request ID and logs structured request info.
+
+    Each request gets a unique ``X-Request-ID`` header. Response time and
+    status are logged as JSON-structured fields for production correlation.
+    """
+    request_id = request.headers.get("X-Request-ID", "") or uuid.uuid4().hex[:12]
+    request["request_id"] = request_id
+    start = time.monotonic()
+    try:
+        response = await handler(request)
+        elapsed_ms = round((time.monotonic() - start) * 1000, 2)
+        logger.info(
+            json.dumps({
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.path,
+                "status": getattr(response, "status", 200),
+                "elapsed_ms": elapsed_ms,
+            })
+        )
+        if hasattr(response, "headers"):
+            response.headers["X-Request-ID"] = request_id
+        return response
+    except Exception:
+        elapsed_ms = round((time.monotonic() - start) * 1000, 2)
+        logger.error(
+            json.dumps({
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.path,
+                "status": 500,
+                "elapsed_ms": elapsed_ms,
+                "error": "unhandled exception",
+            })
+        )
+        raise
 
 
 def _json_error_middleware(request: Any, handler: Any) -> Any:
@@ -806,12 +846,12 @@ async def _stream_console(
     ws: Any, backend: AbstractBackend, interval: float,
 ) -> None:
     """Poll console messages and stream new ones."""
-    seen: set[int] = set()
+    seen: set[str] = set()
     while True:
         try:
             messages = await backend.capture_console()
             for msg in messages:
-                key = hash(json.dumps(msg, sort_keys=True))
+                key = json.dumps(msg, sort_keys=True)
                 if key not in seen:
                     seen.add(key)
                     await ws.send_json({
@@ -1179,6 +1219,7 @@ def create_app(
 
     registry = get_registry()
     middlewares: list[Any] = [m.factory(web) for m in registry.middleware]
+    middlewares.append(_request_logging_middleware)
     middlewares.append(_json_error_middleware)
 
     if cors_origins:
@@ -1261,6 +1302,11 @@ def serve(
         BackendNotAvailableError: If no backend is available.
     """
     web = _import_aiohttp()
+    logging.basicConfig(
+        level=logging.INFO,
+        format='{"timestamp":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","message":%(message)s}',
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
     app = create_app(
         backend,
         rate_limit=rate_limit,

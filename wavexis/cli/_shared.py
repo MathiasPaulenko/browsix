@@ -44,6 +44,7 @@ __all__ = [
     "WaitTimeoutError",
     "WavexisError",
     "_browser_options",
+    "_close_backend",
     "_ctx",
     "_echo",
     "_get_backend",
@@ -288,6 +289,16 @@ def _get_backend() -> Any:
     backend = manager.select_with_fallback_sync(preferred, _browser_options())
     register_backend(backend)
     return backend
+
+
+async def _close_backend(backend: Any) -> None:
+    """Close a backend and unregister it from cleanup tracking.
+
+    Args:
+        backend: The backend instance to close and unregister.
+    """
+    await backend.close()
+    unregister_backend(backend)
 
 
 def _browser_options() -> BrowserOptions:

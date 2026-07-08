@@ -16,6 +16,7 @@ from wavexis.actions.screenshot import ScreenshotAction
 from wavexis.cli._shared import (
     WavexisError,
     _browser_options,
+    _close_backend,
     _echo,
     _get_backend,
     _handle_error,
@@ -109,6 +110,11 @@ def _multi_watch(
             mtime = config_path.stat().st_mtime
             if mtime != last_mtime:
                 last_mtime = mtime
+                time.sleep(0.5)
+                current_mtime = config_path.stat().st_mtime
+                if current_mtime != mtime:
+                    last_mtime = current_mtime
+                    continue
                 typer.echo(f"\n[{time.strftime('%H:%M:%S')}] Re-running actions…")
                 results = _run_async(
                     _multi(config_path, parallel=parallel, cache_ttl=cache_ttl)
@@ -157,7 +163,7 @@ async def _multi(
                 results.extend(result)
         return results
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 def _parse_and_describe(config_path: Any) -> list[str]:
@@ -308,7 +314,7 @@ async def _batch_tabs(
         tasks = [_run_one(u) for u in urls]
         return await asyncio.gather(*tasks)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _batch_processes(
@@ -377,7 +383,7 @@ async def _batch_single(
         await backend.launch(_browser_options())
         return await _batch_single_on(url, action, out_dir, expression, backend)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _batch_single_on(
@@ -537,7 +543,7 @@ def replay(
         try:
             return await replay_from_yaml(config_path, backend)
         finally:
-            await backend.close()
+            await _close_backend(backend)
 
     results = _run_async(_replay())
     if results is None:

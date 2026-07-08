@@ -11,6 +11,7 @@ import typer
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -99,7 +100,7 @@ async def _iframe_click(
         await backend.navigate(url, WaitStrategy(strategy="load"))
         await backend.iframe_click(iframe_selector, selector, auto_wait=auto_wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _iframe_fill(
@@ -116,7 +117,7 @@ async def _iframe_fill(
         await backend.navigate(url, WaitStrategy(strategy="load"))
         await backend.iframe_fill(iframe_selector, selector, value, auto_wait=auto_wait)
     finally:
-        await backend.close()
+        await _close_backend(backend)
 
 
 async def _iframe_eval(
@@ -129,4 +130,4 @@ async def _iframe_eval(
         await backend.navigate(url, WaitStrategy(strategy="load"))
         return await backend.iframe_eval(iframe_selector, expression, await_promise)
     finally:
-        await backend.close()
+        await _close_backend(backend)

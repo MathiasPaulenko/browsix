@@ -12,6 +12,7 @@ import typer
 from wavexis.cli._shared import (
     Output,
     _browser_options,
+    _close_backend,
     _get_backend,
     _run_async,
     app,
@@ -96,7 +97,7 @@ def session(
                 save_action = SessionSaveAction(session_path)
                 return await save_action.execute(backend)
             finally:
-                await backend.close()
+                await _close_backend(backend)
 
         _run_async(_save_session())
         typer.echo(f"Session saved to {session_path}")
@@ -118,7 +119,7 @@ def session(
                     return title
                 return "Session loaded"
             finally:
-                await backend.close()
+                await _close_backend(backend)
 
         result = _run_async(_load_session())
         if result is None:
