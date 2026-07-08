@@ -2,6 +2,18 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.11.5 — 2026-07-08
+
+### Testing
+
+- **CDP backend coverage** — Added 154 comprehensive async unit tests for `CDPBackend` method bodies with fully mocked `CDPSession`/`CDPClient`, covering navigation, screenshots, DOM, network, input, storage, CSS, debugger, WebAuthn, media, tracing, accessibility, and more.
+- **BiDi backend coverage** — Added 159 comprehensive async unit tests for `BiDiBackend` method bodies with mocked `BiDiClient`, covering navigation, screenshots, DOM, network, input, contexts, and more.
+- **Coverage restored to 84%** — Overall test coverage increased from 70% to 84% after removing the `cdp.py` and `bidi.py` coverage exclusions, exceeding the 80% CI threshold.
+
+### Code Quality
+
+- **Ruff lint compliance** — Fixed all E501 (line length) and N806 (variable naming) errors in test files to pass CI lint checks.
+
 ## v2.11.4 — 2026-07-08
 
 ### Code Quality & Cleanup
