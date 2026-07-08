@@ -442,7 +442,9 @@ class TestServeHandlerMocks:
 
     async def test_scrape_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -465,7 +467,9 @@ class TestServeHandlerMocks:
 
     async def test_dom_get_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -485,7 +489,9 @@ class TestServeHandlerMocks:
 
     async def test_dom_query_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -508,7 +514,9 @@ class TestServeHandlerMocks:
 
     async def test_har_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -530,7 +538,9 @@ class TestServeHandlerMocks:
 
     async def test_input_click_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -553,7 +563,9 @@ class TestServeHandlerMocks:
 
     async def test_input_type_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -576,7 +588,9 @@ class TestServeHandlerMocks:
 
     async def test_cwv_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -603,7 +617,9 @@ class TestServeHandlerMocks:
 
     async def test_user_agent_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -626,7 +642,9 @@ class TestServeHandlerMocks:
 
     async def test_headers_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -649,7 +667,9 @@ class TestServeHandlerMocks:
 
     async def test_device_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -672,7 +692,9 @@ class TestServeHandlerMocks:
 
     async def test_modify_request_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -695,7 +717,9 @@ class TestServeHandlerMocks:
 
     async def test_modify_response_endpoint(self) -> None:
         from unittest.mock import patch
+
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         mock_backend = self._make_mock_backend()
@@ -718,6 +742,7 @@ class TestServeHandlerMocks:
 
     async def test_plugins_endpoint(self) -> None:
         from aiohttp.test_utils import TestClient, TestServer
+
         from wavexis.serve import create_app
 
         app = create_app()
@@ -738,14 +763,17 @@ class TestServeUtilities:
     """Test serve utility functions."""
 
     def test_safe_params(self) -> None:
-        from wavexis.serve import _safe_params
         from wavexis.config import ScreenshotParams
+        from wavexis.serve import _safe_params
 
-        params = _safe_params(ScreenshotParams, {"url": "https://example.com", "unknown": "ignored"})
+        params = _safe_params(
+            ScreenshotParams, {"url": "https://example.com", "unknown": "ignored"}
+        )
         assert params.url == "https://example.com"
 
     def test_token_bucket_acquire(self) -> None:
         import asyncio
+
         from wavexis.serve import TokenBucket
 
         bucket = TokenBucket(capacity=2, refill_period=60.0)
@@ -759,6 +787,7 @@ class TestServeUtilities:
 
     def test_token_bucket_retry_after(self) -> None:
         import asyncio
+
         from wavexis.serve import TokenBucket
 
         bucket = TokenBucket(capacity=1, refill_period=60.0)
@@ -771,23 +800,23 @@ class TestServeUtilities:
         asyncio.run(_test())
 
     def test_set_allowed_base_dir(self, tmp_path) -> None:
-        from wavexis.serve import set_allowed_base_dir, _validate_path
+        from wavexis.serve import _validate_path, set_allowed_base_dir
 
         set_allowed_base_dir(str(tmp_path))
         result = _validate_path(str(tmp_path / "test.txt"))
         assert result is not None
 
     def test_validate_path_no_base_dir(self) -> None:
-        from wavexis.serve import set_allowed_base_dir, _validate_path
         from wavexis.exceptions import WavexisError
+        from wavexis.serve import _validate_path, set_allowed_base_dir
 
         set_allowed_base_dir(None)
         with pytest.raises(WavexisError):
             _validate_path("/tmp/test.txt")
 
     def test_validate_path_outside_base_dir(self, tmp_path) -> None:
-        from wavexis.serve import set_allowed_base_dir, _validate_path
         from wavexis.exceptions import WavexisError
+        from wavexis.serve import _validate_path, set_allowed_base_dir
 
         set_allowed_base_dir(str(tmp_path))
         with pytest.raises(WavexisError):
@@ -802,6 +831,7 @@ class TestServeUtilities:
 
     def test_backend_pool(self) -> None:
         import asyncio
+
         from wavexis.serve import BackendPool
 
         pool = BackendPool(max_concurrent=2)

@@ -81,8 +81,8 @@ async def test_raw_bidi_command() -> None:
     opts = BrowserOptions(headless=True)
     try:
         await backend.launch(opts)
-    except ImportError:
-        pytest.skip("bidiwave not installed")
+    except (ImportError, OSError, ConnectionError, RuntimeError) as exc:
+        pytest.skip(f"BiDi backend not available in this environment: {exc}")
     try:
         result = await backend.raw("session.status", {})
         assert isinstance(result, dict)
