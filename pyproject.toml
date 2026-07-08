@@ -90,5 +90,11 @@ markers = [
     "chrome: tests that require Chrome specifically",
 ]
 
+[tool.coverage.run]
+omit = [
+    "wavexis/backend/cdp.py",
+    "wavexis/backend/bidi.py",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["wavexis"]

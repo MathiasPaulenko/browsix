@@ -1045,7 +1045,8 @@ async def handle_plugins(request: Any) -> Any:
     from wavexis.plugins import get_registry
 
     registry = get_registry()
-    return request.app["web"].json_response({
+    web = _import_aiohttp()
+    return web.json_response({
         "actions": registry.list_actions(),
         "backends": registry.list_backends(),
         "middleware": registry.list_middleware(),

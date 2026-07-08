@@ -439,3 +439,403 @@ class TestServeHandlerMocks:
             await ws.send_json({"action": "close"})
         await ws.close()
         await client.close()
+
+    async def test_scrape_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.scrape = AsyncMock(return_value={"title": "Test"})
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/scrape",
+                json={"url": "https://example.com"},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_dom_get_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.dom_get = AsyncMock(return_value="<html></html>")
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post("/dom/get", json={"url": "https://example.com"})
+        assert resp.status == 200
+        await client.close()
+
+    async def test_dom_query_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.dom_query = AsyncMock(return_value={"nodeId": 1})
+        mock_backend.dom_get = AsyncMock(return_value="<html></html>")
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/dom/query", json={"url": "https://example.com", "selector": "div"}
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_har_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.capture_har = AsyncMock(
+            return_value={"log": {"entries": []}}
+        )
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post("/har", json={"url": "https://example.com"})
+        assert resp.status == 200
+        await client.close()
+
+    async def test_input_click_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.click = AsyncMock()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/input/click",
+                json={"url": "https://example.com", "selector": "button"},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_input_type_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.type = AsyncMock()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/input/type",
+                json={"url": "https://example.com", "selector": "input", "text": "hello"},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_cwv_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.eval = AsyncMock(
+            side_effect=[
+                {"lcp": 2000, "cls": 0.05, "inp": 100},
+                {"lcp": 2000, "cls": 0.05, "inp": 100},
+            ]
+        )
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/cwv", json={"url": "https://example.com", "observe_ms": 100}
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_user_agent_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.set_user_agent = AsyncMock()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/user-agent",
+                json={"url": "https://example.com", "user_agent": "MyBot/1.0"},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_headers_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.set_headers = AsyncMock()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/headers",
+                json={"url": "https://example.com", "headers": {"X-Test": "val"}},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_device_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.emulate_device = AsyncMock()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/device",
+                json={"url": "https://example.com", "device": "iPhone 12"},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_modify_request_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.modify_request = AsyncMock()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/modify-request",
+                json={"url": "https://example.com", "pattern": "*api*"},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_modify_response_endpoint(self) -> None:
+        from unittest.mock import patch
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.modify_response = AsyncMock()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/modify-response",
+                json={"url": "https://example.com", "pattern": "*api*"},
+            )
+        assert resp.status == 200
+        await client.close()
+
+    async def test_plugins_endpoint(self) -> None:
+        from aiohttp.test_utils import TestClient, TestServer
+        from wavexis.serve import create_app
+
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        resp = await client.get("/plugins")
+        assert resp.status == 200
+        data = await resp.json()
+        assert "actions" in data
+        assert "backends" in data
+        assert "middleware" in data
+        await client.close()
+
+
+@pytest.mark.unit
+class TestServeUtilities:
+    """Test serve utility functions."""
+
+    def test_safe_params(self) -> None:
+        from wavexis.serve import _safe_params
+        from wavexis.config import ScreenshotParams
+
+        params = _safe_params(ScreenshotParams, {"url": "https://example.com", "unknown": "ignored"})
+        assert params.url == "https://example.com"
+
+    def test_token_bucket_acquire(self) -> None:
+        import asyncio
+        from wavexis.serve import TokenBucket
+
+        bucket = TokenBucket(capacity=2, refill_period=60.0)
+
+        async def _test() -> None:
+            assert await bucket.acquire() is True
+            assert await bucket.acquire() is True
+            assert await bucket.acquire() is False
+
+        asyncio.run(_test())
+
+    def test_token_bucket_retry_after(self) -> None:
+        import asyncio
+        from wavexis.serve import TokenBucket
+
+        bucket = TokenBucket(capacity=1, refill_period=60.0)
+
+        async def _test() -> None:
+            await bucket.acquire()
+            ra = await bucket.retry_after()
+            assert ra > 0
+
+        asyncio.run(_test())
+
+    def test_set_allowed_base_dir(self, tmp_path) -> None:
+        from wavexis.serve import set_allowed_base_dir, _validate_path
+
+        set_allowed_base_dir(str(tmp_path))
+        result = _validate_path(str(tmp_path / "test.txt"))
+        assert result is not None
+
+    def test_validate_path_no_base_dir(self) -> None:
+        from wavexis.serve import set_allowed_base_dir, _validate_path
+        from wavexis.exceptions import WavexisError
+
+        set_allowed_base_dir(None)
+        with pytest.raises(WavexisError):
+            _validate_path("/tmp/test.txt")
+
+    def test_validate_path_outside_base_dir(self, tmp_path) -> None:
+        from wavexis.serve import set_allowed_base_dir, _validate_path
+        from wavexis.exceptions import WavexisError
+
+        set_allowed_base_dir(str(tmp_path))
+        with pytest.raises(WavexisError):
+            _validate_path("/etc/passwd")
+
+    def test_set_ws_max_connections(self) -> None:
+        import wavexis.serve as serve_mod
+
+        serve_mod.set_ws_max_connections(10)
+        assert serve_mod._ws_max_connections == 10
+        serve_mod.set_ws_max_connections(20)
+
+    def test_backend_pool(self) -> None:
+        import asyncio
+        from wavexis.serve import BackendPool
+
+        pool = BackendPool(max_concurrent=2)
+
+        async def _test() -> None:
+            await pool.acquire()
+            await pool.acquire()
+            pool.release()
+            pool.release()
+
+        asyncio.run(_test())
+
+    def test_create_app_with_options(self) -> None:
+        from wavexis.serve import create_app
+
+        app = create_app(
+            backend_name="cdp",
+            rate_limit=100,
+            base_dir="/tmp",
+            api_key="secret",
+            cors_origins=["*"],
+            max_concurrent=3,
+        )
+        assert app is not None
+        assert app["backend_name"] == "cdp"
+
+    def test_create_app_with_cors_origins(self) -> None:
+        from wavexis.serve import create_app
+
+        app = create_app(cors_origins=["https://example.com"])
+        assert app is not None
+
+    def test_create_app_with_api_key(self) -> None:
+        from wavexis.serve import create_app
+
+        app = create_app(api_key="test-key")
+        assert app is not None
