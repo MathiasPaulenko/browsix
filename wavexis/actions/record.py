@@ -132,9 +132,9 @@ async def record_session(
 
     events: list[dict[str, Any]] = []
     interrupted = False
-    with contextlib.suppress(KeyboardInterrupt):
+    try:
         await asyncio.sleep(duration)
-    else:
+    except KeyboardInterrupt:
         interrupted = True
 
     if not interrupted:

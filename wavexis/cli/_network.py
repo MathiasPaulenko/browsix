@@ -272,3 +272,41 @@ async def _network_mock(url: str, response: dict[str, Any]) -> None:
     finally:
         await _close_backend(backend)
 
+@network_app.command("auth")
+def network_auth(
+    url_pattern: str = typer.Argument(..., help="URL pattern to match auth challenges"),
+    username: str | None = typer.Option(None, "--username", "-u", help="Username to provide"),
+    password: str | None = typer.Option(None, "--password", "-p", help="Password to provide"),
+    navigate_url: str | None = typer.Option(
+        None, "--navigate", help="URL to navigate after setting auth handler"
+    ),
+    wait: str = typer.Option("load", "--wait", help="Wait strategy for navigation"),
+) -> None:
+    """Handle HTTP authentication challenges for matching URLs."""
+    _run_async(_network_auth(url_pattern, username, password, navigate_url, wait))
+    typer.echo(f"Auth handler set for '{url_pattern}'")
+
+async def _network_auth(
+    url_pattern: str,
+    username: str | None,
+    password: str | None,
+    navigate_url: str | None,
+    wait: str,
+) -> None:
+    """Set up HTTP authentication handling.
+
+    Args:
+        url_pattern: URL pattern to match auth challenges.
+        username: Username to provide. If None, auth is canceled.
+        password: Password to provide.
+        navigate_url: Optional URL to navigate after setting auth handler.
+        wait: Wait strategy for navigation.
+    """
+    backend = _get_backend()
+    try:
+        await backend.launch(_browser_options())
+        await backend.handle_auth(url_pattern, username, password)
+        if navigate_url:
+            await backend.navigate(navigate_url, WaitStrategy(strategy=wait))
+    finally:
+        await _close_backend(backend)

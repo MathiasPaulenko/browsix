@@ -117,3 +117,18 @@ class NetworkBackend(ABC):
             har_path: Path to the HAR file.
             url_filter: Optional URL pattern to filter which entries to replay.
         """
+
+    @abstractmethod
+    async def handle_auth(
+        self,
+        url_pattern: str,
+        username: str | None = None,
+        password: str | None = None,
+    ) -> None:
+        """Handle HTTP authentication challenges for matching requests.
+
+        Args:
+            url_pattern: URL pattern to match auth challenges.
+            username: Username to provide. If None, auth is canceled.
+            password: Password to provide.
+        """

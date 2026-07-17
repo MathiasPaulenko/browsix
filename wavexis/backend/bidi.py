@@ -1903,6 +1903,50 @@ class BiDiBackend(AbstractBackend):
                 self._context, fetch_js, await_promise=True
             )
 
+    async def handle_auth(
+        self,
+        url_pattern: str,
+        username: str | None = None,
+        password: str | None = None,
+    ) -> None:
+        """Handle HTTP authentication challenges for matching requests.
+
+        Uses native BiDi network interception to respond to authRequired events.
+
+        Args:
+            url_pattern: URL pattern to match auth challenges.
+            username: Username to provide. If None, auth is canceled.
+            password: Password to provide.
+        """
+        client = self._require_client()
+
+        async def on_auth_required(params: dict[str, Any]) -> None:
+            """Respond to network.authRequired events."""
+            request_url = params.get("request", {}).get("url", "")
+            if url_pattern and url_pattern not in request_url:
+                return
+            request_id = params.get("request", "")
+            if isinstance(request_id, dict):
+                request_id = request_id.get("id", "")
+            if username and password:
+                await client.network.continue_with_auth(
+                    request=request_id,
+                    action="provideCredentials",
+                    credentials={"username": username, "password": password},
+                )
+            else:
+                await client.network.continue_with_auth(
+                    request=request_id,
+                    action="cancel",
+                )
+
+        await client.network.add_intercept(
+            phases=["authRequired"],
+            contexts=[self._context] if self._context else None,
+            url_patterns=[url_pattern] if url_pattern else None,
+        )
+        client.on_auth_required(on_auth_required)
+
     # ── Combined trace (W8) ────────────────────────────────
 
     async def start_combined_trace(

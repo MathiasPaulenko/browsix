@@ -2084,6 +2084,57 @@ class CDPBackend(AbstractBackend):
             )
             await session.runtime.evaluate(fetch_js)
 
+    async def handle_auth(
+        self,
+        url_pattern: str,
+        username: str | None = None,
+        password: str | None = None,
+    ) -> None:
+        """Handle HTTP authentication challenges for matching requests.
+
+        Uses the CDP Fetch domain to intercept authRequired events and either
+        provide credentials or cancel the challenge.
+
+        Args:
+            url_pattern: URL pattern to match auth challenges.
+            username: Username to provide. If None, auth is canceled.
+            password: Password to provide.
+        """
+        session = self._require_session()
+
+        async def on_auth_required(event_params: dict[str, Any]) -> None:
+            """Respond to Fetch.authRequired events."""
+            request_url = event_params.get("request", {}).get("url", "")
+            if url_pattern and url_pattern not in request_url:
+                return
+            request_id = event_params.get("requestId", "")
+            if username and password:
+                await session.send(
+                    "Fetch.continueWithAuth",
+                    {
+                        "requestId": request_id,
+                        "authChallengeResponse": {
+                            "response": "ProvideCredentials",
+                            "username": username,
+                            "password": password,
+                        },
+                    },
+                )
+            else:
+                await session.send(
+                    "Fetch.continueWithAuth",
+                    {
+                        "requestId": request_id,
+                        "authChallengeResponse": {"response": "CancelAuth"},
+                    },
+                )
+
+        session.on("Fetch.authRequired", on_auth_required)
+        await session.send(
+            "Fetch.enable",
+            {"patterns": [{"urlPattern": url_pattern}]},
+        )
+
     # ── Combined trace (W8) ────────────────────────────────
 
     async def start_combined_trace(
