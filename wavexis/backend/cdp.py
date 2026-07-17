@@ -162,33 +162,41 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
 
+        timeout_ms: int = wait.timeout if wait is not None else 30000
+        timeout_sec: float = timeout_ms / 1000
+
         await session.page.enable()
         await session.page.navigate(url)
         self._current_url = url
 
         if wait is None or wait.strategy == "load":
-            timeout_sec = (wait.timeout if wait else 30000) / 1000
             try:
-                await session.wait_for_event(
-                    "Page.loadEventFired", timeout=timeout_sec
-                )
+                await session.wait_for_load_state("load", timeout=timeout_sec)
             except TimeoutError:
-                raise WaitTimeoutError("load", wait.timeout if wait else 30000) from None
+                raise WaitTimeoutError("load", timeout_ms) from None
         elif wait.strategy == "selector":
-            await self.wait_for(wait)
-        elif wait.strategy == "domcontentloaded":
-            timeout_sec = wait.timeout / 1000
+            if wait.selector is None:
+                raise ValueError("selector wait strategy requires a selector")
             try:
-                await session.wait_for_event(
-                    "Page.domContentEventFired", timeout=timeout_sec
+                await session.wait_for_selector(
+                    wait.selector, timeout=timeout_sec
                 )
             except TimeoutError:
-                raise WaitTimeoutError("domcontentloaded", wait.timeout) from None
+                raise WaitTimeoutError("selector", timeout_ms) from None
+        elif wait.strategy == "domcontentloaded":
+            try:
+                await session.wait_for_load_state(
+                    "domcontentloaded", timeout=timeout_sec
+                )
+            except TimeoutError:
+                raise WaitTimeoutError("domcontentloaded", timeout_ms) from None
         elif wait.strategy == "networkidle":
-            raise ValueError(
-                "networkidle wait strategy is not implemented in CDP backend. "
-                "Use 'load', 'domcontentloaded', or 'selector' instead."
-            )
+            try:
+                await session.wait_for_network_idle(
+                    idle_time=0.5, timeout=timeout_sec
+                )
+            except TimeoutError:
+                raise WaitTimeoutError("networkidle", timeout_ms) from None
 
     async def screenshot(self, params: ScreenshotParams) -> bytes:
         """Take a screenshot of the current page.
@@ -431,70 +439,53 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
 
-        timeout_sec = strategy.timeout / 1000
-        deadline = time.monotonic() + timeout_sec
+        timeout_ms: int = strategy.timeout
+        timeout_sec: float = timeout_ms / 1000
 
         if strategy.strategy == "selector" and strategy.selector:
-            escaped = json.dumps(strategy.selector)
-            js = f"document.querySelector('{escaped}') !== null"
-            while time.monotonic() < deadline:
-                result = await session.runtime.evaluate(js)
-                if result.get("result", {}).get("value") is True:
-                    return
-                await asyncio.sleep(0.1)
-            raise WaitTimeoutError("selector", strategy.timeout)
+            try:
+                await session.wait_for_selector(
+                    strategy.selector, timeout=timeout_sec
+                )
+            except TimeoutError:
+                raise WaitTimeoutError("selector", timeout_ms) from None
+            return
 
         if strategy.strategy == "load":
             try:
-                await session.wait_for_event(
-                    "Page.loadEventFired", timeout=timeout_sec
-                )
+                await session.wait_for_load_state("load", timeout=timeout_sec)
             except TimeoutError:
-                raise WaitTimeoutError("load", strategy.timeout) from None
+                raise WaitTimeoutError("load", timeout_ms) from None
             return
 
         if strategy.strategy == "url" and strategy.url_pattern:
+            deadline = time.monotonic() + timeout_sec
+            js = "window.location.href"
             while time.monotonic() < deadline:
-                result = await session.runtime.evaluate("window.location.href")
+                result = await session.runtime.evaluate(js)
                 href = result.get("result", {}).get("value", "")
                 if strategy.url_pattern in href:
                     return
                 await asyncio.sleep(0.1)
-            raise WaitTimeoutError("url", strategy.timeout)
+            raise WaitTimeoutError("url", timeout_ms)
 
         if strategy.strategy == "domcontentloaded":
             try:
-                await session.wait_for_event(
-                    "Page.domContentEventFired", timeout=timeout_sec
+                await session.wait_for_load_state(
+                    "domcontentloaded", timeout=timeout_sec
                 )
             except TimeoutError:
-                raise WaitTimeoutError("domcontentloaded", strategy.timeout) from None
+                raise WaitTimeoutError("domcontentloaded", timeout_ms) from None
             return
 
         if strategy.strategy == "networkidle":
-            # Poll for network idle: no more than 2 active requests for 500ms
-            js = """
-            (function() {
-                return window.performance.getEntries()
-                    .filter(e => e.entryType === 'resource')
-                    .filter(e => !e.duration || e.duration < 0)
-                    .length <= 2;
-            })()
-            """
-            deadline = time.monotonic() + timeout_sec
-            idle_start = None
-            while time.monotonic() < deadline:
-                result = await session.runtime.evaluate(js)
-                is_idle = result.get("result", {}).get("value", False)
-                if is_idle:
-                    if idle_start is None:
-                        idle_start = time.monotonic()
-                    elif time.monotonic() - idle_start >= 0.5:
-                        return
-                else:
-                    idle_start = None
-                await asyncio.sleep(0.1)
-            raise WaitTimeoutError("networkidle", strategy.timeout)
+            try:
+                await session.wait_for_network_idle(
+                    idle_time=0.5, timeout=timeout_sec
+                )
+            except TimeoutError:
+                raise WaitTimeoutError("networkidle", timeout_ms) from None
+            return
 
         # If we get here, the strategy is not supported
         raise ValueError(f"Unsupported wait strategy: {strategy.strategy}")
@@ -1050,7 +1041,7 @@ class CDPBackend(AbstractBackend):
 
         await session.network.enable()
         await self.navigate(params.url, WaitStrategy(strategy="load"))
-        await asyncio.sleep(params.wait / 1000)
+        await asyncio.sleep(params.timeout / 1000)
 
         entries: list[dict[str, Any]] = []
         for req_id, req_data in requests.items():

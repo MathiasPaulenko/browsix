@@ -14,8 +14,9 @@ import json
 from typing import Any
 
 try:
-    from PIL import Image
     from io import BytesIO
+
+    from PIL import Image
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -85,6 +86,7 @@ class BiDiBackend(AbstractBackend):
         """Initialize the BiDi backend."""
         self._client: BiDiClient | None = None
         self._context: Any = None
+        self._current_url: str = ""
 
     async def new_tab_handle(self, url: str = "about:blank") -> BiDiTabHandle:
         """Create a new browsing context with its own session for concurrent ops.
@@ -239,7 +241,8 @@ class BiDiBackend(AbstractBackend):
             wait: Wait strategy (mapped to BiDi wait parameter).
         """
         client = self._require_launched()
-        
+        timeout_ms: int = wait.timeout if wait is not None else 30000
+
         # Map WaitStrategy to BiDi wait parameter
         # BiDi accepts: "none", "complete", "interactive"
         bidi_wait = "complete"  # default
@@ -251,6 +254,7 @@ class BiDiBackend(AbstractBackend):
             elif wait.strategy == "selector":
                 # For selector, we navigate first then wait separately
                 await client.browsing.navigate(self._context, url, wait="complete")
+                self._current_url = url
                 await self.wait_for(wait)
                 return
             else:
@@ -258,11 +262,12 @@ class BiDiBackend(AbstractBackend):
                     f"Unsupported wait strategy for BiDi navigate: {wait.strategy}. "
                     "Use 'load', 'domcontentloaded', or 'selector'."
                 )
-        
+
         try:
             await client.browsing.navigate(self._context, url, wait=bidi_wait)
+            self._current_url = url
         except TimeoutError:
-            raise WaitTimeoutError(wait.strategy if wait else "load", wait.timeout if wait else 30000) from None
+            raise WaitTimeoutError(wait.strategy if wait else "load", timeout_ms) from None
 
     async def screenshot(self, params: ScreenshotParams) -> bytes:
         """Take a screenshot via browsingContext.captureScreenshot.
@@ -291,10 +296,16 @@ class BiDiBackend(AbstractBackend):
                 else:
                     bidi_wait = "complete"
             
+            timeout_ms: int = params.wait.timeout if params.wait is not None else 30000
             try:
-                await client.browsing.navigate(self._context, params.url, wait=bidi_wait)
+                await client.browsing.navigate(
+                    self._context, params.url, wait=bidi_wait
+                )
             except TimeoutError:
-                raise WaitTimeoutError(params.wait.strategy if params.wait else "load", params.wait.timeout if params.wait else 30000) from None
+                raise WaitTimeoutError(
+                    params.wait.strategy if params.wait else "load",
+                    timeout_ms,
+                ) from None
         
         # Execute custom JS before screenshot if provided
         if params.js:
@@ -983,7 +994,7 @@ class BiDiBackend(AbstractBackend):
             self._context, params.url, wait="complete",
         )
         import asyncio as _asyncio
-        await _asyncio.sleep(params.wait / 1000)
+        await _asyncio.sleep(params.timeout / 1000)
         result = await client.cdp.send_command(
             "Network.getResponseBody", {"requestId": ""},
         )
@@ -2880,6 +2891,15 @@ class BiDiBackend(AbstractBackend):
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
         return json.loads(val) if isinstance(val, str) else list(val)
+
+    def _get_origin(self) -> str:
+        """Extract the security origin from the current page URL."""
+        if self._current_url:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(self._current_url)
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return ""
 
     async def cache_storage_delete(self, cache_name: str) -> None:
         """Delete a cache by name via JS Cache API.
