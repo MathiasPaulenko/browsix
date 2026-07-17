@@ -119,6 +119,48 @@ async def _tabs(action: str, url: str, tab_id: str) -> Any:
     finally:
         await _close_backend(backend)
 
+
+@app.command()
+def contexts(
+    action: str = typer.Argument(
+        "list", help="Context action: list, new, close, user-context"
+    ),
+    context_id: str = typer.Option("", "--context-id", "-c", help="Context ID for close"),
+) -> None:
+    """Manage browser contexts and user contexts."""
+    result = _run_async(_contexts(action, context_id))
+    if result is None:
+        return
+
+    if action == "list":
+        typer.echo(json.dumps(result, indent=2, default=str))
+    elif action == "new":
+        typer.echo(f"New context created: {result}")
+    elif action == "close":
+        typer.echo(f"Context closed: {context_id}")
+    elif action == "user-context":
+        typer.echo(f"New user context created: {result}")
+
+
+async def _contexts(action: str, context_id: str) -> Any:
+    """Async helper for context operations."""
+    backend = _get_backend()
+    try:
+        await backend.launch(_browser_options())
+        if action == "list":
+            return await backend.list_contexts()
+        if action == "new":
+            return await backend.new_context()
+        if action == "close":
+            await backend.close_context(context_id)
+            return None
+        if action == "user-context":
+            return await backend.new_user_context()
+        raise ValueError(f"Unknown context action: {action}")
+    finally:
+        await _close_backend(backend)
+
+
 @app.command()
 def console(
     url: str = typer.Argument(..., help="URL to navigate to"),

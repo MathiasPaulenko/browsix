@@ -1166,10 +1166,8 @@ class CDPBackend(AbstractBackend):
         Returns:
             The browser context ID string.
         """
-        self._require_session()
-        if self._client is None:
-            raise NavigationError("", "Client not initialized.")
-        result = await self._client.send("Target.createBrowserContext", {})
+        session = self._require_session()
+        result = await session.target.create_browser_context()
         return str(result.get("browserContextId", ""))
 
     async def list_contexts(self) -> list[dict[str, Any]]:
@@ -1179,7 +1177,7 @@ class CDPBackend(AbstractBackend):
             List of context info dicts.
         """
         session = self._require_session()
-        result = await session.send("Target.getBrowserContexts")
+        result = await session.target.get_browser_contexts()
         contexts = result.get("browserContextIds", [])
         return [{"contextId": ctx} for ctx in contexts]
 
@@ -1191,6 +1189,17 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
         await session.target.dispose_browser_context(context_id)
+
+    async def new_user_context(self) -> str:
+        """Create a new user context.
+
+        CDP does not have a direct user-context concept, so a new browser
+        context is created as the closest equivalent.
+
+        Returns:
+            The user/browser context ID string.
+        """
+        return await self.new_context()
 
     async def get_window_bounds(self) -> dict[str, Any]:
         """Get the current window bounds.

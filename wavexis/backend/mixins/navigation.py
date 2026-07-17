@@ -99,6 +99,10 @@ class NavigationBackend(ABC):
         """Close a browser context by ID."""
 
     @abstractmethod
+    async def new_user_context(self) -> str:
+        """Create a new user context and return its ID."""
+
+    @abstractmethod
     async def get_window_bounds(self) -> dict[str, Any]:
         """Get the current window bounds (width, height, x, y)."""
 

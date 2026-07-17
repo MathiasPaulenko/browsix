@@ -1090,27 +1090,29 @@ class BiDiBackend(AbstractBackend):
     async def new_context(self) -> str:
         """Create a new browsing context via browsingContext.create."""
         client = self._require_launched()
-        result = await client._connection.send_command(
-            "browsingContext.create",
-            {"type": "window"},
-        )
-        return str(result.get("context", ""))
+        result = await client.browsing.create_context(type="window")
+        return str(result.id)
 
     async def list_contexts(self) -> list[dict[str, Any]]:
         """List browsing contexts via browsingContext.getTree."""
         client = self._require_launched()
-        result = await client._connection.send_command(
-            "browsingContext.getTree", {}
-        )
-        return list(result.get("contexts", []))
+        result = await client.browsing.get_tree()
+        return [ctx.model_dump() for ctx in result.contexts]
 
     async def close_context(self, context_id: str) -> None:
         """Close a browsing context via browsingContext.close."""
         client = self._require_launched()
-        await client._connection.send_command(
-            "browsingContext.close",
-            {"context": context_id},
-        )
+        await client.browsing.close(context_id)
+
+    async def new_user_context(self) -> str:
+        """Create a new user context via browsingContext.createUserContext.
+
+        Returns:
+            The user context ID string.
+        """
+        client = self._require_launched()
+        result = await client.browsing.create_user_context()
+        return str(result.user_context)
 
     async def get_window_bounds(self) -> dict[str, Any]:
         """Get window bounds via browsingContext.getTree."""
