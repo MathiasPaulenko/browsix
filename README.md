@@ -13,7 +13,7 @@
 [![License](https://img.shields.io/github/license/MathiasPaulenko/wavexis.svg)](https://github.com/MathiasPaulenko/wavexis/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://mathiaspaulenko.github.io/wavexis/)
 
-> Browser automation CLI — wraps cdpwave and bidiwave. No Node.js, no Chromium download. Uses your existing Chrome/Edge. 100+ commands across CDP and BiDi backends with full parity.
+> Browser automation CLI — wraps cdpwave and bidiwave. No Node.js, no Chromium download. Uses your existing Chrome/Edge. 117 CLI commands, 743 backend methods, full CDP + BiDi parity.
 
 ## Why wavexis?
 
@@ -21,7 +21,7 @@ wavexis is a command-line tool for browser automation. It wraps the [cdpwave](ht
 
 ### Core concepts
 
-- **Backend** — The browser driver that executes commands. wavexis supports two backends with full feature parity: CDP (default, via cdpwave) and BiDi (via bidiwave). Both implement all 100+ methods, so you can switch with `--backend bidi` without losing functionality.
+- **Backend** — The browser driver that executes commands. wavexis supports two backends with full feature parity: CDP (default, via cdpwave) and BiDi (via bidiwave). Both implement all 743 methods across 60 CDP domains and 12 BiDi modules, so you can switch with `--backend bidi` without losing functionality.
 - **Action** — A single operation (screenshot, eval, click, etc.). Each action maps to a CLI command or a step in a multi-action YAML config.
 - **Multi-action** — A YAML config that chains multiple actions in sequence on a single browser session. Avoids the overhead of launching a browser per action.
 - **Serve mode** — An HTTP API server that exposes all wavexis commands as REST endpoints with WebSocket streaming for real-time events.
@@ -428,10 +428,10 @@ wavexis screenshot https://example.com -o out.png
 wavexis --backend bidi screenshot https://example.com -o out.png
 ```
 
-### Feature parity (v1.7.0)
+### Feature parity (v2.13.0)
 
-Both backends implement **all** methods. BiDi uses native BiDi commands, JS workarounds
-(`script.evaluate`), or the CDP bridge (`browser.cdp.sendCommand`) when needed.
+Both backends implement **all** 743 methods across 60 CDP domains and 12 BiDi modules. BiDi uses native BiDi commands, JS workarounds
+(`script.evaluate`), or the CDP bridge (`browser.cdp.sendCommand`) when needed. Zero uncovered methods.
 
 | Category | Methods | BiDi impl |
 |----------|---------|-----------|
@@ -467,10 +467,43 @@ Both backends implement **all** methods. BiDi uses native BiDi commands, JS work
 | Extensions | `extension_install`, `extension_uninstall`, `extension_list` | CDP bridge |
 | Preferences | `get_pref`, `set_pref` | CDP bridge |
 | Stealth | `stealth` JS injection on launch | JS |
+| Debugger | `debugger_pause`, `debugger_resume`, `debugger_step_into`, `debugger_step_over`, `debugger_step_out`, `debugger_set_breakpoint`, +27 more | CDP bridge |
+| Heap Profiler | `heap_profiler_take_heap_snapshot`, `heap_profiler_start_sampling`, +10 more | CDP bridge |
+| DOM Debugger | `dom_debugger_get_event_listeners`, `dom_debugger_set_breakpoint`, +8 more | CDP bridge |
+| DOM Storage | `dom_storage_clear`, `dom_storage_get_items`, +5 more | CDP bridge |
+| Event Breakpoints | `event_breakpoints_set`, `event_breakpoints_clear`, +2 more | CDP bridge |
+| FedCM | `fedcm_enable`, `fedcm_disable`, +5 more | CDP bridge |
+| Fetch | `fetch_enable`, `fetch_disable`, `fetch_continue_request`, +8 more | CDP bridge |
+| File System | `file_system_get_directory` | CDP bridge |
+| Headless | `headless_begin_frame`, `headless_disable`, `headless_enable` | CDP bridge |
+| IO | `io_read`, `io_write`, `io_close` | CDP bridge |
+| Layer Tree | `layer_tree_enable`, `layer_tree_disable`, +7 more | CDP bridge |
+| Log | `log_enable`, `log_disable`, `log_clear`, `log_start_violations`, `log_stop_violations` | CDP bridge |
+| Memory | `memory_get_sampling_profile`, `memory_start_sampling`, +9 more | CDP bridge |
+| Page | `page_enable`, `page_disable`, `page_reload`, +62 more | CDP bridge |
+| Profiler | `profiler_start`, `profiler_stop`, `profiler_get_profile`, +6 more | CDP bridge |
+| Runtime | `runtime_evaluate`, `runtime_compile_script`, `runtime_run_script`, +21 more | CDP bridge |
+| Schema | `schema_get_domains` | CDP bridge |
+| Sensor | `sensor_set_sensor_reading_enabled`, +3 more | CDP bridge |
+| Smart Card | `smart_card_emulation_enable`, `smart_card_emulation_disable`, +10 more | CDP bridge |
+| System Info | `system_info_get_info`, `system_info_get_process_info`, `system_info_get_feature_state` | CDP bridge |
+| Target | `target_create_target`, `target_close_target`, `target_get_targets`, +16 more | CDP bridge |
+| Tethering | `tethering_bind`, `tethering_unbind` | CDP bridge |
+| Tracing | `tracing_start`, `tracing_end`, `tracing_get_categories`, +3 more | CDP bridge |
+| WebMCP | `web_mcp_enable`, `web_mcp_disable` | CDP bridge |
+| Worker | `worker_created`, `worker_disconnected` | CDP bridge |
+| Crash Report | `crash_report_context_get_entries` | CDP bridge |
+| Device Access | `device_access_enable`, `device_access_disable`, `device_access_select_device`, `device_access_cancel_prompt` | CDP bridge |
+| Device Orientation | `device_orientation_set_orientation`, `device_orientation_clear_orientation` | CDP bridge |
+| Digital Credentials | `digital_credentials_get_credentials` | CDP bridge |
+| Inspector | `inspector_enable`, `inspector_disable` | CDP bridge |
+| Performance Timeline | `performance_timeline_enable` | CDP bridge |
+| Preload | `preload_enable`, `preload_disable` | CDP bridge |
+| PWA | `pwa_get_install_state`, `pwa_install`, `pwa_uninstall`, +4 more | CDP bridge |
 
 ## Commands
 
-wavexis provides 100+ CLI commands organized into categories:
+wavexis provides 117 CLI commands organized into categories:
 
 | Category | Commands |
 |----------|----------|
@@ -544,6 +577,12 @@ Run `wavexis --help` for the full list.
 | Accessibility audit | Yes | No | No |
 | WebSocket inspection | Yes | No | No |
 | Visual diff | Yes | No | No |
+| Full CDP domain coverage (60 domains) | Yes | No | No |
+| Heap profiler | Yes | No | No |
+| Smart card emulation | Yes | No | No |
+| System info | Yes | No | No |
+| Tethering | Yes | No | No |
+| WebMCP | Yes | No | No |
 
 ## Documentation
 
