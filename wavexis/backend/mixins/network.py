@@ -132,3 +132,49 @@ class NetworkBackend(ABC):
             username: Username to provide. If None, auth is canceled.
             password: Password to provide.
         """
+
+    @abstractmethod
+    async def network_clear_browser_cache(self) -> None:
+        """Clear the browser cache."""
+
+    @abstractmethod
+    async def network_clear_browser_cookies(self) -> None:
+        """Clear all browser cookies."""
+
+    @abstractmethod
+    async def network_delete_cookies(self, name: str, domain: str = "") -> None:
+        """Delete cookies by name and optional domain."""
+
+    @abstractmethod
+    async def network_set_blocked_urls(self, urls: list[str]) -> None:
+        """Block requests to specific URLs."""
+
+    @abstractmethod
+    async def network_set_bypass_service_worker(self, bypass: bool) -> None:
+        """Bypass the service worker for all network requests."""
+
+    @abstractmethod
+    async def network_set_cookie_controls(
+        self, mode: str = "allow", third_party_mode: str = "allow"
+    ) -> None:
+        """Set cookie controls (allow, block, only-existing)."""
+
+    @abstractmethod
+    async def network_set_extra_request_headers(self, headers: dict[str, str]) -> None:
+        """Set extra HTTP headers for all requests."""
+
+    @abstractmethod
+    async def network_set_user_agent_override(
+        self, user_agent: str, accept_language: str = "", platform: str = ""
+    ) -> None:
+        """Override the User-Agent string with metadata."""
+
+    @abstractmethod
+    async def network_replay_xhr(self, request_id: str) -> None:
+        """Replay a previously captured XHR request by ID."""
+
+    @abstractmethod
+    async def network_load_network_resource(
+        self, frame_id: str, url: str, options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Load a network resource outside the context of a page."""

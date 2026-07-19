@@ -39,6 +39,11 @@ def _make_bidi_backend() -> Any:
     backend._client.cdp.off = MagicMock()
     backend._client.script = MagicMock()
     backend._client.script.evaluate = AsyncMock()
+    backend._client.network = MagicMock()
+    backend._client.network.add_intercept = AsyncMock()
+    backend._client.network.continue_request = AsyncMock()
+    backend._client.network.continue_response = AsyncMock()
+    backend._client.network.response_body = AsyncMock(return_value=MagicMock(body="response body"))
     return backend
 
 
@@ -83,8 +88,8 @@ class TestRequestBodyCapture:
 
     def test_bidi_get_response_body(self) -> None:
         backend = _make_bidi_backend()
-        backend._client.cdp.send_command = AsyncMock(
-            return_value={"body": "response body"}
+        backend._client.network.response_body = AsyncMock(
+            return_value=MagicMock(body="response body")
         )
         result = asyncio.run(backend.get_response_body("req-1"))
         assert result == "response body"
@@ -109,9 +114,7 @@ class TestModifyRequest:
         pattern = {"urlPattern": "*api*"}
         modifications = {"method": "POST"}
         asyncio.run(backend.modify_request(pattern, modifications))
-        backend._client.cdp.send_command.assert_called_with(
-            "Fetch.enable", {"patterns": [pattern]}
-        )
+        backend._client.network.add_intercept.assert_called_once()
 
 
 # ── W7: HAR replay ─────────────────────────────────────

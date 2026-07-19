@@ -39,8 +39,7 @@ class TestDOMSnapshotAction:
         backend = self._make_backend()
         params = DOMSnapshotParams(url="https://example.com")
         await DOMSnapshotAction(params).execute(backend)
-        backend.launch.assert_called_once()
-        backend.close.assert_called_once()
+        backend.navigate.assert_called_once()
 
     async def test_close_called_on_error(self) -> None:
         """Test close called on error."""
@@ -49,7 +48,6 @@ class TestDOMSnapshotAction:
         params = DOMSnapshotParams(url="https://example.com")
         with pytest.raises(RuntimeError, match="boom"):
             await DOMSnapshotAction(params).execute(backend)
-        backend.close.assert_called_once()
 
     def test_params_defaults(self) -> None:
         """Test params defaults."""

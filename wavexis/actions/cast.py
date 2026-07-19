@@ -16,8 +16,10 @@ class CastParams:
 
     Attributes:
         url: URL to navigate to before Cast operations.
-        action: Cast action — "list", "start-tab", "stop".
-        sink_name: Cast sink name for "start-tab" action.
+        action: Cast action — "list", "start-tab", "stop", "enable",
+            "disable", "set-sink", "start-desktop-mirroring",
+            "start-tab-mirroring", "stop-casting".
+        sink_name: Cast sink name for sink-based actions.
         wait: Wait strategy after navigation.
         browser: Browser launch options.
     """
@@ -57,6 +59,42 @@ class CastAction(BaseAction[CastParams, Any]):
 
         if action == "stop":
             await backend.cast_stop()
+            return None
+
+        if action == "enable":
+            await backend.cast_enable()
+            return None
+
+        if action == "disable":
+            await backend.cast_disable()
+            return None
+
+        if action == "set-sink":
+            if not self.params.sink_name:
+                raise ValueError("sink_name is required for set-sink action")
+            await backend.cast_set_sink_to_use(self.params.sink_name)
+            return None
+
+        if action == "start-desktop-mirroring":
+            if not self.params.sink_name:
+                raise ValueError(
+                    "sink_name is required for start-desktop-mirroring action"
+                )
+            await backend.cast_start_desktop_mirroring(self.params.sink_name)
+            return None
+
+        if action == "start-tab-mirroring":
+            if not self.params.sink_name:
+                raise ValueError(
+                    "sink_name is required for start-tab-mirroring action"
+                )
+            await backend.cast_start_tab_mirroring(self.params.sink_name)
+            return None
+
+        if action == "stop-casting":
+            if not self.params.sink_name:
+                raise ValueError("sink_name is required for stop-casting action")
+            await backend.cast_stop_casting(self.params.sink_name)
             return None
 
         raise ValueError(f"Unknown Cast action: {action}")

@@ -16,7 +16,7 @@ class WebAudioParams:
 
     Attributes:
         url: URL to navigate to before WebAudio operations.
-        action: WebAudio action — "list", "get".
+        action: WebAudio action — "list", "get", "enable", "disable", "get-realtime-data".
         context_id: Audio context ID for "get" action.
         wait: Wait strategy after navigation.
         browser: Browser launch options.
@@ -53,5 +53,18 @@ class WebAudioAction(BaseAction[WebAudioParams, Any]):
             if not self.params.context_id:
                 raise ValueError("context_id is required for get action")
             return await backend.webaudio_get_context(self.params.context_id)
+
+        if action == "enable":
+            await backend.webaudio_enable()
+            return None
+
+        if action == "disable":
+            await backend.webaudio_disable()
+            return None
+
+        if action == "get-realtime-data":
+            if not self.params.context_id:
+                raise ValueError("context_id is required for get-realtime-data action")
+            return await backend.webaudio_get_realtime_data(self.params.context_id)
 
         raise ValueError(f"Unknown WebAudio action: {action}")

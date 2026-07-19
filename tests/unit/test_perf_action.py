@@ -108,8 +108,7 @@ class TestPerformanceAction:
         backend = self._make_backend()
         params = PerformanceParams(url="https://example.com", action="metrics")
         await PerformanceAction(params).execute(backend)
-        backend.launch.assert_called_once()
-        backend.close.assert_called_once()
+        backend.navigate.assert_called_once()
 
     async def test_close_called_on_error(self) -> None:
         """Test close called on error."""
@@ -118,7 +117,6 @@ class TestPerformanceAction:
         params = PerformanceParams(url="https://example.com", action="metrics")
         with pytest.raises(RuntimeError, match="boom"):
             await PerformanceAction(params).execute(backend)
-        backend.close.assert_called_once()
 
     def test_params_defaults(self) -> None:
         """Test params defaults."""

@@ -428,6 +428,441 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         await session.page.stop()
 
+    # ── Page lifecycle ─────────────────────────────────────
+
+    async def page_get_frame_tree(self) -> dict[str, Any]:
+        """Get the current page frame tree."""
+        session = self._require_session()
+        return dict(await session.page.get_frame_tree())
+
+    async def page_get_layout_metrics(self) -> dict[str, Any]:
+        """Get page layout metrics (viewport, content size, etc.)."""
+        session = self._require_session()
+        return dict(await session.page.get_layout_metrics())
+
+    async def page_get_navigation_history(self) -> dict[str, Any]:
+        """Get the navigation history for the current page."""
+        session = self._require_session()
+        return dict(await session.page.get_navigation_history())
+
+    async def page_navigate_to_history_entry(self, entry_id: int) -> None:
+        """Navigate to a specific history entry by ID."""
+        session = self._require_session()
+        await session.page.navigate_to_history_entry(entry_id)
+
+    async def page_bring_to_front(self) -> None:
+        """Bring the current page to the foreground."""
+        session = self._require_session()
+        await session.page.bring_to_front()
+
+    async def page_wait_for_debugger(self) -> None:
+        """Wait for the debugger to attach."""
+        session = self._require_session()
+        await session.page.wait_for_debugger()
+
+    async def page_get_resource_content(
+        self, frame_id: str, url: str
+    ) -> dict[str, Any]:
+        """Get the content of a page resource by frame ID and URL."""
+        session = self._require_session()
+        return dict(await session.page.get_resource_content(frame_id, url))
+
+    async def page_set_download_behavior(
+        self, behavior: str, download_path: str = ""
+    ) -> None:
+        """Set page download behavior (allow/deny and path)."""
+        session = self._require_session()
+        params: dict[str, Any] = {"behavior": behavior}
+        if download_path:
+            params["downloadPath"] = download_path
+        await session.page.set_download_behavior(**params)
+
+    async def page_capture_snapshot(self, format: str = "mhtml") -> str:
+        """Capture a snapshot of the page as MHTML or text."""
+        session = self._require_session()
+        result = await session.page.capture_snapshot(format=format)
+        return str(result.get("data", ""))
+
+    async def page_print_to_pdf(
+        self,
+        landscape: bool = False,
+        display_header_footer: bool = False,
+        print_background: bool = False,
+        scale: float = 1.0,
+        paper_width: float = 8.5,
+        paper_height: float = 11.0,
+        margin_top: float = 0.4,
+        margin_bottom: float = 0.4,
+        margin_left: float = 0.4,
+        margin_right: float = 0.4,
+    ) -> str:
+        """Print the page to PDF and return base64-encoded data."""
+        session = self._require_session()
+        result = await session.page.print_to_pdf(
+            landscape=landscape,
+            displayHeaderFooter=display_header_footer,
+            printBackground=print_background,
+            scale=scale,
+            paperWidth=paper_width,
+            paperHeight=paper_height,
+            marginTop=margin_top,
+            marginBottom=margin_bottom,
+            marginLeft=margin_left,
+            marginRight=margin_right,
+        )
+        return str(result.get("data", ""))
+
+    async def page_start_screencast(
+        self, format: str = "jpeg", quality: int = 80, max_width: int = 0, max_height: int = 0
+    ) -> None:
+        """Start screencasting the page."""
+        session = self._require_session()
+        await session.page.start_screencast(
+            format=format, quality=quality, maxWidth=max_width, maxHeight=max_height
+        )
+
+    async def page_stop_screencast(self) -> None:
+        """Stop screencasting the page."""
+        session = self._require_session()
+        await session.page.stop_screencast()
+
+    async def page_set_bypass_csp(self, enabled: bool) -> None:
+        """Enable or disable CSP bypass for the page."""
+        session = self._require_session()
+        await session.page.set_bypass_csp(enabled)
+
+    async def page_set_ad_blocking_enabled(self, enabled: bool) -> None:
+        """Enable or disable ad blocking for the page."""
+        session = self._require_session()
+        await session.page.set_ad_blocking_enabled(enabled)
+
+    async def page_add_script_to_evaluate_on_new_document(
+        self, source: str, world_name: str = ""
+    ) -> str:
+        """Add a script to evaluate on every new document. Returns script ID."""
+        session = self._require_session()
+        params: dict[str, Any] = {"source": source}
+        if world_name:
+            params["worldName"] = world_name
+        result = await session.page.add_script_to_evaluate_on_new_document(**params)
+        return str(result.get("identifier", ""))
+
+    async def page_remove_script_to_evaluate_on_new_document(
+        self, script_id: str
+    ) -> None:
+        """Remove a previously added script by ID."""
+        session = self._require_session()
+        await session.page.remove_script_to_evaluate_on_new_document(
+            identifier=script_id
+        )
+
+    async def page_generate_test_report(self, message: str, group: str = "") -> None:
+        """Generate a test report for the Reporting API."""
+        session = self._require_session()
+        params: dict[str, Any] = {"message": message}
+        if group:
+            params["group"] = group
+        await session.page.generate_test_report(**params)
+
+    async def page_get_app_manifest(self) -> dict[str, Any]:
+        """Get the web app manifest for the current page."""
+        session = self._require_session()
+        return dict(await session.page.get_app_manifest())
+
+    async def page_get_resource_tree(self) -> dict[str, Any]:
+        """Get the resource tree for the current page."""
+        session = self._require_session()
+        return dict(await session.page.get_resource_tree())
+
+    async def page_add_compilation_cache(
+        self, url: str, data: str
+    ) -> None:
+        """Add data to the compilation cache for the given URL."""
+        session = self._require_session()
+        await session.send("Page.addCompilationCache", {"url": url, "data": data})
+
+    async def page_add_script_to_evaluate_on_load(
+        self, source: str
+    ) -> str:
+        """Add a script to evaluate on page load. Returns script ID."""
+        session = self._require_session()
+        result = await session.send("Page.addScriptToEvaluateOnLoad", {"source": source})
+        return str(result.get("identifier", "")) if result else ""
+
+    async def page_capture_screenshot(
+        self,
+        format: str = "png",
+        quality: int = 80,
+        clip: dict[str, Any] | None = None,
+        from_surface: bool = True,
+        capture_beyond_viewport: bool = False,
+    ) -> str:
+        """Capture a screenshot of the page. Returns base64-encoded data."""
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "format": format,
+            "quality": quality,
+            "fromSurface": from_surface,
+            "captureBeyondViewport": capture_beyond_viewport,
+        }
+        if clip is not None:
+            params["clip"] = clip
+        result = await session.send("Page.captureScreenshot", params)
+        return str(result.get("data", "")) if result else ""
+
+    async def page_clear_compilation_cache(self) -> None:
+        """Clear the compilation cache."""
+        session = self._require_session()
+        await session.send("Page.clearCompilationCache", {})
+
+    async def page_clear_device_orientation_override(self) -> None:
+        """Clear the device orientation override."""
+        session = self._require_session()
+        await session.send("Page.clearDeviceOrientationOverride", {})
+
+    async def page_clear_geolocation_override(self) -> None:
+        """Clear the geolocation overrides."""
+        session = self._require_session()
+        await session.send("Page.clearGeolocationOverride", {})
+
+    async def page_crash(self) -> None:
+        """Crash the renderer."""
+        session = self._require_session()
+        await session.send("Page.crash", {})
+
+    async def page_create_isolated_world(
+        self, frame_id: str, world_name: str = "", grant_univeral_access: bool = False
+    ) -> str:
+        """Create an isolated world for the given frame. Returns execution context ID."""
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "frameId": frame_id,
+            "grantUniveralAccess": grant_univeral_access,
+        }
+        if world_name:
+            params["worldName"] = world_name
+        result = await session.send("Page.createIsolatedWorld", params)
+        return str(result.get("executionContextId", "")) if result else ""
+
+    async def page_disable(self) -> None:
+        """Disable the page domain."""
+        session = self._require_session()
+        await session.send("Page.disable", {})
+
+    async def page_enable(self) -> None:
+        """Enable the page domain."""
+        session = self._require_session()
+        await session.send("Page.enable", {})
+
+    async def page_get_ad_script_ancestry(
+        self, frame_id: str
+    ) -> dict[str, Any]:
+        """Get the ad script ancestry for a frame."""
+        session = self._require_session()
+        result = await session.send("Page.getAdScriptAncestry", {"frameId": frame_id})
+        return dict(result) if result else {}
+
+    async def page_get_annotated_page_content(self) -> dict[str, Any]:
+        """Get annotated page content."""
+        session = self._require_session()
+        result = await session.send("Page.getAnnotatedPageContent", {})
+        return dict(result) if result else {}
+
+    async def page_get_app_id(self) -> dict[str, Any]:
+        """Get the app ID for the current page."""
+        session = self._require_session()
+        result = await session.send("Page.getAppId", {})
+        return dict(result) if result else {}
+
+    async def page_get_installability_errors(self) -> dict[str, Any]:
+        """Get installability errors for the current page."""
+        session = self._require_session()
+        result = await session.send("Page.getInstallabilityErrors", {})
+        return dict(result) if result else {}
+
+    async def page_get_manifest_icons(self) -> dict[str, Any]:
+        """Get manifest icons for the current page."""
+        session = self._require_session()
+        result = await session.send("Page.getManifestIcons", {})
+        return dict(result) if result else {}
+
+    async def page_get_origin_trials(self) -> dict[str, Any]:
+        """Get origin trials for the current page."""
+        session = self._require_session()
+        result = await session.send("Page.getOriginTrials", {})
+        return dict(result) if result else {}
+
+    async def page_get_permissions_policy_state(
+        self, frame_id: str
+    ) -> dict[str, Any]:
+        """Get permissions policy state for a frame."""
+        session = self._require_session()
+        result = await session.send("Page.getPermissionsPolicyState", {"frameId": frame_id})
+        return dict(result) if result else {}
+
+    async def page_handle_java_script_dialog(
+        self, accept: bool, prompt_text: str = ""
+    ) -> None:
+        """Handle a JavaScript dialog (alias for handle_javascript_dialog)."""
+        session = self._require_session()
+        params: dict[str, Any] = {"accept": accept}
+        if prompt_text:
+            params["promptText"] = prompt_text
+        await session.send("Page.handleJavaScriptDialog", params)
+
+    async def page_handle_javascript_dialog(
+        self, accept: bool, prompt_text: str = ""
+    ) -> None:
+        """Handle a JavaScript dialog."""
+        session = self._require_session()
+        params: dict[str, Any] = {"accept": accept}
+        if prompt_text:
+            params["promptText"] = prompt_text
+        await session.send("Page.handleJavaScriptDialog", params)
+
+    async def page_produce_compilation_cache(
+        self, url: str
+    ) -> dict[str, Any]:
+        """Produce compilation cache for the given URL."""
+        session = self._require_session()
+        result = await session.send("Page.produceCompilationCache", {"url": url})
+        return dict(result) if result else {}
+
+    async def page_remove_script_to_evaluate_on_load(
+        self, script_id: str
+    ) -> None:
+        """Remove a script previously added to evaluate on load."""
+        session = self._require_session()
+        await session.send("Page.removeScriptToEvaluateOnLoad", {"identifier": script_id})
+
+    async def page_reset_navigation_history(self) -> None:
+        """Reset the navigation history."""
+        session = self._require_session()
+        await session.send("Page.resetNavigationHistory", {})
+
+    async def page_screencast_frame_ack(
+        self, session_id: int
+    ) -> None:
+        """Acknowledge a screencast frame."""
+        session = self._require_session()
+        await session.send("Page.screencastFrameAck", {"sessionId": session_id})
+
+    async def page_search_in_resource(
+        self,
+        frame_id: str,
+        url: str,
+        query: str,
+        case_sensitive: bool = False,
+        is_regex: bool = False,
+    ) -> dict[str, Any]:
+        """Search for a string in a resource."""
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "frameId": frame_id,
+            "url": url,
+            "query": query,
+            "caseSensitive": case_sensitive,
+            "isRegex": is_regex,
+        }
+        result = await session.send("Page.searchInResource", params)
+        return dict(result) if result else {}
+
+    async def page_set_device_orientation_override(
+        self, alpha: float, beta: float, gamma: float
+    ) -> None:
+        """Override the device orientation."""
+        session = self._require_session()
+        await session.send("Page.setDeviceOrientationOverride", {
+            "alpha": alpha, "beta": beta, "gamma": gamma
+        })
+
+    async def page_set_document_content(
+        self, frame_id: str, html: str
+    ) -> None:
+        """Set the document content for a frame."""
+        session = self._require_session()
+        await session.send("Page.setDocumentContent", {"frameId": frame_id, "html": html})
+
+    async def page_set_font_families(
+        self, font_families: dict[str, Any]
+    ) -> None:
+        """Set font families for the page."""
+        session = self._require_session()
+        await session.send("Page.setFontFamilies", {"fontFamilies": font_families})
+
+    async def page_set_font_sizes(
+        self, font_sizes: dict[str, Any]
+    ) -> None:
+        """Set font sizes for the page."""
+        session = self._require_session()
+        await session.send("Page.setFontSizes", {"fontSizes": font_sizes})
+
+    async def page_set_geolocation_override(
+        self, latitude: float = 0.0, longitude: float = 0.0, accuracy: float = 0.0
+    ) -> None:
+        """Override the geolocation."""
+        session = self._require_session()
+        await session.send("Page.setGeolocationOverride", {
+            "latitude": latitude, "longitude": longitude, "accuracy": accuracy
+        })
+
+    async def page_set_intercept_file_chooser_dialog(
+        self, enabled: bool
+    ) -> None:
+        """Intercept file chooser dialogs."""
+        session = self._require_session()
+        await session.send("Page.setInterceptFileChooserDialog", {"enabled": enabled})
+
+    async def page_set_lifecycle_events_enabled(
+        self, enabled: bool
+    ) -> None:
+        """Enable or disable lifecycle events."""
+        session = self._require_session()
+        await session.send("Page.setLifecycleEventsEnabled", {"enabled": enabled})
+
+    async def page_set_prerendering_allowed(
+        self, is_allowed: bool
+    ) -> None:
+        """Set whether prerendering is allowed."""
+        session = self._require_session()
+        await session.send("Page.setPrerenderingAllowed", {"isAllowed": is_allowed})
+
+    async def page_set_rph_registration_mode(
+        self, mode: str
+    ) -> None:
+        """Set the RPH registration mode."""
+        session = self._require_session()
+        await session.send("Page.setRPHRegistrationMode", {"mode": mode})
+
+    async def page_set_spc_transaction_mode(
+        self, mode: str
+    ) -> None:
+        """Set the SPC transaction mode."""
+        session = self._require_session()
+        await session.send("Page.setSPCTransactionMode", {"mode": mode})
+
+    async def page_set_touch_emulation_enabled(
+        self, enabled: bool, configuration: str = ""
+    ) -> None:
+        """Enable or disable touch emulation."""
+        session = self._require_session()
+        params: dict[str, Any] = {"enabled": enabled}
+        if configuration:
+            params["configuration"] = configuration
+        await session.send("Page.setTouchEmulationEnabled", params)
+
+    async def page_set_web_lifecycle_state(
+        self, state: str
+    ) -> None:
+        """Set the web lifecycle state."""
+        session = self._require_session()
+        await session.send("Page.setWebLifecycleState", {"state": state})
+
+    async def page_stop(self) -> None:
+        """Stop all page loading."""
+        session = self._require_session()
+        await session.send("Page.stop", {})
+
     async def wait_for(self, strategy: WaitStrategy) -> None:
         """Wait for a specific condition.
 
@@ -788,6 +1223,332 @@ class CDPBackend(AbstractBackend):
         else:
             js = f"window.scrollBy({x}, {y})"
         await session.runtime.evaluate(js)
+
+    async def dom_get_document(self) -> dict[str, Any]:
+        """Get the document root node."""
+        session = self._require_session()
+        await session.dom.enable()
+        return dict(await session.dom.get_document())
+
+    async def dom_get_flattened_document(self) -> dict[str, Any]:
+        """Get the flattened document tree."""
+        session = self._require_session()
+        await session.dom.enable()
+        return dict(await session.dom.get_flattened_document())
+
+    async def dom_get_box_model(self, selector: str) -> dict[str, Any]:
+        """Get the box model for an element matching a CSS selector."""
+        session = self._require_session()
+        node_id = await self._find_node(selector)
+        return dict(await session.dom.get_box_model(node_id))
+
+    async def dom_get_content_quads(
+        self, selector: str
+    ) -> list[dict[str, Any]]:
+        """Get the content quads for an element matching a CSS selector."""
+        session = self._require_session()
+        node_id = await self._find_node(selector)
+        result = await session.dom.get_content_quads(node_id)
+        return list(result.get("quads", []))
+
+    async def dom_get_node_for_location(
+        self, x: int, y: int
+    ) -> dict[str, Any]:
+        """Get the node ID for a location in the viewport (hit testing)."""
+        session = self._require_session()
+        await session.dom.enable()
+        return dict(await session.dom.get_node_for_location(x, y))
+
+    async def dom_perform_search(self, query: str) -> dict[str, Any]:
+        """Search the DOM for the given query string."""
+        session = self._require_session()
+        await session.dom.enable()
+        return dict(await session.dom.perform_search(query))
+
+    async def dom_get_search_results(
+        self, search_id: str, from_index: int = 0, to_index: int = 0
+    ) -> list[dict[str, Any]]:
+        """Get search results for a DOM search session."""
+        session = self._require_session()
+        result = await session.dom.get_search_results(
+            search_id, from_index, to_index
+        )
+        return list(result.get("nodeIds", []))
+
+    async def dom_scroll_into_view_if_needed(self, selector: str) -> None:
+        """Scroll an element matching a CSS selector into view if needed."""
+        session = self._require_session()
+        node_id = await self._find_node(selector)
+        await session.dom.scroll_into_view_if_needed(node_id)
+
+    async def dom_describe_node(self, node_id: int) -> dict[str, Any]:
+        """Describe a DOM node by node ID."""
+        session = self._require_session()
+        result = await session.dom.describe_node(node_id=node_id)
+        return dict(result) if result else {}
+
+    async def dom_get_outer_html(self, node_id: int) -> str:
+        """Get the outer HTML of a node by ID."""
+        session = self._require_session()
+        result = await session.dom.get_outer_html(node_id=node_id)
+        return str(result.get("outerHTML", ""))
+
+    async def dom_remove_node(self, node_id: int) -> None:
+        """Remove a node from the DOM by ID."""
+        session = self._require_session()
+        await session.dom.remove_node(node_id=node_id)
+
+    async def dom_set_node_value(self, node_id: int, value: str) -> None:
+        """Set the value of a node by ID."""
+        session = self._require_session()
+        await session.dom.set_node_value(node_id=node_id, value=value)
+
+    async def dom_set_outer_html(self, node_id: int, outer_html: str) -> None:
+        """Set the outer HTML of a node by ID."""
+        session = self._require_session()
+        await session.dom.set_outer_html(node_id=node_id, outer_html=outer_html)
+
+    async def dom_request_node(self, node_id: int) -> int:
+        """Request a node by ID and return its node ID."""
+        session = self._require_session()
+        result = await session.dom.request_node(node_id=node_id)
+        return int(result.get("nodeId", 0))
+
+    async def dom_resolve_node(self, node_id: int) -> dict[str, Any]:
+        """Resolve a node to a remote object."""
+        session = self._require_session()
+        result = await session.dom.resolve_node(node_id=node_id)
+        return dict(result) if result else {}
+
+    async def dom_set_attribute_value(self, node_id: int, name: str, value: str) -> None:
+        """Set an attribute value on a node by ID."""
+        session = self._require_session()
+        await session.dom.set_attribute_value(node_id=node_id, name=name, value=value)
+
+    async def dom_remove_attribute(self, node_id: int, name: str) -> None:
+        """Remove an attribute from a node by ID."""
+        session = self._require_session()
+        await session.dom.remove_attribute(node_id=node_id, name=name)
+
+    async def dom_request_child_nodes(self, node_id: int, depth: int = -1) -> None:
+        """Request child nodes of a node by ID."""
+        session = self._require_session()
+        await session.dom.request_child_nodes(node_id=node_id, depth=depth)
+
+    async def dom_collect_class_names_from_subtree(self, node_id: int) -> list[str]:
+        """Collect class names from the subtree of a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.collectClassNamesFromSubtree", {"nodeId": node_id})
+        return list(result.get("classNames", [])) if result else []
+
+    async def dom_copy_to(self, node_id: int, target_node_id: int, insert_before_node_id: int | None = None) -> None:
+        """Copy a node to a target node, optionally before another node."""
+        session = self._require_session()
+        params: dict[str, Any] = {"nodeId": node_id, "targetNodeId": target_node_id}
+        if insert_before_node_id is not None:
+            params["insertBeforeNodeId"] = insert_before_node_id
+        await session.send("DOM.copyTo", params)
+
+    async def dom_disable(self) -> None:
+        """Disable the DOM agent."""
+        session = self._require_session()
+        await session.send("DOM.disable", {})
+
+    async def dom_discard_search_results(self, search_id: str) -> None:
+        """Discard search results for a DOM search session."""
+        session = self._require_session()
+        await session.send("DOM.discardSearchResults", {"searchId": search_id})
+
+    async def dom_enable(self) -> None:
+        """Enable the DOM agent."""
+        session = self._require_session()
+        await session.send("DOM.enable", {})
+
+    async def dom_focus_node(self, node_id: int) -> None:
+        """Focus a node by ID."""
+        session = self._require_session()
+        await session.send("DOM.focus", {"nodeId": node_id})
+
+    async def dom_force_show_popover(self, node_id: int) -> None:
+        """Force show a popover for a node by ID."""
+        session = self._require_session()
+        await session.send("DOM.forceShowPopover", {"nodeId": node_id})
+
+    async def dom_get_anchor_element(self, node_id: int) -> dict[str, Any]:
+        """Get the anchor element for a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getAnchorElement", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def dom_get_node_attribute(self, node_id: int, name: str) -> str:
+        """Get an attribute value from a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getAttribute", {"nodeId": node_id, "name": name})
+        return str(result.get("value", "")) if result else ""
+
+    async def dom_get_container_for_node(self, node_id: int, container_name: str | None = None) -> dict[str, Any]:
+        """Get the container for a node by ID."""
+        session = self._require_session()
+        params: dict[str, Any] = {"nodeId": node_id}
+        if container_name is not None:
+            params["containerName"] = container_name
+        result = await session.send("DOM.getContainerForNode", params)
+        return dict(result) if result else {}
+
+    async def dom_get_detached_dom_nodes(self) -> list[dict[str, Any]]:
+        """Get detached DOM nodes."""
+        session = self._require_session()
+        result = await session.send("DOM.getDetachedDomNodes", {})
+        return list(result.get("detachedNodes", [])) if result else []
+
+    async def dom_get_element_by_relation(self, node_id: int, relation: str) -> dict[str, Any]:
+        """Get an element by relation from a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getElementByRelation", {"nodeId": node_id, "relation": relation})
+        return dict(result) if result else {}
+
+    async def dom_get_file_info(self, node_id: int) -> dict[str, Any]:
+        """Get file info for a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getFileInfo", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def dom_get_frame_owner(self, frame_id: str) -> dict[str, Any]:
+        """Get the frame owner node for a frame ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getFrameOwner", {"frameId": frame_id})
+        return dict(result) if result else {}
+
+    async def dom_get_node_stack_traces(self, node_id: int) -> dict[str, Any]:
+        """Get stack traces for a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getNodeStackTraces", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def dom_get_nodes_for_subtree_by_style(self, node_id: int, computed_styles: list[str], pierce: bool = False) -> list[dict[str, Any]]:
+        """Get nodes in a subtree matching the given computed styles."""
+        session = self._require_session()
+        result = await session.send("DOM.getNodesForSubtreeByStyle", {"nodeId": node_id, "computedStyles": computed_styles, "pierce": pierce})
+        return list(result.get("nodeIds", [])) if result else []
+
+    async def dom_get_querying_descendants_for_container(self, node_id: int) -> list[dict[str, Any]]:
+        """Get querying descendants for a container node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getQueryingDescendantsForContainer", {"nodeId": node_id})
+        return list(result.get("nodeIds", [])) if result else []
+
+    async def dom_get_relayout_boundary(self, node_id: int) -> dict[str, Any]:
+        """Get the relayout boundary for a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.getRelayoutBoundary", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def dom_get_top_layer_elements(self) -> list[dict[str, Any]]:
+        """Get top layer elements."""
+        session = self._require_session()
+        result = await session.send("DOM.getTopLayerElements", {})
+        return list(result.get("nodes", [])) if result else []
+
+    async def dom_hide_highlight(self) -> None:
+        """Hide any DOM highlight."""
+        session = self._require_session()
+        await session.send("DOM.hideHighlight", {})
+
+    async def dom_highlight_node(self, node_id: int, highlight_config: dict[str, Any]) -> None:
+        """Highlight a node by ID with the given highlight config."""
+        session = self._require_session()
+        await session.send("DOM.highlightNode", {"highlightConfig": highlight_config, "nodeId": node_id})
+
+    async def dom_highlight_rect(self, x: int, y: int, width: int, height: int, highlight_config: dict[str, Any]) -> None:
+        """Highlight a rect with the given highlight config."""
+        session = self._require_session()
+        await session.send("DOM.highlightRect", {
+            "highlightConfig": highlight_config,
+            "rect": {"x": x, "y": y, "width": width, "height": height},
+        })
+
+    async def dom_mark_undoable_state(self) -> None:
+        """Mark an undoable state in the DOM."""
+        session = self._require_session()
+        await session.send("DOM.markUndoableState", {})
+
+    async def dom_move_to(self, node_id: int, target_node_id: int, insert_before_node_id: int | None = None) -> None:
+        """Move a node to a target node, optionally before another node."""
+        session = self._require_session()
+        params: dict[str, Any] = {"nodeId": node_id, "targetNodeId": target_node_id}
+        if insert_before_node_id is not None:
+            params["insertBeforeNodeId"] = insert_before_node_id
+        await session.send("DOM.moveTo", params)
+
+    async def dom_push_node_by_path_to_frontend(self, path: str) -> dict[str, Any]:
+        """Push a node by path to frontend."""
+        session = self._require_session()
+        result = await session.send("DOM.pushNodeByPathToFrontend", {"path": path})
+        return dict(result) if result else {}
+
+    async def dom_push_nodes_by_backend_ids_to_frontend(self, backend_node_ids: list[int]) -> dict[str, Any]:
+        """Push nodes by backend IDs to frontend."""
+        session = self._require_session()
+        result = await session.send("DOM.pushNodesByBackendIdsToFrontend", {"backendNodeIds": backend_node_ids})
+        return dict(result) if result else {}
+
+    async def dom_query_selector(self, node_id: int, selector: str) -> dict[str, Any]:
+        """Query a single selector within a node's subtree."""
+        session = self._require_session()
+        result = await session.send("DOM.querySelector", {"nodeId": node_id, "selector": selector})
+        return dict(result) if result else {}
+
+    async def dom_query_selector_all(self, node_id: int, selector: str) -> list[dict[str, Any]]:
+        """Query all selectors within a node's subtree."""
+        session = self._require_session()
+        result = await session.send("DOM.querySelectorAll", {"nodeId": node_id, "selector": selector})
+        return list(result.get("nodes", [])) if result else []
+
+    async def dom_redo(self) -> None:
+        """Redo the last DOM action."""
+        session = self._require_session()
+        await session.send("DOM.redo", {})
+
+    async def dom_remove_node_by_id(self, node_id: int) -> None:
+        """Remove a node from the DOM by ID."""
+        session = self._require_session()
+        await session.send("DOM.removeNode", {"nodeId": node_id})
+
+    async def dom_set_attributes_as_text(self, node_id: int, text: str) -> None:
+        """Set attributes on a node from a text string."""
+        session = self._require_session()
+        await session.send("DOM.setAttributesAsText", {"nodeId": node_id, "text": text})
+
+    async def dom_set_file_input_files(self, node_id: int, files: list[str]) -> None:
+        """Set files for a file input node by ID."""
+        session = self._require_session()
+        await session.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": files})
+
+    async def dom_set_inspected_node(self, node_id: int) -> None:
+        """Set the inspected node by ID."""
+        session = self._require_session()
+        await session.send("DOM.setInspectedNode", {"nodeId": node_id})
+
+    async def dom_set_node_name(self, node_id: int, name: str) -> dict[str, Any]:
+        """Set the name of a node by ID."""
+        session = self._require_session()
+        result = await session.send("DOM.setNodeName", {"nodeId": node_id, "name": name})
+        return dict(result) if result else {}
+
+    async def dom_set_node_stack_traces_enabled(self, enable: bool) -> None:
+        """Enable or disable node stack traces."""
+        session = self._require_session()
+        await session.send("DOM.setNodeStackTracesEnabled", {"enable": enable})
+
+    async def dom_set_text_content(self, node_id: int, text: str) -> None:
+        """Set the text content of a node by ID."""
+        session = self._require_session()
+        await session.send("DOM.setTextContent", {"nodeId": node_id, "text": text})
+
+    async def dom_undo(self) -> None:
+        """Undo the last DOM action."""
+        session = self._require_session()
+        await session.send("DOM.undo", {})
 
     async def suggest_locator(
         self, selector: str, all: bool = False
@@ -1711,7 +2472,7 @@ class CDPBackend(AbstractBackend):
         Returns:
             JavaScript IIFE that returns the final element or null.
         """
-        escaped = [json.dumps(s) for s in selectors]
+        escaped = [json.dumps(s).replace("'", "\\'") for s in selectors]
         parts = [f"var el=document.querySelector('{escaped[0]}')"]
         for sel in escaped[1:]:
             parts.append(
@@ -2143,6 +2904,75 @@ class CDPBackend(AbstractBackend):
             "Fetch.enable",
             {"patterns": [{"urlPattern": url_pattern}]},
         )
+
+    async def network_clear_browser_cache(self) -> None:
+        """Clear the browser cache."""
+        session = self._require_session()
+        await session.network.clear_browser_cache()
+
+    async def network_clear_browser_cookies(self) -> None:
+        """Clear all browser cookies."""
+        session = self._require_session()
+        await session.network.clear_browser_cookies()
+
+    async def network_delete_cookies(self, name: str, domain: str = "") -> None:
+        """Delete cookies by name and optional domain."""
+        session = self._require_session()
+        params: dict[str, Any] = {"name": name}
+        if domain:
+            params["domain"] = domain
+        await session.network.delete_cookies(**params)
+
+    async def network_set_blocked_urls(self, urls: list[str]) -> None:
+        """Block requests to specific URLs."""
+        session = self._require_session()
+        await session.network.set_blocked_urls(urls=urls)
+
+    async def network_set_bypass_service_worker(self, bypass: bool) -> None:
+        """Bypass the service worker for all network requests."""
+        session = self._require_session()
+        await session.network.set_bypass_service_worker(bypass=bypass)
+
+    async def network_set_cookie_controls(
+        self, mode: str = "allow", third_party_mode: str = "allow"
+    ) -> None:
+        """Set cookie controls."""
+        session = self._require_session()
+        await session.network.set_cookie_controls(
+            mode=mode, third_party_mode=third_party_mode
+        )
+
+    async def network_set_extra_request_headers(self, headers: dict[str, str]) -> None:
+        """Set extra HTTP headers for all requests."""
+        session = self._require_session()
+        await session.network.set_extra_request_headers(headers=headers)
+
+    async def network_set_user_agent_override(
+        self, user_agent: str, accept_language: str = "", platform: str = ""
+    ) -> None:
+        """Override the User-Agent string with metadata."""
+        session = self._require_session()
+        params: dict[str, Any] = {"user_agent": user_agent}
+        if accept_language:
+            params["accept_language"] = accept_language
+        if platform:
+            params["platform"] = platform
+        await session.network.set_user_agent_override(**params)
+
+    async def network_replay_xhr(self, request_id: str) -> None:
+        """Replay a previously captured XHR request by ID."""
+        session = self._require_session()
+        await session.network.replay_xhr(request_id=request_id)
+
+    async def network_load_network_resource(
+        self, frame_id: str, url: str, options: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Load a network resource outside the context of a page."""
+        session = self._require_session()
+        params: dict[str, Any] = {"frameId": frame_id, "url": url}
+        if options:
+            params["options"] = options
+        return dict(await session.network.load_network_resource(**params))
 
     # ── Combined trace (W8) ────────────────────────────────
 
@@ -2611,6 +3441,305 @@ class CDPBackend(AbstractBackend):
                 accuracy=sensors.values.get("accuracy", 100),
             )
 
+    async def set_device_metrics_override(
+        self,
+        width: int,
+        height: int,
+        device_scale_factor: float = 1.0,
+        mobile: bool = False,
+    ) -> None:
+        """Override device metrics."""
+        session = self._require_session()
+        await session.emulation.set_device_metrics_override(
+            width=width,
+            height=height,
+            device_scale_factor=device_scale_factor,
+            mobile=mobile,
+        )
+
+    async def clear_device_metrics_override(self) -> None:
+        """Clear device metrics override."""
+        session = self._require_session()
+        await session.emulation.clear_device_metrics_override()
+
+    async def set_emulated_media(self, media: str) -> None:
+        """Set the emulated media type."""
+        session = self._require_session()
+        await session.emulation.set_emulated_media(media)
+
+    async def clear_emulated_media(self) -> None:
+        """Clear emulated media override."""
+        session = self._require_session()
+        await session.emulation.clear_emulated_media()
+
+    async def set_emulated_vision_deficiency(self, deficiency: str) -> None:
+        """Set emulated vision deficiency."""
+        session = self._require_session()
+        await session.emulation.set_emulated_vision_deficiency(deficiency)
+
+    async def clear_emulated_vision_deficiency(self) -> None:
+        """Clear emulated vision deficiency override."""
+        session = self._require_session()
+        await session.emulation.clear_emulated_vision_deficiency()
+
+    async def set_idle_override(
+        self, is_user_active: bool = True, is_screen_active: bool = True
+    ) -> None:
+        """Override the idle state."""
+        session = self._require_session()
+        await session.emulation.set_idle_override(
+            is_user_active=is_user_active, is_screen_active=is_screen_active
+        )
+
+    async def clear_idle_override(self) -> None:
+        """Clear the idle state override."""
+        session = self._require_session()
+        await session.emulation.clear_idle_override()
+
+    async def set_script_execution_disabled(self, disabled: bool = True) -> None:
+        """Disable or enable JavaScript script execution."""
+        session = self._require_session()
+        await session.emulation.set_script_execution_disabled(disabled)
+
+    async def set_visible_size(self, width: int, height: int) -> None:
+        """Set the visible size of the page."""
+        session = self._require_session()
+        await session.emulation.set_visible_size(width, height)
+
+    async def add_screen(self, screen: dict[str, Any]) -> None:
+        """Add a virtual screen with the given configuration."""
+        session = self._require_session()
+        await session.send("Emulation.addScreen", {"screen": screen})
+
+    async def can_emulate(self) -> bool:
+        """Check whether the browser supports emulation."""
+        session = self._require_session()
+        result = await session.send("Emulation.canEmulate", {})
+        return bool(result.get("result", False))
+
+    async def clear_auto_dark_mode_override(self) -> None:
+        """Clear the auto dark mode override."""
+        session = self._require_session()
+        await session.send("Emulation.clearAutoDarkModeOverride", {})
+
+    async def clear_default_background_color_override(self) -> None:
+        """Clear the default background color override."""
+        session = self._require_session()
+        await session.send("Emulation.clearDefaultBackgroundColorOverride", {})
+
+    async def clear_device_posture_override(self) -> None:
+        """Clear the device posture override."""
+        session = self._require_session()
+        await session.send("Emulation.clearDevicePostureOverride", {})
+
+    async def clear_display_features_override(self) -> None:
+        """Clear the display features override."""
+        session = self._require_session()
+        await session.send("Emulation.clearDisplayFeaturesOverride", {})
+
+    async def clear_geolocation_override(self) -> None:
+        """Clear the geolocation override."""
+        session = self._require_session()
+        await session.send("Emulation.clearGeolocationOverride", {})
+
+    async def clear_timezone_override(self) -> None:
+        """Clear the timezone override."""
+        session = self._require_session()
+        await session.send("Emulation.clearTimezoneOverride", {})
+
+    async def get_overridden_sensor_information(self, sensor_type: str) -> dict[str, Any]:
+        """Get information about overridden sensors of the given type."""
+        session = self._require_session()
+        result = await session.send(
+            "Emulation.getOverriddenSensorInformation", {"type": sensor_type}
+        )
+        return dict(result) if result else {}
+
+    async def get_screen_infos(self) -> dict[str, Any]:
+        """Get information about all virtual screens."""
+        session = self._require_session()
+        result = await session.send("Emulation.getScreenInfos", {})
+        return dict(result) if result else {}
+
+    async def remove_screen(self, screen_id: str) -> None:
+        """Remove a virtual screen by ID."""
+        session = self._require_session()
+        await session.send("Emulation.removeScreen", {"screenId": screen_id})
+
+    async def reset_page_scale_factor(self) -> None:
+        """Reset the page scale factor to its default."""
+        session = self._require_session()
+        await session.send("Emulation.resetPageScaleFactor", {})
+
+    async def set_auto_dark_mode_override(self, enabled: bool) -> None:
+        """Enable or disable auto dark mode override."""
+        session = self._require_session()
+        await session.send("Emulation.setAutoDarkModeOverride", {"enabled": enabled})
+
+    async def set_automation_override(self, enabled: bool) -> None:
+        """Enable or disable automation override."""
+        session = self._require_session()
+        await session.send("Emulation.setAutomationOverride", {"enabled": enabled})
+
+    async def set_cpu_throttling_rate(self, rate: float) -> None:
+        """Set CPU throttling rate as a multiplier."""
+        session = self._require_session()
+        await session.send("Emulation.setCPUThrottlingRate", {"rate": rate})
+
+    async def set_data_saver_override(self, enabled: bool) -> None:
+        """Enable or disable data saver override."""
+        session = self._require_session()
+        await session.send("Emulation.setDataSaverOverride", {"enabled": enabled})
+
+    async def set_default_background_color_override(self, color: dict[str, Any]) -> None:
+        """Override the default background color."""
+        session = self._require_session()
+        await session.send("Emulation.setDefaultBackgroundColorOverride", {"color": color})
+
+    async def set_device_posture_override(self, posture: str) -> None:
+        """Override the device posture."""
+        session = self._require_session()
+        await session.send("Emulation.setDevicePostureOverride", {"posture": posture})
+
+    async def set_disabled_image_types(self, image_types: list[str]) -> None:
+        """Disable the given image types from loading."""
+        session = self._require_session()
+        await session.send("Emulation.setDisabledImageTypes", {"imageTypes": image_types})
+
+    async def set_display_features_override(self, features: list[dict[str, Any]]) -> None:
+        """Override display features."""
+        session = self._require_session()
+        await session.send("Emulation.setDisplayFeaturesOverride", {"features": features})
+
+    async def set_document_cookie_disabled(self, disabled: bool) -> None:
+        """Disable or enable document cookies."""
+        session = self._require_session()
+        await session.send("Emulation.setDocumentCookieDisabled", {"disabled": disabled})
+
+    async def set_emit_touch_events_for_mouse(self, enabled: bool, configuration: dict[str, Any] | None = None) -> None:
+        """Enable or disable touch event emulation for mouse input."""
+        session = self._require_session()
+        params: dict[str, Any] = {"enabled": enabled}
+        if configuration is not None:
+            params["configuration"] = configuration
+        await session.send("Emulation.setEmitTouchEventsForMouse", params)
+
+    async def set_emulated_media_feature(self, features: list[dict[str, str]]) -> None:
+        """Set emulated media features."""
+        session = self._require_session()
+        await session.send("Emulation.setEmulatedMediaFeature", {"features": features})
+
+    async def set_emulated_os_text_scale(self, scale: float) -> None:
+        """Override the OS text scale factor."""
+        session = self._require_session()
+        await session.send("Emulation.setEmulatedOSTextScale", {"scale": scale})
+
+    async def set_focus_emulation_enabled(self, enabled: bool) -> None:
+        """Enable or disable focus emulation."""
+        session = self._require_session()
+        await session.send("Emulation.setFocusEmulationEnabled", {"enabled": enabled})
+
+    async def set_geolocation_override(self, latitude: float, longitude: float, accuracy: float = 100.0) -> None:
+        """Override the geolocation position."""
+        session = self._require_session()
+        await session.send("Emulation.setGeolocationOverride", {
+            "latitude": latitude,
+            "longitude": longitude,
+            "accuracy": accuracy,
+        })
+
+    async def set_hardware_concurrency_override(self, concurrency: int) -> None:
+        """Override the hardware concurrency."""
+        session = self._require_session()
+        await session.send("Emulation.setHardwareConcurrencyOverride", {"hardwareConcurrency": concurrency})
+
+    async def set_locale_override(self, locale: str) -> None:
+        """Override the browser locale."""
+        session = self._require_session()
+        await session.send("Emulation.setLocaleOverride", {"locale": locale})
+
+    async def set_navigator_overrides(self, navigator: dict[str, Any]) -> None:
+        """Override navigator properties."""
+        session = self._require_session()
+        await session.send("Emulation.setNavigatorOverrides", {"navigator": navigator})
+
+    async def set_page_scale_factor(self, factor: float) -> None:
+        """Set the page scale factor."""
+        session = self._require_session()
+        await session.send("Emulation.setPageScaleFactor", {"pageScaleFactor": factor})
+
+    async def set_pressure_source_override_enabled(self, source: str, enabled: bool) -> None:
+        """Enable or disable pressure source override."""
+        session = self._require_session()
+        await session.send("Emulation.setPressureSourceOverrideEnabled", {"source": source, "enabled": enabled})
+
+    async def set_pressure_state_override(self, source: str, state: str, value: float) -> None:
+        """Override the pressure state."""
+        session = self._require_session()
+        await session.send("Emulation.setPressureStateOverride", {"source": source, "state": state, "value": value})
+
+    async def set_primary_screen(self, screen_id: str) -> None:
+        """Set the primary screen by ID."""
+        session = self._require_session()
+        await session.send("Emulation.setPrimaryScreen", {"screenId": screen_id})
+
+    async def set_safe_area_insets_override(self, insets: dict[str, Any]) -> None:
+        """Override the safe area insets."""
+        session = self._require_session()
+        await session.send("Emulation.setSafeAreaInsetsOverride", {"insets": insets})
+
+    async def set_scrollbars_hidden(self, hidden: bool) -> None:
+        """Hide or show scrollbars."""
+        session = self._require_session()
+        await session.send("Emulation.setScrollbarsHidden", {"hidden": hidden})
+
+    async def set_sensor_override_enabled(self, type: str, enabled: bool) -> None:
+        """Enable or disable sensor override."""
+        session = self._require_session()
+        await session.send("Emulation.setSensorOverrideEnabled", {"type": type, "enabled": enabled})
+
+    async def set_sensor_override_readings(self, type: str, readings: list[dict[str, Any]]) -> None:
+        """Override sensor readings."""
+        session = self._require_session()
+        await session.send("Emulation.setSensorOverrideReadings", {"type": type, "readings": readings})
+
+    async def set_small_viewport_height_difference_override(self, difference: float) -> None:
+        """Override the small viewport height difference."""
+        session = self._require_session()
+        await session.send("Emulation.setSmallViewportHeightDifferenceOverride", {"difference": difference})
+
+    async def set_timezone_override(self, timezone_id: str) -> None:
+        """Override the timezone."""
+        session = self._require_session()
+        await session.send("Emulation.setTimezoneOverride", {"timezoneId": timezone_id})
+
+    async def set_touch_emulation_enabled(self, enabled: bool, max_touch_points: int = 5) -> None:
+        """Enable or disable touch emulation."""
+        session = self._require_session()
+        await session.send("Emulation.setTouchEmulationEnabled", {"enabled": enabled, "maxTouchPoints": max_touch_points})
+
+    async def set_user_agent_override(self, user_agent: str, accept_language: str = "", platform: str = "", user_agent_metadata: dict[str, Any] | None = None) -> None:
+        """Override the user agent string and related metadata."""
+        session = self._require_session()
+        params: dict[str, Any] = {"userAgent": user_agent}
+        if accept_language:
+            params["acceptLanguage"] = accept_language
+        if platform:
+            params["platform"] = platform
+        if user_agent_metadata is not None:
+            params["userAgentMetadata"] = user_agent_metadata
+        await session.send("Emulation.setUserAgentOverride", params)
+
+    async def set_virtual_time_policy(self, policy: str, budget: int = 0) -> None:
+        """Set the virtual time policy."""
+        session = self._require_session()
+        await session.send("Emulation.setVirtualTimePolicy", {"policy": policy, "budget": budget})
+
+    async def update_screen(self, screen_id: str, screen: dict[str, Any]) -> None:
+        """Update a virtual screen by ID."""
+        session = self._require_session()
+        await session.send("Emulation.updateScreen", {"screenId": screen_id, "screen": screen})
+
     # ── Performance ───────────────────────────────────────
 
     async def perf_metrics(self) -> dict[str, Any]:
@@ -2743,6 +3872,84 @@ class CDPBackend(AbstractBackend):
         result = await session.send("CSS.stopRuleUsageTracking", {})
         return dict(result) if result else {}
 
+    async def performance_disable(self) -> None:
+        """Disable the Performance domain."""
+        session = self._require_session()
+        await session.send("Performance.disable", {})
+
+    async def performance_enable(self) -> None:
+        """Enable the Performance domain."""
+        session = self._require_session()
+        await session.send("Performance.enable", {})
+
+    async def performance_get_metrics(self) -> dict[str, Any]:
+        """Get current values of run-time metrics."""
+        session = self._require_session()
+        result = await session.send("Performance.getMetrics", {})
+        return dict(result) if result else {}
+
+    async def performance_set_time_domain(self, time_domain: str) -> None:
+        """Set the time domain for collecting and reporting durations."""
+        session = self._require_session()
+        await session.send("Performance.setTimeDomain", {"timeDomain": time_domain})
+
+    # ── Tracing ───────────────────────────────────────────
+
+    async def tracing_start(
+        self,
+        categories: str = "",
+        options: str = "",
+        transfer_mode: str = "ReturnAsStream",
+    ) -> None:
+        """Start trace event collection."""
+        session = self._require_session()
+        params: dict[str, Any] = {"transferMode": transfer_mode}
+        if categories:
+            params["traceConfig"] = {"includedCategories": categories.split(",")}
+        if options:
+            params["traceConfig"] = params.get("traceConfig", {})
+            params["traceConfig"]["excludedCategories"] = options.split(",")
+        await session.send("Tracing.start", params)
+
+    async def tracing_end(self) -> None:
+        """Stop trace event collection."""
+        session = self._require_session()
+        await session.send("Tracing.end", {})
+
+    async def tracing_get_categories(self) -> list[str]:
+        """Get supported tracing categories."""
+        session = self._require_session()
+        result = await session.send("Tracing.getCategories", {})
+        return list(result.get("categories", [])) if result else []
+
+    async def tracing_record_clock_sync_marker(self, sync_id: str) -> None:
+        """Record a clock sync marker."""
+        session = self._require_session()
+        await session.send("Tracing.recordClockSyncMarker", {"syncId": sync_id})
+
+    async def tracing_request_memory_dump(self) -> dict[str, Any]:
+        """Request a memory dump."""
+        session = self._require_session()
+        result = await session.send("Tracing.requestMemoryDump", {})
+        return dict(result) if result else {}
+
+    async def tracing_get_track_event_descriptor(
+        self, track_event: str
+    ) -> dict[str, Any]:
+        """Get a track event descriptor."""
+        session = self._require_session()
+        result = await session.send(
+            "Tracing.getTrackEventDescriptor", {"trackEvent": track_event}
+        )
+        return dict(result) if result else {}
+
+    # ── PerformanceTimeline ───────────────────────────────
+
+    async def performance_timeline_enable(self) -> None:
+        """Enable the PerformanceTimeline domain."""
+        session = self._require_session()
+        await session.send("PerformanceTimeline.enable", {})
+
     # ── CSS ────────────────────────────────────────────────
 
     async def css_get_styles(self, selector: str) -> dict[str, Any]:
@@ -2871,6 +4078,252 @@ class CDPBackend(AbstractBackend):
             computed[prop.get("name", "")] = prop.get("value", "")
         return computed
 
+    async def css_add_rule(self, stylesheet_id: str, rule_text: str, location: int = 0) -> str:
+        """Add a new CSS rule to a stylesheet."""
+        session = self._require_session()
+        result = await session.css.add_rule(
+            style_sheet_id=stylesheet_id, rule_text=rule_text, location={"lineNumber": location, "columnNumber": 0}
+        )
+        return str(result.get("ruleId", ""))
+
+    async def css_create_style_sheet(self, frame_id: str) -> str:
+        """Create a new stylesheet in the given frame."""
+        session = self._require_session()
+        result = await session.css.create_style_sheet(frame_id=frame_id)
+        return str(result.get("styleSheetId", ""))
+
+    async def css_get_media_queries(self) -> list[dict[str, Any]]:
+        """Get all media queries in the current page."""
+        session = self._require_session()
+        result = await session.css.get_media_queries()
+        return [dict(m) for m in result.get("medias", [])] if result else []
+
+    async def css_get_style_sheet_text(self, stylesheet_id: str) -> str:
+        """Get the text content of a stylesheet by ID."""
+        session = self._require_session()
+        result = await session.css.get_style_sheet_text(style_sheet_id=stylesheet_id)
+        return str(result.get("text", ""))
+
+    async def css_set_style_sheet_text(self, stylesheet_id: str, text: str) -> None:
+        """Set the text content of a stylesheet by ID."""
+        session = self._require_session()
+        await session.css.set_style_sheet_text(style_sheet_id=stylesheet_id, text=text)
+
+    async def css_set_rule_selector(self, stylesheet_id: str, rule_id: str, selector: str) -> None:
+        """Set the selector text of a CSS rule."""
+        session = self._require_session()
+        await session.css.set_rule_selector(
+            style_sheet_id=stylesheet_id, rule_id={"styleSheetId": stylesheet_id, "ordinal": rule_id}, selector=selector
+        )
+
+    async def css_set_media_text(self, stylesheet_id: str, media_id: str, text: str) -> None:
+        """Set the text of a media rule."""
+        session = self._require_session()
+        await session.css.set_media_text(
+            style_sheet_id=stylesheet_id, media_id={"styleSheetId": stylesheet_id, "ordinal": media_id}, text=text
+        )
+
+    async def css_force_pseudo_state(self, node_id: int, pseudo_state: list[str]) -> None:
+        """Force a pseudo state on a node."""
+        session = self._require_session()
+        await session.css.force_pseudo_state(node_id=node_id, forced_pseudo_state=pseudo_state)
+
+    async def css_get_background_colors(self, node_id: int) -> dict[str, Any]:
+        """Get background colors for a node."""
+        session = self._require_session()
+        return dict(await session.css.get_background_colors(node_id=node_id))
+
+    async def css_start_rule_usage_tracking(self) -> None:
+        """Start tracking CSS rule usage."""
+        session = self._require_session()
+        await session.css.start_rule_usage_tracking()
+
+    async def css_stop_rule_usage_tracking(self) -> None:
+        """Stop tracking CSS rule usage."""
+        session = self._require_session()
+        await session.css.stop_rule_usage_tracking()
+
+    async def css_take_coverage_delta(self) -> dict[str, Any]:
+        """Get the coverage delta since the last call."""
+        session = self._require_session()
+        return dict(await session.css.take_coverage_delta())
+
+    async def css_collect_class_names(self, node_id: int) -> list[str]:
+        """Collect class names from the subtree of a node by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.collectClassNames", {"nodeId": node_id})
+        return list(result.get("classNames", [])) if result else []
+
+    async def css_disable(self) -> None:
+        """Disable the CSS domain."""
+        session = self._require_session()
+        await session.send("CSS.disable", {})
+
+    async def css_enable(self) -> None:
+        """Enable the CSS domain."""
+        session = self._require_session()
+        await session.send("CSS.enable", {})
+
+    async def css_force_starting_style(self, node_id: int, starting_style_id: dict[str, Any]) -> None:
+        """Force a starting style for a node."""
+        session = self._require_session()
+        await session.send("CSS.forceStartingStyle", {"nodeId": node_id, "startingStyleId": starting_style_id})
+
+    async def css_get_animated_styles_for_node(self, node_id: int) -> dict[str, Any]:
+        """Get animated styles for a node by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.getAnimatedStylesForNode", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def css_get_computed_style_for_node(self, node_id: int) -> list[dict[str, Any]]:
+        """Get computed style for a node by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.getComputedStyleForNode", {"nodeId": node_id})
+        return list(result.get("computedStyle", [])) if result else []
+
+    async def css_get_environment_variables(self) -> list[dict[str, Any]]:
+        """Get environment variables for the CSS domain."""
+        session = self._require_session()
+        result = await session.send("CSS.getEnvironmentVariables", {})
+        return list(result.get("environmentVariables", [])) if result else []
+
+    async def css_get_inline_styles(self, node_id: int) -> dict[str, Any]:
+        """Get inline styles for a node by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.getInlineStyles", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def css_get_inline_styles_for_node(self, node_id: int) -> dict[str, Any]:
+        """Get inline styles for a node by ID (alias)."""
+        session = self._require_session()
+        result = await session.send("CSS.getInlineStylesForNode", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def css_get_layers_for_node(self, node_id: int) -> list[dict[str, Any]]:
+        """Get CSS layers for a node by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.getLayersForNode", {"nodeId": node_id})
+        return list(result.get("layers", [])) if result else []
+
+    async def css_get_location_for_selector(self, selector: str, stylesheet_id: str) -> dict[str, Any]:
+        """Get the location of a CSS selector in a stylesheet."""
+        session = self._require_session()
+        result = await session.send("CSS.getLocationForSelector", {"selector": selector, "styleSheetId": stylesheet_id})
+        return dict(result) if result else {}
+
+    async def css_get_longhand_properties(self, shorthand_id: dict[str, Any]) -> list[dict[str, Any]]:
+        """Get longhand properties for a shorthand property."""
+        session = self._require_session()
+        result = await session.send("CSS.getLonghandProperties", {"shorthandId": shorthand_id})
+        return list(result.get("longhandProperties", [])) if result else []
+
+    async def css_get_matched_styles_for_node(self, node_id: int) -> dict[str, Any]:
+        """Get matched styles for a node by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.getMatchedStylesForNode", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def css_get_platform_fonts_for_node(self, node_id: int) -> list[dict[str, Any]]:
+        """Get platform fonts for a node by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.getPlatformFontsForNode", {"nodeId": node_id})
+        return list(result.get("fonts", [])) if result else []
+
+    async def css_get_stylesheet_text(self, stylesheet_id: str) -> str:
+        """Get the text content of a stylesheet by ID."""
+        session = self._require_session()
+        result = await session.send("CSS.getStyleSheetText", {"styleSheetId": stylesheet_id})
+        return str(result.get("text", "")) if result else ""
+
+    async def css_resolve_values(self, values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Resolve CSS values."""
+        session = self._require_session()
+        result = await session.send("CSS.resolveValues", {"values": values})
+        return list(result.get("resolvedValues", [])) if result else []
+
+    async def css_set_container_query_condition_text(self, stylesheet_id: str, container_query_id: dict[str, Any], text: str) -> None:
+        """Set the condition text of a container query."""
+        session = self._require_session()
+        await session.send("CSS.setContainerQueryConditionText", {"styleSheetId": stylesheet_id, "containerQueryId": container_query_id, "text": text})
+
+    async def css_set_effective_property_value_for_node(self, node_id: int, property_name: str, value: str) -> None:
+        """Set the effective property value for a node."""
+        session = self._require_session()
+        await session.send("CSS.setEffectivePropertyValueForNode", {"nodeId": node_id, "propertyName": property_name, "value": value})
+
+    async def css_set_keyframe_key(self, stylesheet_id: str, keyframe_id: dict[str, Any], key_text: str) -> None:
+        """Set the key text of a keyframe rule."""
+        session = self._require_session()
+        await session.send("CSS.setKeyframeKey", {"styleSheetId": stylesheet_id, "keyframeId": keyframe_id, "keyText": key_text})
+
+    async def css_set_local_fonts_enabled(self, enabled: bool) -> None:
+        """Enable or disable local fonts."""
+        session = self._require_session()
+        await session.send("CSS.setLocalFontsEnabled", {"enabled": enabled})
+
+    async def css_set_navigation_text(self, stylesheet_id: str, navigation_id: dict[str, Any], text: str) -> None:
+        """Set the text of a navigation rule."""
+        session = self._require_session()
+        await session.send("CSS.setNavigationText", {"styleSheetId": stylesheet_id, "navigationId": navigation_id, "text": text})
+
+    async def css_set_property_rule_property_name(self, stylesheet_id: str, property_rule_id: dict[str, Any], name: str) -> None:
+        """Set the property name of a property rule."""
+        session = self._require_session()
+        await session.send("CSS.setPropertyRulePropertyName", {"styleSheetId": stylesheet_id, "propertyRuleId": property_rule_id, "name": name})
+
+    async def css_set_rule_style(self, stylesheet_id: str, rule_id: dict[str, Any], style_text: str) -> None:
+        """Set the style text of a CSS rule."""
+        session = self._require_session()
+        await session.send("CSS.setRuleStyle", {"styleSheetId": stylesheet_id, "ruleId": rule_id, "style": style_text})
+
+    async def css_set_scope_text(self, stylesheet_id: str, scope_id: dict[str, Any], text: str) -> None:
+        """Set the text of a scope rule."""
+        session = self._require_session()
+        await session.send("CSS.setScopeText", {"styleSheetId": stylesheet_id, "scopeId": scope_id, "text": text})
+
+    async def css_set_style_sheet_text(self, stylesheet_id: str, text: str) -> None:
+        """Set the text content of a stylesheet by ID."""
+        session = self._require_session()
+        await session.send("CSS.setStyleSheetText", {"styleSheetId": stylesheet_id, "text": text})
+
+    async def css_set_style_text(self, edits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Set style texts for multiple edits."""
+        session = self._require_session()
+        result = await session.send("CSS.setStyleTexts", {"edits": edits})
+        return list(result.get("styles", [])) if result else []
+
+    async def css_set_style_texts(self, edits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Set style texts for multiple edits (batch)."""
+        session = self._require_session()
+        result = await session.send("CSS.setStyleTexts", {"edits": edits})
+        return list(result.get("styles", [])) if result else []
+
+    async def css_set_stylesheet_text(self, stylesheet_id: str, text: str) -> None:
+        """Set the text content of a stylesheet by ID (alias)."""
+        session = self._require_session()
+        await session.send("CSS.setStyleSheetText", {"styleSheetId": stylesheet_id, "text": text})
+
+    async def css_set_supports_text(self, stylesheet_id: str, supports_id: dict[str, Any], text: str) -> None:
+        """Set the text of a supports rule."""
+        session = self._require_session()
+        await session.send("CSS.setSupportsText", {"styleSheetId": stylesheet_id, "supportsId": supports_id, "text": text})
+
+    async def css_take_computed_style_updates(self) -> list[dict[str, Any]]:
+        """Take computed style updates."""
+        session = self._require_session()
+        result = await session.send("CSS.takeComputedStyleUpdates", {})
+        return list(result.get("computedStyleUpdates", [])) if result else []
+
+    async def css_track_computed_style_updates(self, track_properties: bool = True) -> None:
+        """Track computed style updates."""
+        session = self._require_session()
+        await session.send("CSS.trackComputedStyleUpdates", {"trackProperties": track_properties})
+
+    async def css_track_computed_style_updates_for_node(self, node_id: int, track_properties: bool = True) -> None:
+        """Track computed style updates for a specific node."""
+        session = self._require_session()
+        await session.send("CSS.trackComputedStyleUpdatesForNode", {"nodeId": node_id, "trackProperties": track_properties})
+
     # ── Debugging ──────────────────────────────────────────
 
     async def debug_set_breakpoint(
@@ -2983,6 +4436,259 @@ class CDPBackend(AbstractBackend):
             listeners.append(dict(listener))
         return listeners
 
+    async def debug_evaluate_on_call_frame(
+        self, call_frame_id: str, expression: str
+    ) -> dict[str, Any]:
+        """Evaluate a JavaScript expression in the context of a paused call frame."""
+        session = self._require_session()
+        result = await session.debugger.evaluate_on_call_frame(
+            call_frame_id=call_frame_id, expression=expression
+        )
+        return dict(result)
+
+    async def debug_get_script_source(self, script_id: str) -> str:
+        """Get the source code of a script by ID."""
+        session = self._require_session()
+        result = await session.debugger.get_script_source(script_id=script_id)
+        return str(result.get("scriptSource", ""))
+
+    async def debug_get_stack_trace(self) -> dict[str, Any]:
+        """Get the current JavaScript stack trace."""
+        session = self._require_session()
+        result = await session.debugger.get_stack_trace()
+        return dict(result)
+
+    async def debug_get_possible_breakpoints(
+        self, start: dict[str, Any], end: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Get possible breakpoint locations for a range in a script."""
+        session = self._require_session()
+        params: dict[str, Any] = {"start": start}
+        if end:
+            params["end"] = end
+        result = await session.debugger.get_possible_breakpoints(**params)
+        return [dict(b) for b in result.get("locations", [])] if result else []
+
+    async def debug_search_in_content(
+        self, script_id: str, query: str, case_sensitive: bool = False, is_regex: bool = False
+    ) -> list[dict[str, Any]]:
+        """Search for a string in script content."""
+        session = self._require_session()
+        params: dict[str, Any] = {"scriptId": script_id, "query": query}
+        if case_sensitive:
+            params["caseSensitive"] = True
+        if is_regex:
+            params["isRegex"] = True
+        result = await session.debugger.search_in_content(**params)
+        return [dict(r) for r in result.get("result", [])] if result else []
+
+    async def debug_set_pause_on_exceptions(self, state: str) -> None:
+        """Set pause on exceptions mode (none, uncaught, all)."""
+        session = self._require_session()
+        await session.debugger.set_pause_on_exceptions(state=state)
+
+    async def debug_set_breakpoints_active(self, active: bool) -> None:
+        """Enable or disable all breakpoints."""
+        session = self._require_session()
+        await session.debugger.set_breakpoints_active(active=active)
+
+    async def debug_set_skip_all_pauses(self, skip: bool) -> None:
+        """Skip all pauses for the duration of the current script."""
+        session = self._require_session()
+        await session.debugger.set_skip_all_pauses(skip=skip)
+
+    async def debug_set_script_source(self, script_id: str, source: str) -> dict[str, Any]:
+        """Edit the source code of a live script."""
+        session = self._require_session()
+        result = await session.debugger.set_script_source(
+            script_id=script_id, script_source=source
+        )
+        return dict(result) if result else {}
+
+    async def debug_continue_to_location(
+        self, url: str, line: int, column: int = 0
+    ) -> None:
+        """Continue execution until a specific location is reached."""
+        session = self._require_session()
+        await session.debugger.continue_to_location(
+            location={"scriptId": url, "lineNumber": line, "columnNumber": column}
+        )
+
+    async def debug_disable(self) -> None:
+        """Disable the Debugger domain."""
+        session = self._require_session()
+        await session.send("Debugger.disable", {})
+
+    async def debug_disassemble_wasm_module(self, script_id: str) -> dict[str, Any]:
+        """Disassemble a WASM module by script ID."""
+        session = self._require_session()
+        result = await session.send("Debugger.disassembleWasmModule", {"scriptId": script_id})
+        return dict(result) if result else {}
+
+    async def debug_enable(self) -> None:
+        """Enable the Debugger domain."""
+        session = self._require_session()
+        await session.send("Debugger.enable", {})
+
+    async def debug_get_wasm_bytecode(self, script_id: str, offset: int) -> dict[str, Any]:
+        """Get WASM bytecode for a script by ID and offset."""
+        session = self._require_session()
+        result = await session.send("Debugger.getWasmBytecode", {"scriptId": script_id, "offset": offset})
+        return dict(result) if result else {}
+
+    async def debug_next_wasm_disassembly_chunk(self, disassembly_id: str) -> dict[str, Any]:
+        """Get the next chunk of a WASM disassembly."""
+        session = self._require_session()
+        result = await session.send("Debugger.nextWasmDisassemblyChunk", {"disassemblyId": disassembly_id})
+        return dict(result) if result else {}
+
+    async def debug_pause(self) -> None:
+        """Pause JavaScript execution."""
+        session = self._require_session()
+        await session.send("Debugger.pause", {})
+
+    async def debug_pause_on_async_call(self, operation: str) -> None:
+        """Pause on an async call operation."""
+        session = self._require_session()
+        await session.send("Debugger.pauseOnAsyncCall", {"operation": operation})
+
+    async def debug_remove_breakpoint(self, breakpoint_id: str) -> None:
+        """Remove a breakpoint by ID."""
+        session = self._require_session()
+        await session.send("Debugger.removeBreakpoint", {"breakpointId": breakpoint_id})
+
+    async def debug_restart_frame(self, call_frame_id: str) -> None:
+        """Restart a call frame by ID."""
+        session = self._require_session()
+        await session.send("Debugger.restartFrame", {"callFrameId": call_frame_id})
+
+    async def debug_resume(self) -> None:
+        """Resume JavaScript execution."""
+        session = self._require_session()
+        await session.send("Debugger.resume", {})
+
+    async def debug_set_async_call_stack_depth(self, depth: int) -> None:
+        """Set the async call stack depth."""
+        session = self._require_session()
+        await session.send("Debugger.setAsyncCallStackDepth", {"depth": depth})
+
+    async def debug_set_blackbox_execution_contexts(self, unique_ids: list[str]) -> None:
+        """Set blackboxed execution contexts by unique IDs."""
+        session = self._require_session()
+        await session.send("Debugger.setBlackboxExecutionContexts", {"uniqueIds": unique_ids})
+
+    async def debug_set_blackbox_patterns(self, patterns: list[str]) -> None:
+        """Set blackbox patterns for script URLs."""
+        session = self._require_session()
+        await session.send("Debugger.setBlackboxPatterns", {"patterns": patterns})
+
+    async def debug_set_blackboxed_ranges(self, script_id: str, positions: list[dict[str, Any]]) -> None:
+        """Set blackboxed ranges for a script."""
+        session = self._require_session()
+        await session.send("Debugger.setBlackboxedRanges", {"scriptId": script_id, "positions": positions})
+
+    async def debug_set_breakpoint_raw(self, location: dict[str, Any], condition: str | None = None) -> dict[str, Any]:
+        """Set a breakpoint at a raw location in a script."""
+        session = self._require_session()
+        params: dict[str, Any] = {"location": location}
+        if condition is not None:
+            params["condition"] = condition
+        result = await session.send("Debugger.setBreakpoint", params)
+        return dict(result) if result else {}
+
+    async def debug_set_breakpoint_by_url(self, url: str, line_number: int, column_number: int = 0, condition: str | None = None) -> dict[str, Any]:
+        """Set a breakpoint by URL and line number."""
+        session = self._require_session()
+        params: dict[str, Any] = {"url": url, "lineNumber": line_number, "columnNumber": column_number}
+        if condition is not None:
+            params["condition"] = condition
+        result = await session.send("Debugger.setBreakpointByUrl", params)
+        return dict(result) if result else {}
+
+    async def debug_set_breakpoint_on_function_call(self, object_id: str, condition: str | None = None) -> dict[str, Any]:
+        """Set a breakpoint on a function call by object ID."""
+        session = self._require_session()
+        params: dict[str, Any] = {"objectId": object_id}
+        if condition is not None:
+            params["condition"] = condition
+        result = await session.send("Debugger.setBreakpointOnFunctionCall", params)
+        return dict(result) if result else {}
+
+    async def debug_set_instrumentation_breakpoint(self, instrumentation: str) -> dict[str, Any]:
+        """Set an instrumentation breakpoint."""
+        session = self._require_session()
+        result = await session.send("Debugger.setInstrumentationBreakpoint", {"instrumentation": instrumentation})
+        return dict(result) if result else {}
+
+    async def debug_set_return_value(self, new_value: dict[str, Any]) -> None:
+        """Set the return value of the current call frame."""
+        session = self._require_session()
+        await session.send("Debugger.setReturnValue", {"newValue": new_value})
+
+    async def debug_set_variable_value(self, call_frame_id: str, scope_number: int, variable_name: str, new_value: dict[str, Any]) -> None:
+        """Set a variable value in a scope of a call frame."""
+        session = self._require_session()
+        await session.send("Debugger.setVariableValue", {"callFrameId": call_frame_id, "scopeNumber": scope_number, "variableName": variable_name, "newValue": new_value})
+
+    # ── DOMDebugger ────────────────────────────────────────
+
+    async def dom_debugger_get_event_listeners(self, object_id: str, depth: int = 0, pierce: bool = False) -> list[dict[str, Any]]:
+        """Get event listeners for an object by its remote object ID."""
+        session = self._require_session()
+        result = await session.send("DOMDebugger.getEventListeners", {"objectId": object_id, "depth": depth, "pierce": pierce})
+        return list(result.get("listeners", [])) if result else []
+
+    async def dom_debugger_remove_dom_breakpoint(self, node_id: int, type: str) -> None:
+        """Remove a DOM breakpoint from a node by ID."""
+        session = self._require_session()
+        await session.send("DOMDebugger.removeDOMBreakpoint", {"nodeId": node_id, "type": type})
+
+    async def dom_debugger_remove_event_listener_breakpoint(self, event_name: str, target_name: str | None = None) -> None:
+        """Remove an event listener breakpoint."""
+        session = self._require_session()
+        params: dict[str, Any] = {"eventName": event_name}
+        if target_name is not None:
+            params["targetName"] = target_name
+        await session.send("DOMDebugger.removeEventListenerBreakpoint", params)
+
+    async def dom_debugger_remove_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Remove an instrumentation breakpoint."""
+        session = self._require_session()
+        await session.send("DOMDebugger.removeInstrumentationBreakpoint", {"eventName": event_name})
+
+    async def dom_debugger_remove_xhr_breakpoint(self, url: str) -> None:
+        """Remove an XHR breakpoint for a URL substring."""
+        session = self._require_session()
+        await session.send("DOMDebugger.removeXHRBreakpoint", {"url": url})
+
+    async def dom_debugger_set_break_on_csp_violation(self, enabled: bool) -> None:
+        """Set whether to break on CSP violations."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setBreakOnCSPViolation", {"enabled": enabled})
+
+    async def dom_debugger_set_dom_breakpoint(self, node_id: int, type: str) -> None:
+        """Set a DOM breakpoint on a node by ID."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setDOMBreakpoint", {"nodeId": node_id, "type": type})
+
+    async def dom_debugger_set_event_listener_breakpoint(self, event_name: str, target_name: str | None = None) -> None:
+        """Set an event listener breakpoint."""
+        session = self._require_session()
+        params: dict[str, Any] = {"eventName": event_name}
+        if target_name is not None:
+            params["targetName"] = target_name
+        await session.send("DOMDebugger.setEventListenerBreakpoint", params)
+
+    async def dom_debugger_set_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Set an instrumentation breakpoint."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setInstrumentationBreakpoint", {"eventName": event_name})
+
+    async def dom_debugger_set_xhr_breakpoint(self, url: str) -> None:
+        """Set an XHR breakpoint for a URL substring."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setXHRBreakpoint", {"url": url})
+
     # ── DOM Snapshot ───────────────────────────────────────
 
     async def dom_snapshot(self) -> dict[str, Any]:
@@ -3029,6 +4735,617 @@ class CDPBackend(AbstractBackend):
         """Clear all highlight overlays from the page."""
         session = self._require_session()
         await session.overlay.hide_highlight()
+
+    async def overlay_enable(self) -> None:
+        """Enable the overlay domain."""
+        session = self._require_session()
+        await session.overlay.enable()
+
+    async def overlay_disable(self) -> None:
+        """Disable the overlay domain."""
+        session = self._require_session()
+        await session.overlay.disable()
+
+    async def overlay_highlight_node(
+        self, node_id: int, color: str = "rgba(255,0,0,0.5)"
+    ) -> None:
+        """Highlight a DOM node by node ID."""
+        session = self._require_session()
+        highlight_config: dict[str, Any] = {
+            "showStyle": False,
+            "showRulers": False,
+            "showExtensionLines": False,
+            "contentColor": {"r": 255, "g": 0, "b": 0, "a": 0.5},
+        }
+        await session.overlay.highlight_node(
+            highlight_config=highlight_config, node_id=node_id,
+        )
+
+    async def overlay_highlight_quad(
+        self, quad: list[float], color: str = "rgba(255,0,0,0.5)"
+    ) -> None:
+        """Highlight a quad region on the page."""
+        session = self._require_session()
+        await session.overlay.highlight_quad(
+            quad=quad, color={"r": 255, "g": 0, "b": 0, "a": 0.5},
+        )
+
+    async def overlay_highlight_rect(
+        self, x: float, y: float, width: float, height: float,
+        color: str = "rgba(255,0,0,0.5)"
+    ) -> None:
+        """Highlight a rectangular region on the page."""
+        session = self._require_session()
+        await session.overlay.highlight_rect(
+            x=x, y=y, width=width, height=height,
+            outline_color={"r": 255, "g": 0, "b": 0, "a": 0.5},
+        )
+
+    async def overlay_set_inspect_mode(
+        self, mode: str = "searchForNode"
+    ) -> None:
+        """Set the inspect mode for element selection."""
+        session = self._require_session()
+        await session.overlay.set_inspect_mode(mode=mode, highlight_config={})
+
+    async def overlay_set_show_fps_counter(self, show: bool) -> None:
+        """Show or hide the FPS counter overlay."""
+        session = self._require_session()
+        await session.overlay.set_show_fps_counter(show=show)
+
+    async def overlay_set_show_paint_rects(self, show: bool) -> None:
+        """Show or hide paint rectangles overlay."""
+        session = self._require_session()
+        await session.overlay.set_show_paint_rects(show=show)
+
+    async def overlay_set_show_debug_borders(self, show: bool) -> None:
+        """Show or hide debug borders overlay."""
+        session = self._require_session()
+        await session.overlay.set_show_debug_borders(show=show)
+
+    async def overlay_set_show_ad_highlights(self, show: bool) -> None:
+        """Show or hide ad highlights overlay."""
+        session = self._require_session()
+        await session.overlay.set_show_ad_highlights(show=show)
+
+    async def overlay_get_grid_highlight_objects_for_test(
+        self, node_id: int
+    ) -> dict[str, Any]:
+        """Get grid highlight objects for testing."""
+        session = self._require_session()
+        result = await session.send("Overlay.getGridHighlightObjectsForTest", {"nodeId": node_id})
+        return dict(result) if result else {}
+
+    async def overlay_get_highlight_object_for_test(
+        self,
+        node_id: int,
+        include_distance: bool = False,
+        include_style: bool = False,
+        color_format: str = "hex",
+    ) -> dict[str, Any]:
+        """Get highlight object for testing."""
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "nodeId": node_id,
+            "includeDistance": include_distance,
+            "includeStyle": include_style,
+            "colorFormat": color_format,
+        }
+        result = await session.send("Overlay.getHighlightObjectForTest", params)
+        return dict(result) if result else {}
+
+    async def overlay_get_source_order_highlight_object_for_test(
+        self, node_id: int
+    ) -> dict[str, Any]:
+        """Get source order highlight object for testing."""
+        session = self._require_session()
+        result = await session.send(
+            "Overlay.getSourceOrderHighlightObjectForTest", {"nodeId": node_id}
+        )
+        return dict(result) if result else {}
+
+    async def overlay_hide_highlight(self) -> None:
+        """Hide any highlight overlay."""
+        session = self._require_session()
+        await session.send("Overlay.hideHighlight", {})
+
+    async def overlay_highlight_source_order(
+        self, source_order_config: dict[str, Any]
+    ) -> None:
+        """Highlight the source order of a node."""
+        session = self._require_session()
+        await session.send("Overlay.highlightSourceOrder", {"sourceOrderConfig": source_order_config})
+
+    async def overlay_set_paused_in_debugger_message(
+        self, message: str = ""
+    ) -> None:
+        """Set the message displayed when paused in the debugger."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if message:
+            params["message"] = message
+        await session.send("Overlay.setPausedInDebuggerMessage", params)
+
+    async def overlay_set_show_container_query_overlays(
+        self, show: bool
+    ) -> None:
+        """Show or hide container query overlays."""
+        session = self._require_session()
+        await session.send("Overlay.setShowContainerQueryOverlays", {"show": show})
+
+    async def overlay_set_show_display_cutout(self, show: bool) -> None:
+        """Show or hide display cutout overlay."""
+        session = self._require_session()
+        await session.send("Overlay.setShowDisplayCutout", {"show": show})
+
+    async def overlay_set_show_flex_overlays(self, show: bool) -> None:
+        """Show or hide flex overlays."""
+        session = self._require_session()
+        await session.send("Overlay.setShowFlexOverlays", {"show": show})
+
+    async def overlay_set_show_grid_overlays(
+        self, show_grid_overlays: list[dict[str, Any]]
+    ) -> None:
+        """Show grid overlays for the given configurations."""
+        session = self._require_session()
+        await session.send("Overlay.setShowGridOverlays", {"showGridOverlays": show_grid_overlays})
+
+    async def overlay_set_show_hinge(
+        self, hinge_config: dict[str, Any] | None = None
+    ) -> None:
+        """Show or hide the hinge overlay."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if hinge_config is not None:
+            params["hingeConfig"] = hinge_config
+        await session.send("Overlay.setShowHinge", params)
+
+    async def overlay_set_show_inspected_element_anchor(
+        self, show: bool
+    ) -> None:
+        """Show or hide the inspected element anchor."""
+        session = self._require_session()
+        await session.send("Overlay.setShowInspectedElementAnchor", {"show": show})
+
+    async def overlay_set_show_isolated_elements(
+        self, isolated_element_highlight_configs: list[dict[str, Any]]
+    ) -> None:
+        """Show isolated elements with the given highlight configurations."""
+        session = self._require_session()
+        await session.send(
+            "Overlay.setShowIsolatedElements",
+            {"isolatedElementHighlightConfigs": isolated_element_highlight_configs},
+        )
+
+    async def overlay_set_show_layout_shift_regions(
+        self, show: bool
+    ) -> None:
+        """Show or hide layout shift regions."""
+        session = self._require_session()
+        await session.send("Overlay.setShowLayoutShiftRegions", {"show": show})
+
+    async def overlay_set_show_scroll_bottleneck_rects(
+        self, show: bool
+    ) -> None:
+        """Show or hide scroll bottleneck rects."""
+        session = self._require_session()
+        await session.send("Overlay.setShowScrollBottleneckRects", {"show": show})
+
+    async def overlay_set_show_scroll_snap_overlays(
+        self, show: bool
+    ) -> None:
+        """Show or hide scroll snap overlays."""
+        session = self._require_session()
+        await session.send("Overlay.setShowScrollSnapOverlays", {"show": show})
+
+    async def overlay_set_show_viewport_size_on_resize(
+        self, show: bool
+    ) -> None:
+        """Show or hide viewport size on resize."""
+        session = self._require_session()
+        await session.send("Overlay.setShowViewportSizeOnResize", {"show": show})
+
+    async def overlay_set_show_window_controls_overlay(
+        self, show: bool
+    ) -> None:
+        """Show or hide window controls overlay."""
+        session = self._require_session()
+        await session.send("Overlay.setShowWindowControlsOverlay", {"show": show})
+
+    # ── Runtime ───────────────────────────────────────────
+
+    async def runtime_evaluate(
+        self,
+        expression: str,
+        await_promise: bool = False,
+        return_by_value: bool = False,
+    ) -> dict[str, Any]:
+        """Evaluate a JavaScript expression."""
+        session = self._require_session()
+        result = await session.runtime.evaluate(
+            expression,
+            await_promise=await_promise,
+            return_by_value=return_by_value,
+        )
+        return dict(result) if result else {}
+
+    async def runtime_compile_script(
+        self,
+        expression: str,
+        source_url: str = "",
+        persist_script: bool = False,
+    ) -> dict[str, Any]:
+        """Compile a JavaScript expression without running it."""
+        session = self._require_session()
+        result = await session.runtime.compile_script(
+            expression=expression,
+            source_url=source_url,
+            persist_script=persist_script,
+        )
+        return dict(result) if result else {}
+
+    async def runtime_run_script(
+        self, script_id: str, await_promise: bool = False
+    ) -> dict[str, Any]:
+        """Run a previously compiled script by ID."""
+        session = self._require_session()
+        result = await session.runtime.run_script(
+            script_id=script_id,
+            await_promise=await_promise,
+        )
+        return dict(result) if result else {}
+
+    async def runtime_call_function_on(
+        self,
+        function_declaration: str,
+        object_id: str = "",
+        arguments: list[dict[str, Any]] | None = None,
+        await_promise: bool = False,
+        return_by_value: bool = False,
+    ) -> dict[str, Any]:
+        """Call a function on a remote object."""
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "function_declaration": function_declaration,
+            "await_promise": await_promise,
+            "return_by_value": return_by_value,
+        }
+        if object_id:
+            params["object_id"] = object_id
+        if arguments:
+            params["arguments"] = arguments
+        result = await session.runtime.call_function_on(**params)
+        return dict(result) if result else {}
+
+    async def runtime_get_properties(
+        self, object_id: str, own_properties: bool = True
+    ) -> dict[str, Any]:
+        """Get properties of a remote object."""
+        session = self._require_session()
+        result = await session.runtime.get_properties(
+            object_id=object_id,
+            own_properties=own_properties,
+        )
+        return dict(result) if result else {}
+
+    async def runtime_release_object(self, object_id: str) -> None:
+        """Release a remote object."""
+        session = self._require_session()
+        await session.runtime.release_object(object_id=object_id)
+
+    async def runtime_release_object_group(self, object_group: str) -> None:
+        """Release all objects in a group."""
+        session = self._require_session()
+        await session.runtime.release_object_group(object_group=object_group)
+
+    async def runtime_discard_console_entries(self) -> None:
+        """Discard collected console entries."""
+        session = self._require_session()
+        await session.runtime.discard_console_entries()
+
+    async def runtime_get_heap_usage(self) -> dict[str, Any]:
+        """Get the current heap usage."""
+        session = self._require_session()
+        result = await session.runtime.get_heap_usage()
+        return dict(result) if result else {}
+
+    async def runtime_global_lexical_scope_names(
+        self, execution_context_id: int | None = None
+    ) -> dict[str, Any]:
+        """Get global lexical scope names."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if execution_context_id is not None:
+            params["execution_context_id"] = execution_context_id
+        result = await session.runtime.global_lexical_scope_names(**params)
+        return dict(result) if result else {}
+
+    async def runtime_add_binding(self, name: str, execution_context_name: str | None = None) -> None:
+        """Add a binding with the given name."""
+        session = self._require_session()
+        params: dict[str, Any] = {"name": name}
+        if execution_context_name is not None:
+            params["executionContextName"] = execution_context_name
+        await session.send("Runtime.addBinding", params)
+
+    async def runtime_await_promise(self, promise_object_id: str, return_by_value: bool = False) -> dict[str, Any]:
+        """Await a promise by its remote object ID."""
+        session = self._require_session()
+        result = await session.send("Runtime.awaitPromise", {
+            "promiseObjectId": promise_object_id,
+            "returnByValue": return_by_value,
+        })
+        return dict(result) if result else {}
+
+    async def runtime_collect_garbage(self) -> None:
+        """Collect garbage."""
+        session = self._require_session()
+        await session.send("Runtime.collectGarbage", {})
+
+    async def runtime_disable(self) -> None:
+        """Disable the Runtime domain."""
+        session = self._require_session()
+        await session.send("Runtime.disable", {})
+
+    async def runtime_enable(self) -> None:
+        """Enable the Runtime domain."""
+        session = self._require_session()
+        await session.send("Runtime.enable", {})
+
+    async def runtime_get_exception_details(self, error_object_id: str) -> dict[str, Any]:
+        """Get exception details for an error object."""
+        session = self._require_session()
+        result = await session.send("Runtime.getExceptionDetails", {"errorObjectId": error_object_id})
+        return dict(result) if result else {}
+
+    async def runtime_get_isolate_id(self) -> dict[str, Any]:
+        """Get the isolate ID."""
+        session = self._require_session()
+        result = await session.send("Runtime.getIsolateId", {})
+        return dict(result) if result else {}
+
+    async def runtime_query_objects(self, prototype_object_id: str) -> dict[str, Any]:
+        """Query objects by prototype."""
+        session = self._require_session()
+        result = await session.send("Runtime.queryObjects", {"prototypeObjectId": prototype_object_id})
+        return dict(result) if result else {}
+
+    async def runtime_remove_binding(self, name: str) -> None:
+        """Remove a previously added binding."""
+        session = self._require_session()
+        await session.send("Runtime.removeBinding", {"name": name})
+
+    async def runtime_run_if_waiting_for_debugger(self) -> None:
+        """Run if waiting for debugger to pause."""
+        session = self._require_session()
+        await session.send("Runtime.runIfWaitingForDebugger", {})
+
+    async def runtime_set_async_call_stack_depth(self, max_depth: int) -> None:
+        """Set the async call stack depth."""
+        session = self._require_session()
+        await session.send("Runtime.setAsyncCallStackDepth", {"maxDepth": max_depth})
+
+    async def runtime_set_custom_object_formatter_enabled(self, enabled: bool) -> None:
+        """Enable or disable the custom object formatter."""
+        session = self._require_session()
+        await session.send("Runtime.setCustomObjectFormatterEnabled", {"enabled": enabled})
+
+    async def runtime_set_max_call_stack_size_to_capture(self, size: int) -> None:
+        """Set the max call stack size to capture."""
+        session = self._require_session()
+        await session.send("Runtime.setMaxCallStackSizeToCapture", {"size": size})
+
+    async def runtime_terminate_execution(self) -> None:
+        """Terminate the current execution."""
+        session = self._require_session()
+        await session.send("Runtime.terminateExecution", {})
+
+    # ── Schema ─────────────────────────────────────────────
+
+    async def schema_get_domains(self) -> dict[str, Any]:
+        """Get all available CDP domains."""
+        session = self._require_session()
+        result = await session.send("Schema.getDomains", {})
+        return dict(result) if result else {}
+
+    # ── Security ──────────────────────────────────────────
+
+    async def security_disable(self) -> None:
+        """Disable the Security domain."""
+        session = self._require_session()
+        await session.send("Security.disable", {})
+
+    async def security_enable(self) -> None:
+        """Enable the Security domain."""
+        session = self._require_session()
+        await session.send("Security.enable", {})
+
+    async def security_get_visible_security_state(self) -> dict[str, Any]:
+        """Get the visible security state of the current page."""
+        session = self._require_session()
+        result = await session.send("Security.getVisibleSecurityState", {})
+        return dict(result) if result else {}
+
+    async def security_handle_certificate_error(self, event_id: int, action: str) -> None:
+        """Handle a certificate error event."""
+        session = self._require_session()
+        await session.send("Security.handleCertificateError", {"eventId": event_id, "action": action})
+
+    async def security_set_ignore_certificate_errors(self, ignore: bool) -> None:
+        """Set whether to ignore certificate errors."""
+        session = self._require_session()
+        await session.send("Security.setIgnoreCertificateErrors", {"ignore": ignore})
+
+    async def security_set_override_certificate_errors(self, override: bool) -> None:
+        """Set whether to override certificate errors."""
+        session = self._require_session()
+        await session.send("Security.setOverrideCertificateErrors", {"override": override})
+
+    # ── Sensor ─────────────────────────────────────────────
+
+    async def sensor_clear_sensor_override(self, sensor_type: str) -> None:
+        """Clear a sensor override."""
+        session = self._require_session()
+        await session.send("Sensor.clearSensorOverride", {"type": sensor_type})
+
+    async def sensor_disable(self) -> None:
+        """Disable the Sensor domain."""
+        session = self._require_session()
+        await session.send("Sensor.disable", {})
+
+    async def sensor_enable(self) -> None:
+        """Enable the Sensor domain."""
+        session = self._require_session()
+        await session.send("Sensor.enable", {})
+
+    async def sensor_set_sensor_override(
+        self, sensor_type: str, metadata: dict[str, Any] | None = None
+    ) -> None:
+        """Set a sensor override."""
+        session = self._require_session()
+        params: dict[str, Any] = {"type": sensor_type}
+        if metadata is not None:
+            params["metadata"] = metadata
+        await session.send("Sensor.setSensorOverride", params)
+
+    # ── Target ────────────────────────────────────────────
+
+    async def target_get_targets(self) -> list[dict[str, Any]]:
+        """Get all available targets."""
+        session = self._require_session()
+        result = await session.target.get_targets()
+        return list(result.get("targetInfos", []))
+
+    async def target_create_target(self, url: str) -> str:
+        """Create a new target (tab) with the given URL."""
+        session = self._require_session()
+        result = await session.target.create_target(url)
+        return str(result.get("targetId", ""))
+
+    async def target_close_target(self, target_id: str) -> None:
+        """Close a target by ID."""
+        session = self._require_session()
+        await session.target.close_target(target_id)
+
+    async def target_activate_target(self, target_id: str) -> None:
+        """Activate (focus) a target by ID."""
+        session = self._require_session()
+        await session.target.activate_target(target_id)
+
+    async def target_attach_to_target(self, target_id: str, flatten: bool = True) -> str:
+        """Attach to a target by ID."""
+        session = self._require_session()
+        result = await session.target.attach_to_target(
+            target_id=target_id, flatten=flatten,
+        )
+        return str(result.get("sessionId", ""))
+
+    async def target_detach_from_target(self, session_id: str) -> None:
+        """Detach from a target by session ID."""
+        session = self._require_session()
+        await session.target.detach_from_target(session_id=session_id)
+
+    async def target_set_auto_attach(
+        self, auto_attach: bool, wait_for_debugger_on_start: bool = False
+    ) -> None:
+        """Set auto-attach for new targets."""
+        session = self._require_session()
+        await session.target.set_auto_attach(
+            auto_attach=auto_attach,
+            wait_for_debugger_on_start=wait_for_debugger_on_start,
+        )
+
+    async def target_set_discover_targets(self, discover: bool) -> None:
+        """Enable or disable target discovery."""
+        session = self._require_session()
+        await session.target.set_discover_targets(discover=discover)
+
+    async def target_get_target_info(self, target_id: str) -> dict[str, Any]:
+        """Get info about a specific target."""
+        session = self._require_session()
+        result = await session.target.get_target_info(target_id=target_id)
+        return dict(result) if result else {}
+
+    async def target_create_browser_context(self) -> str:
+        """Create a new browser context."""
+        session = self._require_session()
+        result = await session.target.create_browser_context()
+        return str(result.get("browserContextId", ""))
+
+    async def target_attach_to_browser_target(self) -> str:
+        """Attach to the browser target."""
+        session = self._require_session()
+        result = await session.send("Target.attachToBrowserTarget", {})
+        return str(result.get("sessionId", ""))
+
+    async def target_auto_attach_related(
+        self, target_id: str, wait_for_debugger_on_start: bool = False
+    ) -> None:
+        """Auto-attach to related targets of a given target."""
+        session = self._require_session()
+        await session.send(
+            "Target.autoAttachRelated",
+            {
+                "targetId": target_id,
+                "waitForDebuggerOnStart": wait_for_debugger_on_start,
+            },
+        )
+
+    async def target_dispose_browser_context(
+        self, browser_context_id: str
+    ) -> None:
+        """Dispose a browser context by ID."""
+        session = self._require_session()
+        await session.send(
+            "Target.disposeBrowserContext",
+            {"browserContextId": browser_context_id},
+        )
+
+    async def target_expose_dev_tools_protocol(
+        self, target_id: str, binding_name: str
+    ) -> None:
+        """Expose DevTools protocol API to the target."""
+        session = self._require_session()
+        await session.send(
+            "Target.exposeDevToolsProtocol",
+            {"targetId": target_id, "bindingName": binding_name},
+        )
+
+    async def target_get_browser_contexts(self) -> list[str]:
+        """Get all browser contexts."""
+        session = self._require_session()
+        result = await session.send("Target.getBrowserContexts", {})
+        return list(result.get("browserContextIds", [])) if result else []
+
+    async def target_get_dev_tools_target(self, target_id: str) -> str:
+        """Get the DevTools target for a given target."""
+        session = self._require_session()
+        result = await session.send(
+            "Target.getDevToolsTarget", {"targetId": target_id}
+        )
+        return str(result.get("targetId", ""))
+
+    async def target_open_dev_tools(self, target_id: str) -> None:
+        """Open DevTools for a target."""
+        session = self._require_session()
+        await session.send("Target.openDevTools", {"targetId": target_id})
+
+    async def target_send_message_to_target(
+        self, session_id: str, message: str
+    ) -> None:
+        """Send a message to a target via session ID."""
+        session = self._require_session()
+        await session.send(
+            "Target.sendMessageToTarget",
+            {"sessionId": session_id, "message": message},
+        )
+
+    async def target_set_remote_locations(self, locations: list[dict[str, str]]) -> None:
+        """Set remote locations for target discovery."""
+        session = self._require_session()
+        await session.send(
+            "Target.setRemoteLocations", {"locations": locations}
+        )
 
     # ── Storage ────────────────────────────────────────────
 
@@ -3206,6 +5523,93 @@ class CDPBackend(AbstractBackend):
                 {"cacheId": cache_id},
             )
 
+    async def cache_storage_delete_cache(self, cache_id: str) -> None:
+        """Delete a cache by its CDP cache ID.
+
+        Args:
+            cache_id: The CDP cache identifier.
+        """
+        session = self._require_session()
+        await session.send("CacheStorage.deleteCache", {"cacheId": cache_id})
+
+    async def cache_storage_delete_entry(
+        self, cache_id: str, request: str
+    ) -> None:
+        """Delete a specific entry from a cache.
+
+        Args:
+            cache_id: The CDP cache identifier.
+            request: The request URL of the entry to delete.
+        """
+        session = self._require_session()
+        await session.send(
+            "CacheStorage.deleteEntry",
+            {"cacheId": cache_id, "request": request},
+        )
+
+    async def cache_storage_request_cache_names(
+        self, security_origin: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Request cache names for a security origin.
+
+        Args:
+            security_origin: Optional security origin. If None, uses the current page.
+
+        Returns:
+            List of cache info dicts with cacheId and cacheName.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        else:
+            params["securityOrigin"] = self._get_origin()
+        result = await session.send("CacheStorage.requestCacheNames", params)
+        return [dict(c) for c in result.get("caches", [])] if result else []
+
+    async def cache_storage_request_cached_response(
+        self, cache_id: str, request_url: str, request_headers: list[dict[str, str]] | None = None
+    ) -> dict[str, Any]:
+        """Request a cached response for a specific request.
+
+        Args:
+            cache_id: The CDP cache identifier.
+            request_url: The request URL.
+            request_headers: Optional list of request header dicts.
+
+        Returns:
+            The cached response dict.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"cacheId": cache_id, "requestURL": request_url}
+        if request_headers is not None:
+            params["requestHeaders"] = request_headers
+        return dict(await session.send("CacheStorage.requestCachedResponse", params))
+
+    async def cache_storage_request_entries(
+        self, cache_id: str, skip_count: int = 0, page_size: int = 100
+    ) -> list[dict[str, Any]]:
+        """Request entries from a cache.
+
+        Args:
+            cache_id: The CDP cache identifier.
+            skip_count: Number of entries to skip.
+            page_size: Maximum number of entries to return.
+
+        Returns:
+            List of cache entry dicts.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "CacheStorage.requestEntries",
+            {
+                "cacheId": cache_id,
+                "skipCount": skip_count,
+                "pageSize": page_size,
+            },
+        )
+        return [dict(e) for e in result.get("cacheDataEntries", [])] if result else []
+
     async def indexeddb_list(self) -> list[dict[str, Any]]:
         """List all IndexedDB databases.
 
@@ -3275,6 +5679,243 @@ class CDPBackend(AbstractBackend):
             },
         )
 
+    async def storage_clear_data_for_origin(self, origin: str, storage_types: str = "all") -> None:
+        """Clear storage data for a given origin."""
+        session = self._require_session()
+        await session.storage.clear_data_for_origin(origin=origin, storage_types=storage_types)
+
+    async def storage_get_usage_and_quota(self, origin: str) -> dict[str, Any]:
+        """Get usage and quota for a given origin."""
+        session = self._require_session()
+        return dict(await session.storage.get_usage_and_quota(origin=origin))
+
+    async def storage_get_trust_tokens(self) -> list[dict[str, Any]]:
+        """Get all trust tokens for the current origin."""
+        session = self._require_session()
+        result = await session.storage.get_trust_tokens()
+        return [dict(t) for t in result.get("tokens", [])] if result else []
+
+    async def storage_clear_trust_tokens(self, origin: str) -> None:
+        """Clear trust tokens for a given origin."""
+        session = self._require_session()
+        await session.storage.clear_trust_tokens(origin=origin)
+
+    async def storage_get_shared_storage_entries(self, owner_origin: str) -> list[dict[str, Any]]:
+        """Get shared storage entries for an owner origin."""
+        session = self._require_session()
+        result = await session.storage.get_shared_storage_entries(owner_origin=owner_origin)
+        return [dict(e) for e in result.get("entries", [])] if result else []
+
+    async def storage_set_shared_storage_entry(
+        self, owner_origin: str, key: str, value: str
+    ) -> None:
+        """Set a shared storage entry."""
+        session = self._require_session()
+        await session.storage.set_shared_storage_entry(
+            owner_origin=owner_origin, key=key, value=value
+        )
+
+    async def storage_delete_shared_storage_entry(self, owner_origin: str, key: str) -> None:
+        """Delete a shared storage entry."""
+        session = self._require_session()
+        await session.storage.delete_shared_storage_entry(
+            owner_origin=owner_origin, key=key
+        )
+
+    async def storage_clear_shared_storage_entries(self, owner_origin: str) -> None:
+        """Clear all shared storage entries for an owner origin."""
+        session = self._require_session()
+        await session.storage.clear_shared_storage_entries(owner_origin=owner_origin)
+
+    async def storage_get_interest_group_details(self, owner_origin: str, name: str) -> dict[str, Any]:
+        """Get interest group details."""
+        session = self._require_session()
+        return dict(await session.storage.get_interest_group_details(
+            owner_origin=owner_origin, name=name
+        ))
+
+    async def storage_override_quota_for_origin(self, origin: str, quota_size: float | None = None) -> None:
+        """Override quota for a given origin."""
+        session = self._require_session()
+        params: dict[str, Any] = {"origin": origin}
+        if quota_size is not None:
+            params["quotaSize"] = quota_size
+        await session.storage.override_quota_for_origin(**params)
+
+    async def storage_clear_data_for_storage_key(
+        self, storage_key: str, storage_types: str = "all"
+    ) -> None:
+        """Clear storage data for a given storage key."""
+        session = self._require_session()
+        await session.send(
+            "Storage.clearDataForStorageKey",
+            {"storageKey": storage_key, "storageTypes": storage_types},
+        )
+
+    async def storage_delete_storage_bucket(
+        self, storage_key: str, bucket_name: str
+    ) -> None:
+        """Delete a storage bucket."""
+        session = self._require_session()
+        await session.send(
+            "Storage.deleteStorageBucket",
+            {"storageKey": storage_key, "bucketName": bucket_name},
+        )
+
+    async def storage_get_related_website_sets(self) -> list[dict[str, Any]]:
+        """Get related website sets."""
+        session = self._require_session()
+        result = await session.send("Storage.getRelatedWebsiteSets", {})
+        return [dict(s) for s in result.get("sets", [])] if result else []
+
+    async def storage_get_shared_storage_metadata(
+        self, owner_origin: str
+    ) -> dict[str, Any]:
+        """Get shared storage metadata for an owner origin."""
+        session = self._require_session()
+        return dict(await session.send(
+            "Storage.getSharedStorageMetadata",
+            {"ownerOrigin": owner_origin},
+        ))
+
+    async def storage_get_storage_key(self, frame_id: str) -> str:
+        """Get storage key for a frame."""
+        session = self._require_session()
+        result = await session.send(
+            "Storage.getStorageKey", {"frameId": frame_id}
+        )
+        return result.get("storageKey", "")
+
+    async def storage_get_storage_key_for_frame(self, frame_id: str) -> str:
+        """Get storage key for a frame (alternative endpoint)."""
+        session = self._require_session()
+        result = await session.send(
+            "Storage.getStorageKeyForFrame", {"frameId": frame_id}
+        )
+        return result.get("storageKey", "")
+
+    async def storage_reset_shared_storage_budget(self, owner_origin: str) -> None:
+        """Reset shared storage budget for an owner origin."""
+        session = self._require_session()
+        await session.send(
+            "Storage.resetSharedStorageBudget",
+            {"ownerOrigin": owner_origin},
+        )
+
+    async def storage_run_bounce_tracking_mitigations(self) -> None:
+        """Run bounce tracking mitigations."""
+        session = self._require_session()
+        await session.send("Storage.runBounceTrackingMitigations", {})
+
+    async def storage_set_cookies(self, cookies: list[dict[str, Any]]) -> None:
+        """Set cookies."""
+        session = self._require_session()
+        await session.send("Storage.setCookies", {"cookies": cookies})
+
+    async def storage_set_interest_group_auction_tracking(
+        self, enable: bool, context_id: int | None = None
+    ) -> None:
+        """Set interest group auction tracking."""
+        session = self._require_session()
+        params: dict[str, Any] = {"enable": enable}
+        if context_id is not None:
+            params["contextId"] = context_id
+        await session.send("Storage.setInterestGroupAuctionTracking", params)
+
+    async def storage_set_interest_group_tracking(self, enable: bool) -> None:
+        """Set interest group tracking."""
+        session = self._require_session()
+        await session.send(
+            "Storage.setInterestGroupTracking", {"enable": enable}
+        )
+
+    async def storage_set_protected_audience_k_anonymity(
+        self, storage_key: str, hashed_mac_key: str
+    ) -> None:
+        """Set protected audience k-anonymity."""
+        session = self._require_session()
+        await session.send(
+            "Storage.setProtectedAudienceKAnonymity",
+            {"storageKey": storage_key, "hashedMacKey": hashed_mac_key},
+        )
+
+    async def storage_set_shared_storage_tracking(self, enable: bool) -> None:
+        """Set shared storage tracking."""
+        session = self._require_session()
+        await session.send(
+            "Storage.setSharedStorageTracking", {"enable": enable}
+        )
+
+    async def storage_set_storage_bucket_tracking(
+        self, storage_key: str, bucket_name: str, enable: bool
+    ) -> None:
+        """Set storage bucket tracking."""
+        session = self._require_session()
+        await session.send(
+            "Storage.setStorageBucketTracking",
+            {
+                "storageKey": storage_key,
+                "bucketName": bucket_name,
+                "enable": enable,
+            },
+        )
+
+    async def storage_track_cache_storage_for_origin(self, origin: str) -> None:
+        """Track cache storage for an origin."""
+        session = self._require_session()
+        await session.send(
+            "Storage.trackCacheStorageForOrigin", {"origin": origin}
+        )
+
+    async def storage_track_cache_storage_for_storage_key(self, storage_key: str) -> None:
+        """Track cache storage for a storage key."""
+        session = self._require_session()
+        await session.send(
+            "Storage.trackCacheStorageForStorageKey", {"storageKey": storage_key}
+        )
+
+    async def storage_track_indexed_db_for_origin(self, origin: str) -> None:
+        """Track IndexedDB for an origin."""
+        session = self._require_session()
+        await session.send(
+            "Storage.trackIndexedDBForOrigin", {"origin": origin}
+        )
+
+    async def storage_track_indexed_db_for_storage_key(self, storage_key: str) -> None:
+        """Track IndexedDB for a storage key."""
+        session = self._require_session()
+        await session.send(
+            "Storage.trackIndexedDBForStorageKey", {"storageKey": storage_key}
+        )
+
+    async def storage_untrack_cache_storage_for_origin(self, origin: str) -> None:
+        """Untrack cache storage for an origin."""
+        session = self._require_session()
+        await session.send(
+            "Storage.untrackCacheStorageForOrigin", {"origin": origin}
+        )
+
+    async def storage_untrack_cache_storage_for_storage_key(self, storage_key: str) -> None:
+        """Untrack cache storage for a storage key."""
+        session = self._require_session()
+        await session.send(
+            "Storage.untrackCacheStorageForStorageKey", {"storageKey": storage_key}
+        )
+
+    async def storage_untrack_indexed_db_for_origin(self, origin: str) -> None:
+        """Untrack IndexedDB for an origin."""
+        session = self._require_session()
+        await session.send(
+            "Storage.untrackIndexedDBForOrigin", {"origin": origin}
+        )
+
+    async def storage_untrack_indexed_db_for_storage_key(self, storage_key: str) -> None:
+        """Untrack IndexedDB for a storage key."""
+        session = self._require_session()
+        await session.send(
+            "Storage.untrackIndexedDBForStorageKey", {"storageKey": storage_key}
+        )
+
     # ── Service Workers ────────────────────────────────────
 
     async def sw_list(self) -> list[dict[str, Any]]:
@@ -3314,6 +5955,117 @@ class CDPBackend(AbstractBackend):
         await session.send("ServiceWorker.enable", {})
         await session.send(
             "ServiceWorker.updateRegistration", {"registrationId": registration_id}
+        )
+
+    async def sw_enable(self) -> None:
+        """Enable the ServiceWorker domain."""
+        session = self._require_session()
+        await session.send("ServiceWorker.enable", {})
+
+    async def sw_disable(self) -> None:
+        """Disable the ServiceWorker domain."""
+        session = self._require_session()
+        await session.send("ServiceWorker.disable", {})
+
+    async def sw_deliver_push_message(
+        self, origin: str, registration_id: str, data: str
+    ) -> None:
+        """Deliver a push message to a service worker.
+
+        Args:
+            origin: Origin of the service worker.
+            registration_id: Service worker registration ID.
+            data: Push message data.
+        """
+        session = self._require_session()
+        await session.send(
+            "ServiceWorker.deliverPushMessage",
+            {
+                "origin": origin,
+                "registrationId": registration_id,
+                "data": data,
+            },
+        )
+
+    async def sw_dispatch_sync_event(
+        self, origin: str, registration_id: str, tag: str, last_chance: bool
+    ) -> None:
+        """Dispatch a sync event to a service worker.
+
+        Args:
+            origin: Origin of the service worker.
+            registration_id: Service worker registration ID.
+            tag: Sync tag.
+            last_chance: Whether this is the last chance to run the sync.
+        """
+        session = self._require_session()
+        await session.send(
+            "ServiceWorker.dispatchSyncEvent",
+            {
+                "origin": origin,
+                "registrationId": registration_id,
+                "tag": tag,
+                "lastChance": last_chance,
+            },
+        )
+
+    async def sw_get_messages(self, worker_id: str) -> list[dict[str, Any]]:
+        """Get messages from a service worker.
+
+        Args:
+            worker_id: Service worker target ID.
+
+        Returns:
+            List of message dicts.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "ServiceWorker.getMessages", {"workerId": worker_id}
+        )
+        return result.get("messages", [])
+
+    async def sw_inspect_worker(self, worker_id: str) -> None:
+        """Inspect a service worker by opening a DevTools window.
+
+        Args:
+            worker_id: Service worker target ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "ServiceWorker.inspectWorker", {"workerId": worker_id}
+        )
+
+    async def sw_skip_waiting(self, scope_url: str) -> None:
+        """Skip waiting for a service worker to become active.
+
+        Args:
+            scope_url: Scope URL of the service worker.
+        """
+        session = self._require_session()
+        await session.send(
+            "ServiceWorker.skipWaiting", {"scopeURL": scope_url}
+        )
+
+    async def sw_start_worker(self, scope_url: str) -> None:
+        """Start a service worker by scope URL.
+
+        Args:
+            scope_url: Scope URL of the service worker.
+        """
+        session = self._require_session()
+        await session.send(
+            "ServiceWorker.startWorker", {"scopeURL": scope_url}
+        )
+
+    async def sw_stop_worker(self, worker_id: str) -> None:
+        """Stop a running service worker.
+
+        Args:
+            worker_id: Service worker target ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "ServiceWorker.stopWorker", {"workerId": worker_id}
         )
 
     # ── Animations ─────────────────────────────────────────
@@ -3417,6 +6169,144 @@ class CDPBackend(AbstractBackend):
         )
         return list(result.get("credentials", []))
 
+    async def webauthn_enable(self) -> None:
+        """Enable the WebAuthn domain."""
+        session = self._require_session()
+        await session.send("WebAuthn.enable", {})
+
+    async def webauthn_disable(self) -> None:
+        """Disable the WebAuthn domain."""
+        session = self._require_session()
+        await session.send("WebAuthn.disable", {})
+
+    async def webauthn_get_credential(
+        self, authenticator_id: str, credential_id: str
+    ) -> dict[str, Any]:
+        """Get a specific credential from a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            credential_id: The credential ID.
+
+        Returns:
+            Credential dict.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "WebAuthn.getCredential",
+            {"authenticatorId": authenticator_id, "credentialId": credential_id},
+        )
+        return dict(result) if result else {}
+
+    async def webauthn_remove_credential(
+        self, authenticator_id: str, credential_id: str
+    ) -> None:
+        """Remove a credential from a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            credential_id: The credential ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "WebAuthn.removeCredential",
+            {"authenticatorId": authenticator_id, "credentialId": credential_id},
+        )
+
+    async def webauthn_clear_credentials(self, authenticator_id: str) -> None:
+        """Clear all credentials from a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "WebAuthn.clearCredentials",
+            {"authenticatorId": authenticator_id},
+        )
+
+    async def webauthn_set_user_verified(
+        self, authenticator_id: str, is_user_verified: bool
+    ) -> None:
+        """Set the user-verified flag on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            is_user_verified: Whether the user is verified.
+        """
+        session = self._require_session()
+        await session.send(
+            "WebAuthn.setUserVerified",
+            {"authenticatorId": authenticator_id, "isUserVerified": is_user_verified},
+        )
+
+    async def webauthn_set_automatic_presence_simulation(
+        self, authenticator_id: str, enabled: bool
+    ) -> None:
+        """Set automatic presence simulation on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            enabled: Whether to enable presence simulation.
+        """
+        session = self._require_session()
+        await session.send(
+            "WebAuthn.setAutomaticPresenceSimulation",
+            {"authenticatorId": authenticator_id, "enabled": enabled},
+        )
+
+    async def webauthn_set_credential_properties(
+        self,
+        authenticator_id: str,
+        credential_id: str,
+        backup_state: bool = False,
+        backup_eligibility: bool = False,
+    ) -> None:
+        """Set credential properties on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            credential_id: The credential ID.
+            backup_state: The backup state.
+            backup_eligibility: The backup eligibility.
+        """
+        session = self._require_session()
+        await session.send(
+            "WebAuthn.setCredentialProperties",
+            {
+                "authenticatorId": authenticator_id,
+                "credentialId": credential_id,
+                "backupState": backup_state,
+                "backupEligibility": backup_eligibility,
+            },
+        )
+
+    async def webauthn_set_response_override_bits(
+        self,
+        authenticator_id: str,
+        is_bogus_signature: bool = False,
+        is_bad_uv: bool = False,
+        is_bad_up: bool = False,
+    ) -> None:
+        """Set response override bits on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            is_bogus_signature: Whether to return bogus signatures.
+            is_bad_uv: Whether to return bad UV responses.
+            is_bad_up: Whether to return bad UP responses.
+        """
+        session = self._require_session()
+        await session.send(
+            "WebAuthn.setResponseOverrideBits",
+            {
+                "authenticatorId": authenticator_id,
+                "isBogusSignature": is_bogus_signature,
+                "isBadUV": is_bad_uv,
+                "isBadUP": is_bad_up,
+            },
+        )
+
     # ── WebAudio (experimental) ────────────────────────────
 
     async def webaudio_get_contexts(self) -> list[dict[str, Any]]:
@@ -3441,6 +6331,31 @@ class CDPBackend(AbstractBackend):
             if ctx.get("contextId") == context_id:
                 return dict(ctx)
         return {}
+
+    async def webaudio_enable(self) -> None:
+        """Enable the WebAudio domain."""
+        session = self._require_session()
+        await session.send("WebAudio.enable", {})
+
+    async def webaudio_disable(self) -> None:
+        """Disable the WebAudio domain."""
+        session = self._require_session()
+        await session.send("WebAudio.disable", {})
+
+    async def webaudio_get_realtime_data(self, context_id: str) -> dict[str, Any]:
+        """Get realtime data for a WebAudio context.
+
+        Args:
+            context_id: The audio context ID.
+
+        Returns:
+            Dict with realtime audio data.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "WebAudio.getRealtimeData", {"contextId": context_id}
+        )
+        return dict(result) if result else {}
 
     # ── Media (experimental) ───────────────────────────────
 
@@ -3490,6 +6405,40 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         await session.send("Cast.enable", {})
         await session.send("Cast.stopCasting", {})
+
+    async def cast_enable(self) -> None:
+        """Enable the Cast domain via CDP."""
+        session = self._require_session()
+        await session.send("Cast.enable", {})
+
+    async def cast_disable(self) -> None:
+        """Disable the Cast domain via CDP."""
+        session = self._require_session()
+        await session.send("Cast.disable", {})
+
+    async def cast_set_sink_to_use(self, sink_name: str) -> None:
+        """Set a sink to use for cast via CDP."""
+        session = self._require_session()
+        await session.send("Cast.setSinkToUse", {"sinkName": sink_name})
+
+    async def cast_start_desktop_mirroring(self, sink_name: str) -> None:
+        """Start desktop mirroring to a cast sink via CDP."""
+        session = self._require_session()
+        await session.send(
+            "Cast.startDesktopMirroring", {"sinkName": sink_name}
+        )
+
+    async def cast_start_tab_mirroring(self, sink_name: str) -> None:
+        """Start tab mirroring to a cast sink via CDP."""
+        session = self._require_session()
+        await session.send(
+            "Cast.startTabMirroring", {"sinkName": sink_name}
+        )
+
+    async def cast_stop_casting(self, sink_name: str) -> None:
+        """Stop casting to a specific sink via CDP."""
+        session = self._require_session()
+        await session.send("Cast.stopCasting", {"sinkName": sink_name})
 
     # ── Bluetooth (experimental) ───────────────────────────
 
@@ -3605,6 +6554,1405 @@ class CDPBackend(AbstractBackend):
             {"name": key, "value": value},
         )
 
+    # ── Tethering ─────────────────────────────────────────
+
+    async def tethering_bind(self, port: int) -> None:
+        """Bind a port for tethering (accept incoming connections).
+
+        Args:
+            port: The port number to bind.
+        """
+        session = self._require_session()
+        await session.send("Tethering.bind", {"port": port})
+
+    async def tethering_unbind(self, port: int) -> None:
+        """Unbind a port from tethering.
+
+        Args:
+            port: The port number to unbind.
+        """
+        session = self._require_session()
+        await session.send("Tethering.unbind", {"port": port})
+
+    # ── WebMcp ────────────────────────────────────────────
+
+    async def web_mcp_enable(self) -> None:
+        """Enable the WebMcp domain."""
+        session = self._require_session()
+        await session.send("WebMcp.enable", {})
+
+    async def web_mcp_disable(self) -> None:
+        """Disable the WebMcp domain."""
+        session = self._require_session()
+        await session.send("WebMcp.disable", {})
+
+    # ── DeviceAccess ────────────────────────────────────────
+
+    async def device_access_cancel_prompt(self, id: str) -> None:
+        """Cancel a device access prompt by ID."""
+        session = self._require_session()
+        await session.send("DeviceAccess.cancelPrompt", {"id": id})
+
+    async def device_access_disable(self) -> None:
+        """Disable the DeviceAccess domain."""
+        session = self._require_session()
+        await session.send("DeviceAccess.disable", {})
+
+    async def device_access_enable(self) -> None:
+        """Enable the DeviceAccess domain."""
+        session = self._require_session()
+        await session.send("DeviceAccess.enable", {})
+
+    async def device_access_select_prompt(self, id: str, device_id: str) -> None:
+        """Select a device in a device access prompt."""
+        session = self._require_session()
+        await session.send("DeviceAccess.selectPrompt", {"id": id, "deviceId": device_id})
+
+    # ── DeviceOrientation ───────────────────────────────────
+
+    async def device_orientation_clear_override(self) -> None:
+        """Clear device orientation override."""
+        session = self._require_session()
+        await session.send("DeviceOrientation.clearDeviceOrientationOverride", {})
+
+    async def device_orientation_set_override(self, alpha: float, beta: float, gamma: float) -> None:
+        """Set device orientation override."""
+        session = self._require_session()
+        await session.send("DeviceOrientation.setDeviceOrientationOverride", {"alpha": alpha, "beta": beta, "gamma": gamma})
+
+    # ── DigitalCredentials ──────────────────────────────────
+
+    async def digital_credentials_set_virtual_wallet_behavior(self, behavior: dict[str, Any]) -> None:
+        """Set the virtual wallet behavior for digital credentials."""
+        session = self._require_session()
+        await session.send("DigitalCredentials.setVirtualWalletBehavior", {"behavior": behavior})
+
+    # ── DOMSnapshot ─────────────────────────────────────────
+
+    async def dom_snapshot_capture_snapshot(self, computed_styles: list[str] | None = None, include_paint_order: bool = False, include_dom_rects: bool = False, include_blended_background_colors: bool = False, include_text_color_opacity: bool = False) -> dict[str, Any]:
+        """Capture a DOM snapshot of the current page."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if computed_styles is not None:
+            params["computedStyles"] = computed_styles
+        if include_paint_order:
+            params["includePaintOrder"] = True
+        if include_dom_rects:
+            params["includeDOMRects"] = True
+        if include_blended_background_colors:
+            params["includeBlendedBackgroundColor"] = True
+        if include_text_color_opacity:
+            params["includeTextColorOpacity"] = True
+        result = await session.send("DOMSnapshot.captureSnapshot", params)
+        return dict(result) if result else {}
+
+    async def dom_snapshot_disable(self) -> None:
+        """Disable the DOMSnapshot domain."""
+        session = self._require_session()
+        await session.send("DOMSnapshot.disable", {})
+
+    async def dom_snapshot_enable(self) -> None:
+        """Enable the DOMSnapshot domain."""
+        session = self._require_session()
+        await session.send("DOMSnapshot.enable", {})
+
+    async def dom_snapshot_get_snapshot(self, computed_styles: list[str] | None = None, include_paint_order: bool = False, include_dom_rects: bool = False, include_blended_background_colors: bool = False, include_text_color_opacity: bool = False) -> dict[str, Any]:
+        """Get a DOM snapshot of the current page."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if computed_styles is not None:
+            params["computedStyles"] = computed_styles
+        if include_paint_order:
+            params["includePaintOrder"] = True
+        if include_dom_rects:
+            params["includeDOMRects"] = True
+        if include_blended_background_colors:
+            params["includeBlendedBackgroundColor"] = True
+        if include_text_color_opacity:
+            params["includeTextColorOpacity"] = True
+        result = await session.send("DOMSnapshot.getSnapshot", params)
+        return dict(result) if result else {}
+
+    # ── DOMStorage ──────────────────────────────────────────
+
+    async def dom_storage_clear(self, storage_id: dict[str, Any]) -> None:
+        """Clear all entries in a DOM storage."""
+        session = self._require_session()
+        await session.send("DOMStorage.clear", {"storageId": storage_id})
+
+    async def dom_storage_clear_items(self, storage_id: dict[str, Any]) -> None:
+        """Clear all items in a DOM storage (alias)."""
+        session = self._require_session()
+        await session.send("DOMStorage.clear", {"storageId": storage_id})
+
+    async def dom_storage_disable(self) -> None:
+        """Disable the DOMStorage domain."""
+        session = self._require_session()
+        await session.send("DOMStorage.disable", {})
+
+    async def dom_storage_enable(self) -> None:
+        """Enable the DOMStorage domain."""
+        session = self._require_session()
+        await session.send("DOMStorage.enable", {})
+
+    async def dom_storage_get_items(self, storage_id: dict[str, Any]) -> list[dict[str, Any]]:
+        """Get all items in a DOM storage."""
+        session = self._require_session()
+        result = await session.send("DOMStorage.getDOMStorageItems", {"storageId": storage_id})
+        return list(result.get("items", [])) if result else []
+
+    async def dom_storage_remove_item(self, storage_id: dict[str, Any], key: str) -> None:
+        """Remove an item from a DOM storage."""
+        session = self._require_session()
+        await session.send("DOMStorage.removeDOMStorageItem", {"storageId": storage_id, "key": key})
+
+    async def dom_storage_set_item(self, storage_id: dict[str, Any], key: str, value: str) -> None:
+        """Set an item in a DOM storage."""
+        session = self._require_session()
+        await session.send("DOMStorage.setDOMStorageItem", {"storageId": storage_id, "key": key, "value": value})
+
+    # ── EventBreakpoints ────────────────────────────────────
+
+    async def event_breakpoints_clear_instrumentation_breakpoint(self, instrumentation_name: str) -> None:
+        """Clear an instrumentation breakpoint for events."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.clearInstrumentationBreakpoint", {"instrumentationName": instrumentation_name})
+
+    async def event_breakpoints_disable(self) -> None:
+        """Disable the EventBreakpoints domain."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.disable", {})
+
+    async def event_breakpoints_remove_instrumentation_breakpoint(self, instrumentation_name: str) -> None:
+        """Remove an instrumentation breakpoint for events."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.removeInstrumentationBreakpoint", {"instrumentationName": instrumentation_name})
+
+    async def event_breakpoints_set_instrumentation_breakpoint(self, instrumentation_name: str) -> None:
+        """Set an instrumentation breakpoint for events."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.setInstrumentationBreakpoint", {"instrumentationName": instrumentation_name})
+
+    # ── Extensions ──────────────────────────────────────────
+
+    async def extensions_clear_storage_items(self, id: str, storage_type: str) -> None:
+        """Clear storage items for an extension."""
+        session = self._require_session()
+        await session.send("Extensions.clearStorageItems", {"id": id, "storageType": storage_type})
+
+    async def extensions_get_storage_items(self, id: str, storage_type: str) -> dict[str, Any]:
+        """Get storage items for an extension."""
+        session = self._require_session()
+        result = await session.send("Extensions.getStorageItems", {"id": id, "storageType": storage_type})
+        return dict(result) if result else {}
+
+    async def extensions_remove_storage_items(self, id: str, storage_type: str, keys: list[str]) -> None:
+        """Remove storage items from an extension."""
+        session = self._require_session()
+        await session.send("Extensions.removeStorageItems", {"id": id, "storageType": storage_type, "keys": keys})
+
+    async def extensions_set_storage_items(self, id: str, storage_type: str, values: list[dict[str, Any]]) -> None:
+        """Set storage items for an extension."""
+        session = self._require_session()
+        await session.send("Extensions.setStorageItems", {"id": id, "storageType": storage_type, "values": values})
+
+    async def extensions_trigger_action(self, id: str, action: str) -> None:
+        """Trigger an action on an extension."""
+        session = self._require_session()
+        await session.send("Extensions.triggerAction", {"id": id, "action": action})
+
+    # ── FedCm ───────────────────────────────────────────────
+
+    async def fed_cm_click_dialog_button(self, dialog_id: str, button_index: int) -> None:
+        """Click a button in a FedCm dialog."""
+        session = self._require_session()
+        await session.send("FedCm.clickDialogButton", {"dialogId": dialog_id, "buttonIndex": button_index})
+
+    async def fed_cm_disable(self) -> None:
+        """Disable the FedCm domain."""
+        session = self._require_session()
+        await session.send("FedCm.disable", {})
+
+    async def fed_cm_dismiss_dialog(self, dialog_id: str) -> None:
+        """Dismiss a FedCm dialog."""
+        session = self._require_session()
+        await session.send("FedCm.dismissDialog", {"dialogId": dialog_id})
+
+    async def fed_cm_enable(self) -> None:
+        """Enable the FedCm domain."""
+        session = self._require_session()
+        await session.send("FedCm.enable", {})
+
+    async def fed_cm_open_url(self, dialog_id: str, account_index: int, url: str) -> None:
+        """Open a URL from a FedCm dialog."""
+        session = self._require_session()
+        await session.send("FedCm.openUrl", {"dialogId": dialog_id, "accountIndex": account_index, "url": url})
+
+    async def fed_cm_reset_cooldown(self) -> None:
+        """Reset the FedCm cooldown."""
+        session = self._require_session()
+        await session.send("FedCm.resetCooldown", {})
+
+    async def fed_cm_select_account(self, dialog_id: str, account_index: int) -> None:
+        """Select an account in a FedCm dialog."""
+        session = self._require_session()
+        await session.send("FedCm.selectAccount", {"dialogId": dialog_id, "accountIndex": account_index})
+
+    # ── Fetch ───────────────────────────────────────────────
+
+    async def fetch_continue_request(self, request_id: str, url: str | None = None, method: str | None = None, post_data: str | None = None, headers: list[dict[str, Any]] | None = None) -> None:
+        """Continue a paused request with optional modifications."""
+        session = self._require_session()
+        params: dict[str, Any] = {"requestId": request_id}
+        if url is not None:
+            params["url"] = url
+        if method is not None:
+            params["method"] = method
+        if post_data is not None:
+            params["postData"] = post_data
+        if headers is not None:
+            params["headers"] = headers
+        await session.send("Fetch.continueRequest", params)
+
+    async def fetch_continue_request_with_auth(self, request_id: str, auth_challenge_response: dict[str, Any]) -> None:
+        """Continue a paused request with authentication."""
+        session = self._require_session()
+        await session.send("Fetch.continueWithAuth", {"requestId": request_id, "authChallengeResponse": auth_challenge_response})
+
+    async def fetch_continue_response(self, request_id: str, response_code: int = 200, response_headers: list[dict[str, Any]] | None = None, binary_response_headers: str | None = None) -> None:
+        """Continue a paused response."""
+        session = self._require_session()
+        params: dict[str, Any] = {"requestId": request_id, "responseCode": response_code}
+        if response_headers is not None:
+            params["responseHeaders"] = response_headers
+        if binary_response_headers is not None:
+            params["binaryResponseHeaders"] = binary_response_headers
+        await session.send("Fetch.continueResponse", params)
+
+    async def fetch_continue_with_auth(self, request_id: str, auth_challenge_response: dict[str, Any]) -> None:
+        """Continue a paused request with auth challenge response."""
+        session = self._require_session()
+        await session.send("Fetch.continueWithAuth", {"requestId": request_id, "authChallengeResponse": auth_challenge_response})
+
+    async def fetch_disable(self) -> None:
+        """Disable the Fetch domain."""
+        session = self._require_session()
+        await session.send("Fetch.disable", {})
+
+    async def fetch_enable(self, patterns: list[dict[str, Any]] | None = None, handle_auth_requests: bool = False) -> None:
+        """Enable the Fetch domain with optional patterns."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if patterns is not None:
+            params["patterns"] = patterns
+        if handle_auth_requests:
+            params["handleAuthRequests"] = True
+        await session.send("Fetch.enable", params)
+
+    async def fetch_fail_request(self, request_id: str, error_reason: str) -> None:
+        """Fail a paused request with an error."""
+        session = self._require_session()
+        await session.send("Fetch.failRequest", {"requestId": request_id, "errorReason": error_reason})
+
+    async def fetch_fulfill_request(self, request_id: str, response_code: int = 200, response_headers: list[dict[str, Any]] | None = None, body: str | None = None) -> None:
+        """Fulfill a paused request with a response."""
+        session = self._require_session()
+        params: dict[str, Any] = {"requestId": request_id, "responseCode": response_code}
+        if response_headers is not None:
+            params["responseHeaders"] = response_headers
+        if body is not None:
+            params["body"] = body
+        await session.send("Fetch.fulfillRequest", params)
+
+    async def fetch_get_request_post_data(self, request_id: str) -> str:
+        """Get the POST data of a paused request."""
+        session = self._require_session()
+        result = await session.send("Fetch.getRequestPostData", {"requestId": request_id})
+        return str(result.get("postData", "")) if result else ""
+
+    async def fetch_take_response_body_as_stream(self, request_id: str) -> dict[str, Any]:
+        """Take the response body of a paused request as a stream."""
+        session = self._require_session()
+        result = await session.send("Fetch.takeResponseBodyAsStream", {"requestId": request_id})
+        return dict(result) if result else {}
+
+    # ── FileSystem ──────────────────────────────────────────
+
+    async def file_system_get_directory(self, origin: str, type: str) -> dict[str, Any]:
+        """Get a file system directory by origin and type."""
+        session = self._require_session()
+        result = await session.send("FileSystem.getDirectory", {"origin": origin, "type": type})
+        return dict(result) if result else {}
+
+    # ── HeadlessExperimental ────────────────────────────────
+
+    async def headless_experimental_begin_frame(self, frame_time_ticks: float | None = None, interval: float | None = None, no_display_updates: bool = False, screenshot: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Begin a new frame in headless mode."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if frame_time_ticks is not None:
+            params["frameTimeTicks"] = frame_time_ticks
+        if interval is not None:
+            params["interval"] = interval
+        if no_display_updates:
+            params["noDisplayUpdates"] = True
+        if screenshot is not None:
+            params["screenshot"] = screenshot
+        result = await session.send("HeadlessExperimental.beginFrame", params)
+        return dict(result) if result else {}
+
+    async def headless_experimental_disable(self) -> None:
+        """Disable the HeadlessExperimental domain."""
+        session = self._require_session()
+        await session.send("HeadlessExperimental.disable", {})
+
+    async def headless_experimental_enable(self) -> None:
+        """Enable the HeadlessExperimental domain."""
+        session = self._require_session()
+        await session.send("HeadlessExperimental.enable", {})
+
+    # ── Inspector ───────────────────────────────────────────
+
+    async def inspector_disable(self) -> None:
+        """Disable the Inspector domain."""
+        session = self._require_session()
+        await session.send("Inspector.disable", {})
+
+    async def inspector_enable(self) -> None:
+        """Enable the Inspector domain."""
+        session = self._require_session()
+        await session.send("Inspector.enable", {})
+
+    # ── Preload ────────────────────────────────────────────
+
+    async def preload_disable(self) -> None:
+        """Disable the Preload domain."""
+        session = self._require_session()
+        await session.send("Preload.disable", {})
+
+    async def preload_enable(self) -> None:
+        """Enable the Preload domain."""
+        session = self._require_session()
+        await session.send("Preload.enable", {})
+
+    async def preload_get_preload_policy(self) -> dict[str, Any]:
+        """Get the current preload policy."""
+        session = self._require_session()
+        result = await session.send("Preload.getPreloadPolicy", {})
+        return dict(result) if result else {}
+
+    async def preload_set_preload_policy(self, policy: dict[str, Any]) -> None:
+        """Set the preload policy."""
+        session = self._require_session()
+        await session.send("Preload.setPreloadPolicy", {"policy": policy})
+
+    # ── Profiler ───────────────────────────────────────────
+
+    async def profiler_disable(self) -> None:
+        """Disable the Profiler domain."""
+        session = self._require_session()
+        await session.send("Profiler.disable", {})
+
+    async def profiler_enable(self) -> None:
+        """Enable the Profiler domain."""
+        session = self._require_session()
+        await session.send("Profiler.enable", {})
+
+    async def profiler_get_best_effort_coverage(self) -> dict[str, Any]:
+        """Get best effort coverage data."""
+        session = self._require_session()
+        result = await session.send("Profiler.getBestEffortCoverage", {})
+        return dict(result) if result else {}
+
+    async def profiler_set_sampling_interval(self, interval: int) -> None:
+        """Set the CPU sampling interval in microseconds."""
+        session = self._require_session()
+        await session.send("Profiler.setSamplingInterval", {"interval": interval})
+
+    async def profiler_start(self) -> None:
+        """Start CPU profiling."""
+        session = self._require_session()
+        await session.send("Profiler.start", {})
+
+    async def profiler_start_precise_coverage(
+        self, call_count: bool = False, detailed: bool = False
+    ) -> dict[str, Any]:
+        """Start precise code coverage tracking."""
+        session = self._require_session()
+        result = await session.send(
+            "Profiler.startPreciseCoverage",
+            {"callCount": call_count, "detailed": detailed},
+        )
+        return dict(result) if result else {}
+
+    async def profiler_stop(self) -> dict[str, Any]:
+        """Stop CPU profiling and return the profile data."""
+        session = self._require_session()
+        result = await session.send("Profiler.stop", {})
+        return dict(result) if result else {}
+
+    async def profiler_stop_precise_coverage(self) -> None:
+        """Stop precise code coverage tracking."""
+        session = self._require_session()
+        await session.send("Profiler.stopPreciseCoverage", {})
+
+    async def profiler_take_precise_coverage(self) -> dict[str, Any]:
+        """Take a snapshot of precise code coverage data."""
+        session = self._require_session()
+        result = await session.send("Profiler.takePreciseCoverage", {})
+        return dict(result) if result else {}
+
+    # ── PWA ────────────────────────────────────────────────
+
+    async def pwa_change_app_user_settings(self, app_id: str, user_settings: dict[str, Any]) -> None:
+        """Change PWA user settings."""
+        session = self._require_session()
+        await session.send("PWA.changeAppUserSettings", {"appId": app_id, "userSettings": user_settings})
+
+    async def pwa_get_os_app_state(self, app_id: str) -> dict[str, Any]:
+        """Get the OS-level state of a PWA."""
+        session = self._require_session()
+        result = await session.send("PWA.getOsAppState", {"appId": app_id})
+        return dict(result) if result else {}
+
+    async def pwa_install(self, manifest_id: str, install_url: str | None = None) -> None:
+        """Install a PWA."""
+        session = self._require_session()
+        params: dict[str, Any] = {"manifestId": manifest_id}
+        if install_url is not None:
+            params["installUrlOrBundleUrl"] = install_url
+        await session.send("PWA.install", params)
+
+    async def pwa_launch_files_in_app(self, app_id: str, files: list[str]) -> dict[str, Any]:
+        """Launch files in a PWA."""
+        session = self._require_session()
+        result = await session.send("PWA.launchFilesInApp", {"appId": app_id, "files": files})
+        return dict(result) if result else {}
+
+    async def pwa_open_current_page_in_app(self, app_id: str) -> dict[str, Any]:
+        """Open the current page in a PWA."""
+        session = self._require_session()
+        result = await session.send("PWA.openCurrentPageInApp", {"appId": app_id})
+        return dict(result) if result else {}
+
+    async def pwa_uninstall(self, app_id: str) -> None:
+        """Uninstall a PWA."""
+        session = self._require_session()
+        await session.send("PWA.uninstall", {"appId": app_id})
+
+    # ── IO ──────────────────────────────────────────────────
+
+    async def io_read(self, handle: str, offset: int = 0, size: int | None = None) -> dict[str, Any]:
+        """Read data from a blob handle."""
+        session = self._require_session()
+        params: dict[str, Any] = {"handle": handle, "offset": offset}
+        if size is not None:
+            params["size"] = size
+        result = await session.send("IO.read", params)
+        return dict(result) if result else {}
+
+    async def io_resolve_blob(self, object_id: str) -> str:
+        """Resolve a blob object ID to a UUID handle."""
+        session = self._require_session()
+        result = await session.send("IO.resolveBlob", {"objectId": object_id})
+        return str(result.get("uuid", "")) if result else ""
+
+    # ── HeapProfiler ───────────────────────────────────────
+
+    async def heap_profiler_add_inspected_heap_object(self, heap_object_id: str) -> None:
+        """Add an inspected heap object."""
+        session = self._require_session()
+        await session.send("HeapProfiler.addInspectedHeapObject", {"heapObjectId": heap_object_id})
+
+    async def heap_profiler_collect_garbage(self) -> None:
+        """Collect garbage."""
+        session = self._require_session()
+        await session.send("HeapProfiler.collectGarbage", {})
+
+    async def heap_profiler_disable(self) -> None:
+        """Disable the HeapProfiler domain."""
+        session = self._require_session()
+        await session.send("HeapProfiler.disable", {})
+
+    async def heap_profiler_enable(self) -> None:
+        """Enable the HeapProfiler domain."""
+        session = self._require_session()
+        await session.send("HeapProfiler.enable", {})
+
+    async def heap_profiler_get_heap_object_id(self, object_id: str) -> str:
+        """Get the heap object ID for a remote object."""
+        session = self._require_session()
+        result = await session.send("HeapProfiler.getHeapObjectId", {"objectId": object_id})
+        return str(result.get("heapSnapshotObjectId", "")) if result else ""
+
+    async def heap_profiler_get_object_by_heap_object_id(self, object_id: str, object_group: str = "") -> dict[str, Any]:
+        """Get an object by heap object ID."""
+        session = self._require_session()
+        params: dict[str, Any] = {"objectId": object_id}
+        if object_group:
+            params["objectGroup"] = object_group
+        result = await session.send("HeapProfiler.getObjectByHeapObjectId", params)
+        return dict(result) if result else {}
+
+    async def heap_profiler_get_sampling_profile(self) -> dict[str, Any]:
+        """Get the current sampling profile."""
+        session = self._require_session()
+        result = await session.send("HeapProfiler.getSamplingProfile", {})
+        return dict(result) if result else {}
+
+    async def heap_profiler_start_sampling(self, sampling_interval: int = 0) -> None:
+        """Start heap sampling."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if sampling_interval:
+            params["samplingInterval"] = sampling_interval
+        await session.send("HeapProfiler.startSampling", params)
+
+    async def heap_profiler_start_tracking_heap_objects(self, track_allocations: bool = False) -> None:
+        """Start tracking heap objects."""
+        session = self._require_session()
+        await session.send("HeapProfiler.startTrackingHeapObjects", {"trackAllocations": track_allocations})
+
+    async def heap_profiler_stop_sampling(self) -> dict[str, Any]:
+        """Stop heap sampling and return the profile."""
+        session = self._require_session()
+        result = await session.send("HeapProfiler.stopSampling", {})
+        return dict(result) if result else {}
+
+    async def heap_profiler_stop_tracking_heap_objects(self, report_progress: bool = False) -> None:
+        """Stop tracking heap objects."""
+        session = self._require_session()
+        await session.send("HeapProfiler.stopTrackingHeapObjects", {"reportProgress": report_progress})
+
+    async def heap_profiler_take_heap_snapshot(self, report_progress: bool = False) -> None:
+        """Take a heap snapshot."""
+        session = self._require_session()
+        await session.send("HeapProfiler.takeHeapSnapshot", {"reportProgress": report_progress})
+
+    # ── IndexedDB ──────────────────────────────────────────
+
+    async def indexed_db_clear_object_store(self, security_origin: str, database_name: str, object_store_name: str) -> None:
+        """Clear all entries in an IndexedDB object store."""
+        session = self._require_session()
+        await session.send("IndexedDB.clearObjectStore", {"securityOrigin": security_origin, "databaseName": database_name, "objectStoreName": object_store_name})
+
+    async def indexed_db_delete_database(self, security_origin: str, database_name: str) -> None:
+        """Delete an IndexedDB database."""
+        session = self._require_session()
+        await session.send("IndexedDB.deleteDatabase", {"securityOrigin": security_origin, "databaseName": database_name})
+
+    async def indexed_db_delete_object_store_entries(self, security_origin: str, database_name: str, object_store_name: str, key_range: dict[str, Any]) -> None:
+        """Delete entries in an IndexedDB object store."""
+        session = self._require_session()
+        await session.send("IndexedDB.deleteObjectStoreEntries", {"securityOrigin": security_origin, "databaseName": database_name, "objectStoreName": object_store_name, "keyRange": key_range})
+
+    async def indexed_db_disable(self) -> None:
+        """Disable the IndexedDB domain."""
+        session = self._require_session()
+        await session.send("IndexedDB.disable", {})
+
+    async def indexed_db_enable(self) -> None:
+        """Enable the IndexedDB domain."""
+        session = self._require_session()
+        await session.send("IndexedDB.enable", {})
+
+    async def indexed_db_get_metadata(self, security_origin: str, database_name: str, object_store_name: str) -> dict[str, Any]:
+        """Get metadata for an IndexedDB object store."""
+        session = self._require_session()
+        result = await session.send("IndexedDB.getMetadata", {"securityOrigin": security_origin, "databaseName": database_name, "objectStoreName": object_store_name})
+        return dict(result) if result else {}
+
+    async def indexed_db_request_data(self, security_origin: str, database_name: str, object_store_name: str, index_name: str, skip_count: int = 0, page_size: int = 10, key_range: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Request data from an IndexedDB object store."""
+        session = self._require_session()
+        params: dict[str, Any] = {"securityOrigin": security_origin, "databaseName": database_name, "objectStoreName": object_store_name, "indexName": index_name, "skipCount": skip_count, "pageSize": page_size}
+        if key_range is not None:
+            params["keyRange"] = key_range
+        result = await session.send("IndexedDB.requestData", params)
+        return dict(result) if result else {}
+
+    async def indexed_db_request_database(self, security_origin: str, database_name: str) -> dict[str, Any]:
+        """Request an IndexedDB database with its object stores."""
+        session = self._require_session()
+        result = await session.send("IndexedDB.requestDatabase", {"securityOrigin": security_origin, "databaseName": database_name})
+        return dict(result) if result else {}
+
+    async def indexed_db_request_database_names(self, security_origin: str) -> dict[str, Any]:
+        """Request the names of all IndexedDB databases for an origin."""
+        session = self._require_session()
+        result = await session.send("IndexedDB.requestDatabaseNames", {"securityOrigin": security_origin})
+        return dict(result) if result else {}
+
+    # ── LayerTree ──────────────────────────────────────────
+
+    async def layer_tree_compositing_reasons(self, layer_id: str) -> dict[str, Any]:
+        """Get compositing reasons for a layer."""
+        session = self._require_session()
+        result = await session.send("LayerTree.compositingReasons", {"layerId": layer_id})
+        return dict(result) if result else {}
+
+    async def layer_tree_disable(self) -> None:
+        """Disable the LayerTree domain."""
+        session = self._require_session()
+        await session.send("LayerTree.disable", {})
+
+    async def layer_tree_enable(self) -> None:
+        """Enable the LayerTree domain."""
+        session = self._require_session()
+        await session.send("LayerTree.enable", {})
+
+    async def layer_tree_load_snapshot(self, snapshots: list[dict[str, Any]]) -> dict[str, Any]:
+        """Load a layer tree snapshot."""
+        session = self._require_session()
+        result = await session.send("LayerTree.loadSnapshot", {"snapshots": snapshots})
+        return dict(result) if result else {}
+
+    async def layer_tree_make_snapshot(self, layer_id: str) -> dict[str, Any]:
+        """Make a snapshot of a layer."""
+        session = self._require_session()
+        result = await session.send("LayerTree.makeSnapshot", {"layerId": layer_id})
+        return dict(result) if result else {}
+
+    async def layer_tree_profile_snapshot(self, snapshot_id: str) -> dict[str, Any]:
+        """Profile a layer snapshot."""
+        session = self._require_session()
+        result = await session.send("LayerTree.profileSnapshot", {"snapshotId": snapshot_id})
+        return dict(result) if result else {}
+
+    async def layer_tree_release_snapshot(self, snapshot_id: str) -> None:
+        """Release a layer snapshot."""
+        session = self._require_session()
+        await session.send("LayerTree.releaseSnapshot", {"snapshotId": snapshot_id})
+
+    async def layer_tree_replay_snapshot(self, snapshot_id: str) -> dict[str, Any]:
+        """Replay a layer snapshot."""
+        session = self._require_session()
+        result = await session.send("LayerTree.replaySnapshot", {"snapshotId": snapshot_id})
+        return dict(result) if result else {}
+
+    async def layer_tree_snapshot_command_log(self, snapshot_id: str) -> dict[str, Any]:
+        """Get the command log for a layer snapshot."""
+        session = self._require_session()
+        result = await session.send("LayerTree.snapshotCommandLog", {"snapshotId": snapshot_id})
+        return dict(result) if result else {}
+
+    # ── Log ─────────────────────────────────────────────────
+
+    async def log_clear(self) -> None:
+        """Clear the log."""
+        session = self._require_session()
+        await session.send("Log.clear", {})
+
+    async def log_disable(self) -> None:
+        """Disable the Log domain."""
+        session = self._require_session()
+        await session.send("Log.disable", {})
+
+    async def log_enable(self) -> None:
+        """Enable the Log domain."""
+        session = self._require_session()
+        await session.send("Log.enable", {})
+
+    async def log_start_violations_report(self, config: list[dict[str, Any]]) -> None:
+        """Start reporting violations."""
+        session = self._require_session()
+        await session.send("Log.startViolationsReport", {"config": config})
+
+    async def log_stop_violations_report(self) -> None:
+        """Stop reporting violations."""
+        session = self._require_session()
+        await session.send("Log.stopViolationsReport", {})
+
+    # ── Media ───────────────────────────────────────────────
+
+    async def media_disable(self) -> None:
+        """Disable the Media domain."""
+        session = self._require_session()
+        await session.send("Media.disable", {})
+
+    async def media_enable(self) -> None:
+        """Enable the Media domain."""
+        session = self._require_session()
+        await session.send("Media.enable", {})
+
+    # ── Memory ──────────────────────────────────────────────
+
+    async def memory_forcibly_purge_javascript_memory(self) -> None:
+        """Forcibly purge JavaScript memory."""
+        session = self._require_session()
+        await session.send("Memory.forciblyPurgeJavaScriptMemory", {})
+
+    async def memory_get_all_time_sampling_profile(self) -> dict[str, Any]:
+        """Get the all-time sampling profile."""
+        session = self._require_session()
+        result = await session.send("Memory.getAllTimeSamplingProfile", {})
+        return dict(result) if result else {}
+
+    async def memory_get_browser_sampling_profile(self) -> dict[str, Any]:
+        """Get the browser sampling profile."""
+        session = self._require_session()
+        result = await session.send("Memory.getBrowserSamplingProfile", {})
+        return dict(result) if result else {}
+
+    async def memory_get_dom_counters(self) -> dict[str, Any]:
+        """Get DOM counters."""
+        session = self._require_session()
+        result = await session.send("Memory.getDOMCounters", {})
+        return dict(result) if result else {}
+
+    async def memory_get_dom_counters_for_leak_detection(self) -> dict[str, Any]:
+        """Get DOM counters for leak detection."""
+        session = self._require_session()
+        result = await session.send("Memory.getDOMCountersForLeakDetection", {})
+        return dict(result) if result else {}
+
+    async def memory_get_sampling_profile(self) -> dict[str, Any]:
+        """Get the current sampling profile."""
+        session = self._require_session()
+        result = await session.send("Memory.getSamplingProfile", {})
+        return dict(result) if result else {}
+
+    async def memory_prepare_for_leak_detection(self) -> None:
+        """Prepare for leak detection."""
+        session = self._require_session()
+        await session.send("Memory.prepareForLeakDetection", {})
+
+    async def memory_set_pressure_notifications_suppressed(self, suppressed: bool) -> None:
+        """Set pressure notifications suppressed state."""
+        session = self._require_session()
+        await session.send("Memory.setPressureNotificationsSuppressed", {"suppressed": suppressed})
+
+    async def memory_simulate_pressure_notification(self, level: str) -> None:
+        """Simulate a memory pressure notification."""
+        session = self._require_session()
+        await session.send("Memory.simulatePressureNotification", {"level": level})
+
+    async def memory_start_sampling(self, sampling_interval: int = 0) -> None:
+        """Start memory sampling."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if sampling_interval:
+            params["samplingInterval"] = sampling_interval
+        await session.send("Memory.startSampling", params)
+
+    async def memory_stop_sampling(self) -> None:
+        """Stop memory sampling."""
+        session = self._require_session()
+        await session.send("Memory.stopSampling", {})
+
+    # ── Console ─────────────────────────────────────────────
+
+    async def console_clear_messages(self) -> None:
+        """Clear all console messages."""
+        session = self._require_session()
+        await session.send("Console.clearMessages", {})
+
+    async def console_disable(self) -> None:
+        """Disable the Console domain."""
+        session = self._require_session()
+        await session.send("Console.disable", {})
+
+    async def console_enable(self) -> None:
+        """Enable the Console domain."""
+        session = self._require_session()
+        await session.send("Console.enable", {})
+
+    # ── CrashReportContext ──────────────────────────────────
+
+    async def crash_report_context_get_entries(self) -> list[dict[str, Any]]:
+        """Get crash report entries."""
+        session = self._require_session()
+        return await session.send("CrashReportContext.getEntries", {})
+
+    # ── Input (low-level CDP) ───────────────────────────────
+
+    async def input_cancel_dragging(self) -> None:
+        """Cancel any ongoing drag operation."""
+        session = self._require_session()
+        await session.send("Input.cancelDragging", {})
+
+    async def input_dispatch_drag_event(
+        self, type: str, x: float, y: float, data: dict[str, Any] | None = None
+    ) -> None:
+        """Dispatch a drag event to the page."""
+        session = self._require_session()
+        params: dict[str, Any] = {"type": type, "x": x, "y": y}
+        if data is not None:
+            params["data"] = data
+        await session.send("Input.dispatchDragEvent", params)
+
+    async def input_dispatch_key_event(
+        self,
+        type: str,
+        key: str = "",
+        code: str = "",
+        windows_virtual_key_code: int = 0,
+        native_virtual_key_code: int = 0,
+        modifiers: int = 0,
+        text: str = "",
+        unmodified_text: str = "",
+        auto_repeat: bool = False,
+        is_keypad: bool = False,
+        is_system_key: bool = False,
+        location: int = 0,
+        commands: list[str] | None = None,
+    ) -> None:
+        """Dispatch a key event to the page."""
+        session = self._require_session()
+        params: dict[str, Any] = {"type": type}
+        if key:
+            params["key"] = key
+        if code:
+            params["code"] = code
+        if windows_virtual_key_code:
+            params["windowsVirtualKeyCode"] = windows_virtual_key_code
+        if native_virtual_key_code:
+            params["nativeVirtualKeyCode"] = native_virtual_key_code
+        if modifiers:
+            params["modifiers"] = modifiers
+        if text:
+            params["text"] = text
+        if unmodified_text:
+            params["unmodifiedText"] = unmodified_text
+        if auto_repeat:
+            params["autoRepeat"] = auto_repeat
+        if is_keypad:
+            params["isKeypad"] = is_keypad
+        if is_system_key:
+            params["isSystemKey"] = is_system_key
+        if location:
+            params["location"] = location
+        if commands is not None:
+            params["commands"] = commands
+        await session.send("Input.dispatchKeyEvent", params)
+
+    async def input_dispatch_mouse_event(
+        self,
+        type: str,
+        x: float,
+        y: float,
+        button: str = "none",
+        click_count: int = 0,
+        modifiers: int = 0,
+        timestamp: float = 0,
+        delta_x: float = 0,
+        delta_y: float = 0,
+    ) -> None:
+        """Dispatch a mouse event to the page."""
+        session = self._require_session()
+        params: dict[str, Any] = {"type": type, "x": x, "y": y}
+        if button != "none":
+            params["button"] = button
+        if click_count:
+            params["clickCount"] = click_count
+        if modifiers:
+            params["modifiers"] = modifiers
+        if timestamp:
+            params["timestamp"] = timestamp
+        if delta_x:
+            params["deltaX"] = delta_x
+        if delta_y:
+            params["deltaY"] = delta_y
+        await session.send("Input.dispatchMouseEvent", params)
+
+    async def input_dispatch_touch_event(
+        self,
+        type: str,
+        touch_points: list[dict[str, Any]],
+        modifiers: int = 0,
+        timestamp: float = 0,
+    ) -> None:
+        """Dispatch a touch event to the page."""
+        session = self._require_session()
+        params: dict[str, Any] = {"type": type, "touchPoints": touch_points}
+        if modifiers:
+            params["modifiers"] = modifiers
+        if timestamp:
+            params["timestamp"] = timestamp
+        await session.send("Input.dispatchTouchEvent", params)
+
+    async def input_emulate_touch_from_mouse_event(
+        self,
+        type: str,
+        x: float,
+        y: float,
+        button: str = "none",
+        timestamp: float = 0,
+        delta_x: float = 0,
+        delta_y: float = 0,
+        modifiers: int = 0,
+        click_count: int = 0,
+    ) -> None:
+        """Emulate a touch event from a mouse event."""
+        session = self._require_session()
+        params: dict[str, Any] = {"type": type, "x": x, "y": y}
+        if button != "none":
+            params["button"] = button
+        if timestamp:
+            params["timestamp"] = timestamp
+        if delta_x:
+            params["deltaX"] = delta_x
+        if delta_y:
+            params["deltaY"] = delta_y
+        if modifiers:
+            params["modifiers"] = modifiers
+        if click_count:
+            params["clickCount"] = click_count
+        await session.send("Input.emulateTouchFromMouseEvent", params)
+
+    async def input_ime_set_composition(
+        self,
+        text: str,
+        selection_start: int,
+        selection_end: int,
+        replacement_start: int = 0,
+        replacement_end: int = 0,
+    ) -> None:
+        """Set the IME composition."""
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "text": text,
+            "selectionStart": selection_start,
+            "selectionEnd": selection_end,
+        }
+        if replacement_start:
+            params["replacementStart"] = replacement_start
+        if replacement_end:
+            params["replacementEnd"] = replacement_end
+        await session.send("Input.imeSetComposition", params)
+
+    async def input_insert_text(self, text: str) -> None:
+        """Insert text into the focused element."""
+        session = self._require_session()
+        await session.send("Input.insertText", {"text": text})
+
+    async def input_set_ignore_input_events(self, ignore: bool) -> None:
+        """Set whether to ignore input events."""
+        session = self._require_session()
+        await session.send("Input.setIgnoreInputEvents", {"ignore": ignore})
+
+    async def input_set_intercept_drags(self, enabled: bool) -> None:
+        """Set whether to intercept drag operations."""
+        session = self._require_session()
+        await session.send("Input.setInterceptDrags", {"enabled": enabled})
+
+    async def input_synthesize_pinch_gesture(
+        self, x: float, y: float, scale_factor: float, relative_pointer_speed: int = 0
+    ) -> None:
+        """Synthesize a pinch gesture."""
+        session = self._require_session()
+        params: dict[str, Any] = {"x": x, "y": y, "scaleFactor": scale_factor}
+        if relative_pointer_speed:
+            params["relativePointerSpeed"] = relative_pointer_speed
+        await session.send("Input.synthesizePinchGesture", params)
+
+    async def input_synthesize_scroll_gesture(
+        self,
+        x: float,
+        y: float,
+        x_distance: float = 0,
+        y_distance: float = 0,
+        x_overscroll: float = 0,
+        y_overscroll: float = 0,
+        prevent_fling: bool = True,
+        speed: int = 0,
+        repeat_count: int = 0,
+        repeat_delay_ms: int = 0,
+        interaction_source_name: str = "",
+    ) -> None:
+        """Synthesize a scroll gesture."""
+        session = self._require_session()
+        params: dict[str, Any] = {"x": x, "y": y}
+        if x_distance:
+            params["xDistance"] = x_distance
+        if y_distance:
+            params["yDistance"] = y_distance
+        if x_overscroll:
+            params["xOverscroll"] = x_overscroll
+        if y_overscroll:
+            params["yOverscroll"] = y_overscroll
+        params["preventFling"] = prevent_fling
+        if speed:
+            params["speed"] = speed
+        if repeat_count:
+            params["repeatCount"] = repeat_count
+        if repeat_delay_ms:
+            params["repeatDelayMs"] = repeat_delay_ms
+        if interaction_source_name:
+            params["interactionSourceName"] = interaction_source_name
+        await session.send("Input.synthesizeScrollGesture", params)
+
+    async def input_synthesize_tap_gesture(
+        self, x: float, y: float, duration: int = 0, tap_count: int = 1
+    ) -> None:
+        """Synthesize a tap gesture."""
+        session = self._require_session()
+        params: dict[str, Any] = {"x": x, "y": y}
+        if duration:
+            params["duration"] = duration
+        if tap_count != 1:
+            params["tapCount"] = tap_count
+        await session.send("Input.synthesizeTapGesture", params)
+
+    # ── Network (additional CDP methods) ────────────────────
+
+    async def network_clear_accepted_encodings_override(self) -> None:
+        """Clear the accepted encodings override."""
+        session = self._require_session()
+        await session.send("Network.clearAcceptedEncodingsOverride", {})
+
+    async def network_configure_durable_messages(self, options: dict[str, Any]) -> None:
+        """Configure durable messages."""
+        session = self._require_session()
+        await session.send("Network.configureDurableMessages", {"options": options})
+
+    async def network_delete_device_bound_session(self, session_id: str) -> None:
+        """Delete a device-bound session."""
+        session = self._require_session()
+        await session.send("Network.deleteDeviceBoundSession", {"sessionId": session_id})
+
+    async def network_disable(self) -> None:
+        """Disable the Network domain."""
+        session = self._require_session()
+        await session.send("Network.disable", {})
+
+    async def network_emulate_network_conditions_by_rule(
+        self, download_throughput: float = 0,
+        upload_throughput: float = 0,
+        offline: bool = False,
+        latency: float = 0,
+        connection_type: str = "",
+    ) -> None:
+        """Emulate network conditions by rule."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if download_throughput:
+            params["downloadThroughput"] = download_throughput
+        if upload_throughput:
+            params["uploadThroughput"] = upload_throughput
+        if offline:
+            params["offline"] = offline
+        if latency:
+            params["latency"] = latency
+        if connection_type:
+            params["connectionType"] = connection_type
+        await session.send("Network.emulateNetworkConditionsByRule", params)
+
+    async def network_enable(
+        self, max_total_buffer_size: int = 0, max_resource_buffer_size: int = 0
+    ) -> None:
+        """Enable the Network domain."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if max_total_buffer_size:
+            params["maxTotalBufferSize"] = max_total_buffer_size
+        if max_resource_buffer_size:
+            params["maxResourceBufferSize"] = max_resource_buffer_size
+        await session.send("Network.enable", params)
+
+    async def network_enable_device_bound_sessions(self) -> None:
+        """Enable device-bound sessions."""
+        session = self._require_session()
+        await session.send("Network.enableDeviceBoundSessions", {})
+
+    async def network_enable_reporting_api(self, enable: bool) -> None:
+        """Enable or disable the Reporting API."""
+        session = self._require_session()
+        await session.send("Network.enableReportingApi", {"enable": enable})
+
+    async def network_fetch_schemeful_site(self, request_id: str) -> dict[str, Any]:
+        """Fetch the schemeful site for a request."""
+        session = self._require_session()
+        return await session.send("Network.fetchSchemefulSite", {"requestId": request_id})
+
+    async def network_get_certificate(self, origin: str) -> dict[str, Any]:
+        """Get the certificate for an origin."""
+        session = self._require_session()
+        return await session.send("Network.getCertificate", {"origin": origin})
+
+    async def network_get_request_post_data(self, request_id: str) -> str:
+        """Get the POST data for a request."""
+        session = self._require_session()
+        result = await session.send("Network.getRequestPostData", {"requestId": request_id})
+        return result.get("postData", "")
+
+    async def network_get_response_body_for_interception(self, interception_id: str) -> str:
+        """Get the response body for an interception."""
+        session = self._require_session()
+        result = await session.send(
+            "Network.getResponseBodyForInterception", {"interceptionId": interception_id}
+        )
+        return result.get("body", "")
+
+    async def network_get_security_isolation_status(self, frame_id: str = "") -> dict[str, Any]:
+        """Get the security isolation status."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if frame_id:
+            params["frameId"] = frame_id
+        return await session.send("Network.getSecurityIsolationStatus", params)
+
+    async def network_override_network_state(self, state: dict[str, Any]) -> None:
+        """Override the network state."""
+        session = self._require_session()
+        await session.send("Network.overrideNetworkState", state)
+
+    async def network_search_in_response_body(
+        self, request_id: str, query: str, case_sensitive: bool = False, is_regex: bool = False
+    ) -> dict[str, Any]:
+        """Search in a response body."""
+        session = self._require_session()
+        params: dict[str, Any] = {"requestId": request_id, "query": query}
+        if case_sensitive:
+            params["caseSensitive"] = case_sensitive
+        if is_regex:
+            params["isRegex"] = is_regex
+        return await session.send("Network.searchInResponseBody", params)
+
+    async def network_set_accepted_encodings(self, encodings: list[str]) -> None:
+        """Set accepted encodings."""
+        session = self._require_session()
+        await session.send("Network.setAcceptedEncodings", {"encodings": encodings})
+
+    async def network_set_attach_debug_stack(self, enabled: bool) -> None:
+        """Set whether to attach debug stack to network requests."""
+        session = self._require_session()
+        await session.send("Network.setAttachDebugStack", {"enabled": enabled})
+
+    async def network_set_cookies(self, cookies: list[dict[str, Any]]) -> None:
+        """Set cookies."""
+        session = self._require_session()
+        await session.send("Network.setCookies", {"cookies": cookies})
+
+    async def network_stream_resource_content(self, request_id: str) -> dict[str, Any]:
+        """Stream resource content for a request."""
+        session = self._require_session()
+        return await session.send("Network.streamResourceContent", {"requestId": request_id})
+
+    async def network_take_response_body_for_interception_as_stream(
+        self, interception_id: str
+    ) -> dict[str, Any]:
+        """Take the response body for an interception as a stream."""
+        session = self._require_session()
+        return await session.send(
+            "Network.takeResponseBodyForInterceptionAsStream",
+            {"interceptionId": interception_id},
+        )
+
+    # ── SmartCardEmulation ────────────────────────────────
+
+    async def smart_card_enable(self) -> None:
+        """Enable the SmartCardEmulation domain."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.enable", {})
+
+    async def smart_card_disable(self) -> None:
+        """Disable the SmartCardEmulation domain."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.disable", {})
+
+    async def smart_card_report_error(
+        self, request_id: str, error: str
+    ) -> None:
+        """Report an error for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            error: Error code string.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportError",
+            {"requestId": request_id, "error": error},
+        )
+
+    async def smart_card_report_plain_result(
+        self, request_id: str, result_code: int
+    ) -> None:
+        """Report a plain result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportPlainResult",
+            {"requestId": request_id, "resultCode": result_code},
+        )
+
+    async def smart_card_report_connect_result(
+        self, request_id: str, result_code: int, connection_id: str
+    ) -> None:
+        """Report a connect result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+            connection_id: Established connection identifier.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportConnectResult",
+            {
+                "requestId": request_id,
+                "resultCode": result_code,
+                "connectionId": connection_id,
+            },
+        )
+
+    async def smart_card_report_data_result(
+        self, request_id: str, result_code: int, data: str
+    ) -> None:
+        """Report a data result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+            data: Response data (hex-encoded).
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportDataResult",
+            {
+                "requestId": request_id,
+                "resultCode": result_code,
+                "data": data,
+            },
+        )
+
+    async def smart_card_report_status_result(
+        self, request_id: str, status: str
+    ) -> None:
+        """Report a status result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            status: Status string.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportStatusResult",
+            {"requestId": request_id, "status": status},
+        )
+
+    async def smart_card_report_begin_transaction_result(
+        self, request_id: str, result_code: int
+    ) -> None:
+        """Report a begin-transaction result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportBeginTransactionResult",
+            {"requestId": request_id, "resultCode": result_code},
+        )
+
+    async def smart_card_report_establish_context_result(
+        self, request_id: str, result_code: int, context_id: str
+    ) -> None:
+        """Report an establish-context result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+            context_id: Established context identifier.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportEstablishContextResult",
+            {
+                "requestId": request_id,
+                "resultCode": result_code,
+                "contextId": context_id,
+            },
+        )
+
+    async def smart_card_report_release_context_result(
+        self, request_id: str, result_code: int
+    ) -> None:
+        """Report a release-context result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportReleaseContextResult",
+            {"requestId": request_id, "resultCode": result_code},
+        )
+
+    async def smart_card_report_list_readers_result(
+        self, request_id: str, result_code: int, readers: list[dict[str, Any]]
+    ) -> None:
+        """Report a list-readers result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+            readers: List of reader dicts.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportListReadersResult",
+            {
+                "requestId": request_id,
+                "resultCode": result_code,
+                "readers": readers,
+            },
+        )
+
+    async def smart_card_report_get_status_change_result(
+        self, request_id: str, result_code: int, readers: list[dict[str, Any]]
+    ) -> None:
+        """Report a get-status-change result for a pending smart card request.
+
+        Args:
+            request_id: The pending request identifier.
+            result_code: Smart card result code.
+            readers: List of reader status dicts.
+        """
+        session = self._require_session()
+        await session.send(
+            "SmartCardEmulation.reportGetStatusChangeResult",
+            {
+                "requestId": request_id,
+                "resultCode": result_code,
+                "readers": readers,
+            },
+        )
+
+    # ── System Info ───────────────────────────────────────
+
+    async def system_info_get_info(self) -> dict[str, Any]:
+        """Get system info (OS, GPU, model, etc.) via CDP."""
+        session = self._require_session()
+        return dict(await session.send("SystemInfo.getInfo", {}))
+
+    async def system_info_get_process_info(self) -> list[dict[str, Any]]:
+        """Get process info for the browser via CDP."""
+        session = self._require_session()
+        result = await session.send("SystemInfo.getProcessInfo", {})
+        return [dict(p) for p in result.get("processInfo", [])] if result else []
+
+    async def system_info_get_feature_state(self, feature_name: str) -> dict[str, Any]:
+        """Get the state of a specific feature via CDP.
+
+        Args:
+            feature_name: The feature name to query.
+
+        Returns:
+            Dict with feature state information.
+        """
+        session = self._require_session()
+        return dict(await session.send(
+            "SystemInfo.getFeatureState", {"featureName": feature_name}
+        ))
+
     async def __aenter__(self) -> CDPBackend:
         """Enter async context manager, returning self.
 
@@ -3624,6 +7972,2113 @@ class CDPBackend(AbstractBackend):
             exc_tb: Traceback if raised, else None.
         """
         await self.close()
+
+    # ── Accessibility (extended) ──────────────────────────
+
+    async def a11y_disable(self) -> None:
+        """Disable the accessibility domain."""
+        session = self._require_session()
+        await session.send("Accessibility.disable")
+
+    async def a11y_enable(self) -> None:
+        """Enable the accessibility domain."""
+        session = self._require_session()
+        await session.send("Accessibility.enable")
+
+    async def a11y_get_ax_node_and_ancestors(
+        self,
+        node_id: int | None = None,
+        backend_node_id: int | None = None,
+        object_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch a node and all ancestors up to and including the root.
+
+        Args:
+            node_id: DOM node ID.
+            backend_node_id: Backend DOM node ID.
+            object_id: JavaScript object ID.
+
+        Returns:
+            Dict with ``nodes`` list.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if node_id is not None:
+            params["nodeId"] = node_id
+        if backend_node_id is not None:
+            params["backendNodeId"] = backend_node_id
+        if object_id is not None:
+            params["objectId"] = object_id
+        return dict(await session.send("Accessibility.getAXNodeAndAncestors", params))
+
+    async def a11y_get_child_ax_nodes(
+        self, node_id: str, frame_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Fetch children of an accessibility node by AXNodeId.
+
+        Args:
+            node_id: Accessibility node ID.
+            frame_id: Optional frame ID.
+
+        Returns:
+            List of child node dicts.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"id": node_id}
+        if frame_id is not None:
+            params["frameId"] = frame_id
+        result = await session.send("Accessibility.getChildAXNodes", params)
+        return list(result.get("nodes", []))
+
+    async def a11y_get_full_ax_tree(
+        self, depth: int | None = None, frame_id: str | None = None
+    ) -> dict[str, Any]:
+        """Fetch the entire accessibility tree for the root document.
+
+        Args:
+            depth: Maximum depth to fetch.
+            frame_id: Optional frame ID.
+
+        Returns:
+            Dict with ``nodes`` list.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if depth is not None:
+            params["depth"] = depth
+        if frame_id is not None:
+            params["frameId"] = frame_id
+        return dict(await session.send("Accessibility.getFullAXTree", params))
+
+    async def a11y_get_partial_ax_tree(
+        self,
+        node_id: int | None = None,
+        backend_node_id: int | None = None,
+        object_id: str | None = None,
+        fetch_relatives: bool = True,
+    ) -> dict[str, Any]:
+        """Fetch a partial accessibility tree for a DOM node.
+
+        Args:
+            node_id: DOM node ID.
+            backend_node_id: Backend DOM node ID.
+            object_id: JavaScript object ID.
+            fetch_relatives: Whether to fetch relatives.
+
+        Returns:
+            Dict with ``nodes`` list.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"fetchRelatives": fetch_relatives}
+        if node_id is not None:
+            params["nodeId"] = node_id
+        if backend_node_id is not None:
+            params["backendNodeId"] = backend_node_id
+        if object_id is not None:
+            params["objectId"] = object_id
+        return dict(await session.send("Accessibility.getPartialAXTree", params))
+
+    async def a11y_get_root_ax_node(
+        self, frame_id: str | None = None
+    ) -> dict[str, Any]:
+        """Fetch the root accessibility node.
+
+        Args:
+            frame_id: Optional frame ID.
+
+        Returns:
+            Dict with the root node.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if frame_id is not None:
+            params["frameId"] = frame_id
+        return dict(await session.send("Accessibility.getRootAXNode", params))
+
+    async def a11y_query_ax_tree(
+        self,
+        node_id: int | None = None,
+        backend_node_id: int | None = None,
+        object_id: str | None = None,
+        accessible_name: str | None = None,
+        role: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Query a DOM node's accessibility subtree.
+
+        Args:
+            node_id: DOM node ID.
+            backend_node_id: Backend DOM node ID.
+            object_id: JavaScript object ID.
+            accessible_name: Filter by accessible name.
+            role: Filter by role.
+
+        Returns:
+            List of matching node dicts.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if node_id is not None:
+            params["nodeId"] = node_id
+        if backend_node_id is not None:
+            params["backendNodeId"] = backend_node_id
+        if object_id is not None:
+            params["objectId"] = object_id
+        if accessible_name is not None:
+            params["accessibleName"] = accessible_name
+        if role is not None:
+            params["role"] = role
+        result = await session.send("Accessibility.queryAXTree", params)
+        return list(result.get("nodes", []))
+
+    # ── Ads ────────────────────────────────────────────────
+
+    async def ads_get_ad_metrics(self) -> dict[str, Any]:
+        """Get ad metrics for the current page."""
+        session = self._require_session()
+        return dict(await session.send("Ads.getAdMetrics"))
+
+    # ── Animation (extended) ──────────────────────────────
+
+    async def animation_disable(self) -> None:
+        """Disable the Animation domain."""
+        session = self._require_session()
+        await session.send("Animation.disable")
+
+    async def animation_enable(self) -> None:
+        """Enable the Animation domain."""
+        session = self._require_session()
+        await session.send("Animation.enable")
+
+    async def animation_get_current_time(self, animation_id: str) -> float:
+        """Get the current time of an animation.
+
+        Args:
+            animation_id: The animation ID.
+
+        Returns:
+            Current time in milliseconds.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "Animation.getCurrentTime", {"id": animation_id}
+        )
+        return float(result.get("currentTime", 0))
+
+    async def animation_get_playback_rate(self) -> float:
+        """Get the playback rate of the document timeline.
+
+        Returns:
+            Playback rate (1.0 = normal).
+        """
+        session = self._require_session()
+        result = await session.send("Animation.getPlaybackRate")
+        return float(result.get("playbackRate", 1.0))
+
+    async def animation_release_animations(self, animations: list[str]) -> None:
+        """Release animations to free resources.
+
+        Args:
+            animations: List of animation IDs to release.
+        """
+        session = self._require_session()
+        await session.send(
+            "Animation.releaseAnimations", {"animations": animations}
+        )
+
+    async def animation_replay(self, animations: list[str]) -> None:
+        """Replay animations from the beginning.
+
+        Args:
+            animations: List of animation IDs to replay.
+        """
+        session = self._require_session()
+        await session.send("Animation.replay", {"animations": animations})
+
+    async def animation_resolve_animation(self, animation_id: str) -> dict[str, Any]:
+        """Get the remote object of an Animation.
+
+        Args:
+            animation_id: The animation ID.
+
+        Returns:
+            Dict with remote object info.
+        """
+        session = self._require_session()
+        return dict(await session.send(
+            "Animation.resolveAnimation", {"animationId": animation_id}
+        ))
+
+    async def animation_seek_animations(
+        self, animations: list[str], current_time: int
+    ) -> None:
+        """Seek a set of animations to a particular time.
+
+        Args:
+            animations: List of animation IDs.
+            current_time: Target time in milliseconds.
+        """
+        session = self._require_session()
+        await session.send(
+            "Animation.seekAnimations",
+            {"animations": animations, "currentTime": current_time},
+        )
+
+    async def animation_seek_to(
+        self, animations: list[str], current_time: int
+    ) -> None:
+        """Seek animations to a specific time.
+
+        Args:
+            animations: List of animation IDs.
+            current_time: Target time in milliseconds.
+        """
+        session = self._require_session()
+        await session.send(
+            "Animation.seekTo",
+            {"animations": animations, "currentTime": current_time},
+        )
+
+    async def animation_set_paused(
+        self, animations: list[str], paused: bool
+    ) -> None:
+        """Pause or resume animations.
+
+        Args:
+            animations: List of animation IDs.
+            paused: True to pause, False to resume.
+        """
+        session = self._require_session()
+        await session.send(
+            "Animation.setPaused",
+            {"animations": animations, "paused": paused},
+        )
+
+    async def animation_set_playback_rate(self, playback_rate: float) -> None:
+        """Set the global animation playback rate.
+
+        Args:
+            playback_rate: Playback rate (1.0 = normal).
+        """
+        session = self._require_session()
+        await session.send(
+            "Animation.setPlaybackRate", {"playbackRate": playback_rate}
+        )
+
+    async def animation_set_timing(
+        self, animation_id: str, duration: int, delay: int
+    ) -> None:
+        """Set the timing of an animation.
+
+        Args:
+            animation_id: The animation ID.
+            duration: Duration in milliseconds.
+            delay: Delay in milliseconds.
+        """
+        session = self._require_session()
+        await session.send(
+            "Animation.setTiming",
+            {"animationId": animation_id, "duration": duration, "delay": delay},
+        )
+
+    # ── Audits ─────────────────────────────────────────────
+
+    async def audits_check_contrast(self) -> dict[str, Any]:
+        """Check contrast issues on the current page."""
+        session = self._require_session()
+        return dict(await session.send("Audits.checkContrast"))
+
+    async def audits_check_forms_issues(self) -> dict[str, Any]:
+        """Run the form issues check for the target page."""
+        session = self._require_session()
+        return dict(await session.send("Audits.checkFormsIssues"))
+
+    async def audits_disable(self) -> None:
+        """Disable the Audits domain."""
+        session = self._require_session()
+        await session.send("Audits.disable")
+
+    async def audits_enable(self) -> None:
+        """Enable the Audits domain."""
+        session = self._require_session()
+        await session.send("Audits.enable")
+
+    async def audits_get_encoded_response(
+        self,
+        request_id: str,
+        encoding: str,
+        quality: float | None = None,
+        size_only: bool | None = None,
+    ) -> dict[str, Any]:
+        """Get the encoded response body for a request.
+
+        Args:
+            request_id: The network request ID.
+            encoding: Encoding format ("webp", "jpeg", "png").
+            quality: Optional quality (0-1) for jpeg.
+            size_only: If True, only return size info.
+
+        Returns:
+            Dict with encoded body, body size, and encoding.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"requestId": request_id, "encoding": encoding}
+        if quality is not None:
+            params["quality"] = quality
+        if size_only is not None:
+            params["sizeOnly"] = size_only
+        return dict(await session.send("Audits.getEncodedResponse", params))
+
+    # ── Autofill ───────────────────────────────────────────
+
+    async def autofill_disable(self) -> None:
+        """Disable the Autofill domain."""
+        session = self._require_session()
+        await session.send("Autofill.disable")
+
+    async def autofill_enable(self) -> None:
+        """Enable the Autofill domain."""
+        session = self._require_session()
+        await session.send("Autofill.enable")
+
+    async def autofill_set_addresses(
+        self, addresses: list[dict[str, Any]]
+    ) -> None:
+        """Set autofill addresses for testing.
+
+        Args:
+            addresses: List of address dicts.
+        """
+        session = self._require_session()
+        await session.send("Autofill.setAddresses", {"addresses": addresses})
+
+    async def autofill_trigger(
+        self,
+        field_id: int,
+        frame_id: str | None = None,
+        card: dict[str, Any] | None = None,
+        address: dict[str, Any] | None = None,
+    ) -> None:
+        """Trigger autofill on a form identified by the fieldId.
+
+        Args:
+            field_id: The field ID to trigger autofill on.
+            frame_id: Optional frame ID.
+            card: Optional card data.
+            address: Optional address data.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"fieldId": field_id}
+        if frame_id is not None:
+            params["frameId"] = frame_id
+        if card is not None:
+            params["card"] = card
+        if address is not None:
+            params["address"] = address
+        await session.send("Autofill.trigger", params)
+
+    async def autofill_trigger_fill(
+        self,
+        field_id: int,
+        frame_id: str | None = None,
+        card: dict[str, Any] | None = None,
+        address: dict[str, Any] | None = None,
+    ) -> None:
+        """Trigger autofill on a form field.
+
+        Args:
+            field_id: The field ID.
+            frame_id: Optional frame ID.
+            card: Optional card data.
+            address: Optional address data.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"fieldId": field_id}
+        if frame_id is not None:
+            params["frameId"] = frame_id
+        if card is not None:
+            params["card"] = card
+        if address is not None:
+            params["address"] = address
+        await session.send("Autofill.triggerFill", params)
+
+    async def autofill_trigger_fill_after_save(
+        self, field_id: int, frame_id: str | None = None
+    ) -> None:
+        """Trigger autofill using saved data after a user save action.
+
+        Args:
+            field_id: The field ID.
+            frame_id: Optional frame ID.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"fieldId": field_id}
+        if frame_id is not None:
+            params["frameId"] = frame_id
+        await session.send("Autofill.triggerFillAfterSave", params)
+
+    # ── Background Service ─────────────────────────────────
+
+    async def background_service_clear_events(self, service: str) -> None:
+        """Clear all stored events for a background service.
+
+        Args:
+            service: The background service name.
+        """
+        session = self._require_session()
+        await session.send(
+            "BackgroundService.clearEvents", {"service": service}
+        )
+
+    async def background_service_set_recording(
+        self, should_record: bool, service: str
+    ) -> None:
+        """Set recording state for a background service.
+
+        Args:
+            should_record: Whether to record events.
+            service: The background service name.
+        """
+        session = self._require_session()
+        await session.send(
+            "BackgroundService.setRecording",
+            {"shouldRecord": should_record, "service": service},
+        )
+
+    async def background_service_start_observing(self, service: str) -> None:
+        """Start observing events for a background service.
+
+        Args:
+            service: The background service name.
+        """
+        session = self._require_session()
+        await session.send(
+            "BackgroundService.startObserving", {"service": service}
+        )
+
+    async def background_service_stop_observing(self, service: str) -> None:
+        """Stop observing events for a background service.
+
+        Args:
+            service: The background service name.
+        """
+        session = self._require_session()
+        await session.send(
+            "BackgroundService.stopObserving", {"service": service}
+        )
+
+    # ── Bluetooth Emulation ────────────────────────────────
+
+    async def bluetooth_emulation_add_characteristic(
+        self, service_id: str, characteristic_uuid: str, properties: dict[str, Any]
+    ) -> str:
+        """Add a characteristic to a service.
+
+        Args:
+            service_id: The service ID.
+            characteristic_uuid: The characteristic UUID.
+            properties: Characteristic properties dict.
+
+        Returns:
+            The characteristic ID.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "BluetoothEmulation.addCharacteristic",
+            {
+                "serviceId": service_id,
+                "characteristicUuid": characteristic_uuid,
+                "properties": properties,
+            },
+        )
+        return str(result.get("characteristicId", ""))
+
+    async def bluetooth_emulation_add_descriptor(
+        self, characteristic_id: str, descriptor_uuid: str
+    ) -> str:
+        """Add a descriptor to a characteristic.
+
+        Args:
+            characteristic_id: The characteristic ID.
+            descriptor_uuid: The descriptor UUID.
+
+        Returns:
+            The descriptor ID.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "BluetoothEmulation.addDescriptor",
+            {
+                "characteristicId": characteristic_id,
+                "descriptorUuid": descriptor_uuid,
+            },
+        )
+        return str(result.get("descriptorId", ""))
+
+    async def bluetooth_emulation_add_service(
+        self, address: str, service_uuid: str
+    ) -> str:
+        """Add a service to a peripheral.
+
+        Args:
+            address: The peripheral address.
+            service_uuid: The service UUID.
+
+        Returns:
+            The service ID.
+        """
+        session = self._require_session()
+        result = await session.send(
+            "BluetoothEmulation.addService",
+            {"address": address, "serviceUuid": service_uuid},
+        )
+        return str(result.get("serviceId", ""))
+
+    async def bluetooth_emulation_disable(self) -> None:
+        """Disable the Bluetooth emulation domain."""
+        session = self._require_session()
+        await session.send("BluetoothEmulation.disable")
+
+    async def bluetooth_emulation_enable(
+        self, state: str, le_supported: bool
+    ) -> None:
+        """Enable the Bluetooth emulation domain.
+
+        Args:
+            state: The central state ("powered-on", "powered-off").
+            le_supported: Whether LE is supported.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.enable",
+            {"state": state, "leSupported": le_supported},
+        )
+
+    async def bluetooth_emulation_remove_characteristic(
+        self, characteristic_id: str
+    ) -> None:
+        """Remove a characteristic from the simulated central.
+
+        Args:
+            characteristic_id: The characteristic ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.removeCharacteristic",
+            {"characteristicId": characteristic_id},
+        )
+
+    async def bluetooth_emulation_remove_descriptor(
+        self, descriptor_id: str
+    ) -> None:
+        """Remove a descriptor from the simulated central.
+
+        Args:
+            descriptor_id: The descriptor ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.removeDescriptor",
+            {"descriptorId": descriptor_id},
+        )
+
+    async def bluetooth_emulation_remove_service(self, service_id: str) -> None:
+        """Remove a service from the simulated central.
+
+        Args:
+            service_id: The service ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.removeService", {"serviceId": service_id}
+        )
+
+    async def bluetooth_emulation_set_simulated_central_state(
+        self, state: str
+    ) -> None:
+        """Set the simulated central state.
+
+        Args:
+            state: The central state ("powered-on", "powered-off").
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.setSimulatedCentralState", {"state": state}
+        )
+
+    async def bluetooth_emulation_simulate_advertisement(
+        self, entry: dict[str, Any]
+    ) -> None:
+        """Simulate a Bluetooth advertisement.
+
+        Args:
+            entry: Advertisement entry dict.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.simulateAdvertisement", {"entry": entry}
+        )
+
+    async def bluetooth_emulation_simulate_characteristic_operation_response(
+        self, characteristic_id: str, op_type: str, code: int, data: str | None = None
+    ) -> None:
+        """Simulate a characteristic operation response.
+
+        Args:
+            characteristic_id: The characteristic ID.
+            op_type: Operation type ("read", "write").
+            code: Response code.
+            data: Optional response data.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "characteristicId": characteristic_id,
+            "opType": op_type,
+            "code": code,
+        }
+        if data is not None:
+            params["data"] = data
+        await session.send(
+            "BluetoothEmulation.simulateCharacteristicOperationResponse", params
+        )
+
+    async def bluetooth_emulation_simulate_descriptor_operation_response(
+        self, descriptor_id: str, op_type: str, code: int, data: str | None = None
+    ) -> None:
+        """Simulate a descriptor operation response.
+
+        Args:
+            descriptor_id: The descriptor ID.
+            op_type: Operation type ("read", "write").
+            code: Response code.
+            data: Optional response data.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "descriptorId": descriptor_id,
+            "opType": op_type,
+            "code": code,
+        }
+        if data is not None:
+            params["data"] = data
+        await session.send(
+            "BluetoothEmulation.simulateDescriptorOperationResponse", params
+        )
+
+    async def bluetooth_emulation_simulate_gatt_disconnection(
+        self, address: str
+    ) -> None:
+        """Simulate a GATT disconnection.
+
+        Args:
+            address: The peripheral address.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.simulateGATTDisconnection", {"address": address}
+        )
+
+    async def bluetooth_emulation_simulate_gatt_operation_response(
+        self, address: str, op_type: str, code: int
+    ) -> None:
+        """Simulate a GATT operation response.
+
+        Args:
+            address: The peripheral address.
+            op_type: Operation type.
+            code: Response code.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.simulateGATTOperationResponse",
+            {"address": address, "opType": op_type, "code": code},
+        )
+
+    async def bluetooth_emulation_simulate_preconnected_peripheral(
+        self,
+        address: str,
+        name: str,
+        manufacturer_data: list[dict[str, Any]],
+        known_service_uuids: list[str],
+    ) -> None:
+        """Simulate a preconnected peripheral.
+
+        Args:
+            address: The peripheral address.
+            name: The peripheral name.
+            manufacturer_data: List of manufacturer data dicts.
+            known_service_uuids: List of known service UUIDs.
+        """
+        session = self._require_session()
+        await session.send(
+            "BluetoothEmulation.simulatePreconnectedPeripheral",
+            {
+                "address": address,
+                "name": name,
+                "manufacturerData": manufacturer_data,
+                "knownServiceUuids": known_service_uuids,
+            },
+        )
+
+    # ── Browser (extended) ─────────────────────────────────
+
+    async def browser_add_privacy_sandbox_coordinator_key_config(
+        self, api: str, coordinator_origin: str, key_config: str,
+        browser_context_id: str | None = None,
+    ) -> None:
+        """Configure encryption keys for a privacy sandbox API.
+
+        Args:
+            api: The privacy sandbox API name.
+            coordinator_origin: The coordinator origin.
+            key_config: The key configuration.
+            browser_context_id: Optional browser context ID.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "api": api,
+            "coordinatorOrigin": coordinator_origin,
+            "keyConfig": key_config,
+        }
+        if browser_context_id is not None:
+            params["browserContextId"] = browser_context_id
+        await session.send("Browser.addPrivacySandboxCoordinatorKeyConfig", params)
+
+    async def browser_add_privacy_sandbox_enrollment_override(
+        self, url: str
+    ) -> None:
+        """Allow a site to use privacy sandbox features that require enrollment.
+
+        Args:
+            url: The URL to enroll.
+        """
+        session = self._require_session()
+        await session.send(
+            "Browser.addPrivacySandboxEnrollmentOverride", {"url": url}
+        )
+
+    async def browser_cancel_download(
+        self, guid: str, browser_context_id: str | None = None
+    ) -> None:
+        """Cancel a download if in progress.
+
+        Args:
+            guid: The download GUID.
+            browser_context_id: Optional browser context ID.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"guid": guid}
+        if browser_context_id is not None:
+            params["browserContextId"] = browser_context_id
+        await session.send("Browser.cancelDownload", params)
+
+    async def browser_crash(self) -> None:
+        """Crashes browser on the main thread."""
+        session = self._require_session()
+        await session.send("Browser.crash")
+
+    async def browser_crash_gpu_process(self) -> None:
+        """Crashes GPU process."""
+        session = self._require_session()
+        await session.send("Browser.crashGpuProcess")
+
+    async def browser_execute_browser_command(
+        self, command_id: str
+    ) -> None:
+        """Invoke custom browser commands used by telemetry.
+
+        Args:
+            command_id: The command ID.
+        """
+        session = self._require_session()
+        await session.send(
+            "Browser.executeBrowserCommand", {"commandId": command_id}
+        )
+
+    async def browser_get_browser_command_line(self) -> str:
+        """Returns the command line switches for the browser process.
+
+        Returns:
+            The command line string.
+        """
+        session = self._require_session()
+        result = await session.send("Browser.getBrowserCommandLine")
+        return str(result.get("commandLine", ""))
+
+    async def browser_get_command_line(self) -> str:
+        """Returns the command line switches for the browser process.
+
+        Returns:
+            The command line string.
+        """
+        session = self._require_session()
+        result = await session.send("Browser.getCommandLine")
+        return str(result.get("commandLine", ""))
+
+    async def browser_get_histogram(
+        self, name: str, delta: bool = False
+    ) -> dict[str, Any]:
+        """Get a Chrome histogram by name.
+
+        Args:
+            name: Histogram name.
+            delta: If True, return delta since last call.
+
+        Returns:
+            Dict with histogram data.
+        """
+        session = self._require_session()
+        return dict(await session.send(
+            "Browser.getHistogram", {"name": name, "delta": delta}
+        ))
+
+    async def browser_get_histograms(
+        self, query: str | None = None, delta: bool = False
+    ) -> list[dict[str, Any]]:
+        """Get Chrome histograms.
+
+        Args:
+            query: Optional query string to filter.
+            delta: If True, return deltas since last call.
+
+        Returns:
+            List of histogram dicts.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"delta": delta}
+        if query is not None:
+            params["query"] = query
+        result = await session.send("Browser.getHistograms", params)
+        return list(result.get("histograms", []))
+
+    async def browser_get_version(self) -> dict[str, Any]:
+        """Returns version information.
+
+        Returns:
+            Dict with protocolVersion, product, revision, etc.
+        """
+        session = self._require_session()
+        return dict(await session.send("Browser.getVersion"))
+
+    async def browser_get_window_for_target(
+        self, target_id: str | None = None
+    ) -> dict[str, Any]:
+        """Get the browser window that contains the devtools target.
+
+        Args:
+            target_id: Optional target ID.
+
+        Returns:
+            Dict with windowId and bounds.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if target_id is not None:
+            params["targetId"] = target_id
+        return dict(await session.send("Browser.getWindowForTarget", params))
+
+    async def browser_grant_permissions(
+        self, origin: str, permissions: list[str],
+        browser_context_id: str | None = None,
+    ) -> None:
+        """Grant specific permissions to the given origin.
+
+        Args:
+            origin: The origin to grant permissions to.
+            permissions: List of permission names.
+            browser_context_id: Optional browser context ID.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"origin": origin, "permissions": permissions}
+        if browser_context_id is not None:
+            params["browserContextId"] = browser_context_id
+        await session.send("Browser.grantPermissions", params)
+
+    async def browser_set_contents_size(
+        self, window_id: int, width: int | None = None, height: int | None = None
+    ) -> None:
+        """Set size of the browser contents.
+
+        Args:
+            window_id: The window ID.
+            width: Optional width.
+            height: Optional height.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"windowId": window_id}
+        if width is not None:
+            params["width"] = width
+        if height is not None:
+            params["height"] = height
+        await session.send("Browser.setContentsSize", params)
+
+    async def browser_set_dock_tile(
+        self, badge_label: str | None = None, image: str | None = None
+    ) -> None:
+        """Set dock tile details (platform-specific).
+
+        Args:
+            badge_label: Optional badge label.
+            image: Optional base64-encoded image.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if badge_label is not None:
+            params["badgeLabel"] = badge_label
+        if image is not None:
+            params["image"] = image
+        await session.send("Browser.setDockTile", params)
+
+    async def browser_set_download_behavior(
+        self, behavior: str,
+        browser_context_id: str | None = None,
+        download_path: str | None = None,
+        events_enabled: bool = False,
+    ) -> None:
+        """Set the behavior when downloading a file.
+
+        Args:
+            behavior: "allow", "deny", or "default".
+            browser_context_id: Optional browser context ID.
+            download_path: Optional download path.
+            events_enabled: Whether to emit download events.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "behavior": behavior,
+            "eventsEnabled": events_enabled,
+        }
+        if browser_context_id is not None:
+            params["browserContextId"] = browser_context_id
+        if download_path is not None:
+            params["downloadPath"] = download_path
+        await session.send("Browser.setDownloadBehavior", params)
+
+    async def browser_set_permission(
+        self, permission: dict[str, Any], setting: str,
+        origin: str | None = None,
+        embedded_origin: str | None = None,
+        browser_context_id: str | None = None,
+    ) -> None:
+        """Set permission settings for given embedding and embedded origins.
+
+        Args:
+            permission: Permission descriptor dict.
+            setting: "grant", "deny", or "prompt".
+            origin: Optional origin.
+            embedded_origin: Optional embedded origin.
+            browser_context_id: Optional browser context ID.
+        """
+        session = self._require_session()
+        params: dict[str, Any] = {"permission": permission, "setting": setting}
+        if origin is not None:
+            params["origin"] = origin
+        if embedded_origin is not None:
+            params["embeddedOrigin"] = embedded_origin
+        if browser_context_id is not None:
+            params["browserContextId"] = browser_context_id
+        await session.send("Browser.setPermission", params)
+
+    # ── Debugger ──────────────────────────────────────────
+
+    async def debugger_continue_to_location(
+        self, location: dict[str, Any], target_call_frames: str | None = None
+    ) -> None:
+        """Continue execution until a specific location."""
+        session = self._require_session()
+        params: dict[str, Any] = {"location": location}
+        if target_call_frames is not None:
+            params["targetCallFrames"] = target_call_frames
+        await session.send("Debugger.continueToLocation", params)
+
+    async def debugger_disable(self) -> None:
+        """Disable the Debugger domain."""
+        session = self._require_session()
+        await session.send("Debugger.disable", {})
+
+    async def debugger_disassemble_wasm_module(self, script_id: str) -> dict[str, Any]:
+        """Disassemble a Wasm module and return the first chunk."""
+        session = self._require_session()
+        return dict(await session.send("Debugger.disassembleWasmModule", {"scriptId": script_id}))
+
+    async def debugger_enable(self, max_scripts_cache_size: int | None = None) -> None:
+        """Enable the Debugger domain."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if max_scripts_cache_size is not None:
+            params["maxScriptsCacheSize"] = max_scripts_cache_size
+        await session.send("Debugger.enable", params)
+
+    async def debugger_evaluate_on_call_frame(
+        self, call_frame_id: str, expression: str,
+        object_group: str | None = None,
+        include_command_line_api: bool | None = None,
+        silent: bool | None = None,
+        return_by_value: bool | None = None,
+        generate_preview: bool | None = None,
+        throw_on_side_effect: bool | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Evaluate an expression in the context of a call frame."""
+        session = self._require_session()
+        params: dict[str, Any] = {"callFrameId": call_frame_id, "expression": expression}
+        if object_group is not None:
+            params["objectGroup"] = object_group
+        if include_command_line_api is not None:
+            params["includeCommandLineAPI"] = include_command_line_api
+        if silent is not None:
+            params["silent"] = silent
+        if return_by_value is not None:
+            params["returnByValue"] = return_by_value
+        if generate_preview is not None:
+            params["generatePreview"] = generate_preview
+        if throw_on_side_effect is not None:
+            params["throwOnSideEffect"] = throw_on_side_effect
+        if timeout is not None:
+            params["timeout"] = timeout
+        return dict(await session.send("Debugger.evaluateOnCallFrame", params))
+
+    async def debugger_get_possible_breakpoints(
+        self, start: dict[str, Any],
+        end: dict[str, Any] | None = None,
+        restrict_to_function: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get possible breakpoint locations for a range."""
+        session = self._require_session()
+        params: dict[str, Any] = {"start": start}
+        if end is not None:
+            params["end"] = end
+        if restrict_to_function is not None:
+            params["restrictToFunction"] = restrict_to_function
+        result = await session.send("Debugger.getPossibleBreakpoints", params)
+        return list(result.get("locations", []))
+
+    async def debugger_get_script_source(self, script_id: str) -> str:
+        """Get the source code of a script."""
+        session = self._require_session()
+        result = await session.send("Debugger.getScriptSource", {"scriptId": script_id})
+        return str(result.get("scriptSource", ""))
+
+    async def debugger_get_stack_trace(self, stack_trace_id: dict[str, Any]) -> dict[str, Any]:
+        """Get stack trace with a given stack trace ID."""
+        session = self._require_session()
+        return dict(await session.send("Debugger.getStackTrace", {"stackTraceId": stack_trace_id}))
+
+    async def debugger_get_wasm_bytecode(self, script_id: str) -> dict[str, Any]:
+        """Get Wasm bytecode for a script."""
+        session = self._require_session()
+        return dict(await session.send("Debugger.getWasmBytecode", {"scriptId": script_id}))
+
+    async def debugger_next_wasm_disassembly_chunk(self, stream_id: str) -> dict[str, Any]:
+        """Get the next chunk of Wasm disassembly."""
+        session = self._require_session()
+        return dict(await session.send("Debugger.nextWasmDisassemblyChunk", {"streamId": stream_id}))
+
+    async def debugger_pause(self) -> None:
+        """Pause script execution."""
+        session = self._require_session()
+        await session.send("Debugger.pause", {})
+
+    async def debugger_pause_on_async_call(self, parent_stack_trace_id: dict[str, Any]) -> None:
+        """Pause on the next async call."""
+        session = self._require_session()
+        await session.send("Debugger.pauseOnAsyncCall", {"parentStackTraceId": parent_stack_trace_id})
+
+    async def debugger_remove_breakpoint(self, breakpoint_id: str) -> None:
+        """Remove a breakpoint by ID."""
+        session = self._require_session()
+        await session.send("Debugger.removeBreakpoint", {"breakpointId": breakpoint_id})
+
+    async def debugger_restart_frame(self, call_frame_id: str, mode: str) -> None:
+        """Restart a particular call frame."""
+        session = self._require_session()
+        await session.send("Debugger.restartFrame", {"callFrameId": call_frame_id, "mode": mode})
+
+    async def debugger_resume(self, terminate_on_resume: bool | None = None) -> None:
+        """Resume script execution after a pause."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if terminate_on_resume is not None:
+            params["terminateOnResume"] = terminate_on_resume
+        await session.send("Debugger.resume", params)
+
+    async def debugger_search_in_content(
+        self, script_id: str, query: str,
+        case_sensitive: bool | None = None,
+        is_regex: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search for a string in a script's content."""
+        session = self._require_session()
+        params: dict[str, Any] = {"scriptId": script_id, "query": query}
+        if case_sensitive is not None:
+            params["caseSensitive"] = case_sensitive
+        if is_regex is not None:
+            params["isRegex"] = is_regex
+        result = await session.send("Debugger.searchInContent", params)
+        return list(result.get("result", []))
+
+    async def debugger_set_async_call_stack_depth(self, max_depth: int) -> None:
+        """Enable or disable async call stack tracking."""
+        session = self._require_session()
+        await session.send("Debugger.setAsyncCallStackDepth", {"maxDepth": max_depth})
+
+    async def debugger_set_blackbox_execution_contexts(self, execution_context_ids: list[int]) -> None:
+        """Replace blackbox execution contexts."""
+        session = self._require_session()
+        await session.send("Debugger.setBlackboxExecutionContexts", {"executionContextIds": execution_context_ids})
+
+    async def debugger_set_blackbox_patterns(
+        self, patterns: list[str], skip_anonymous: bool | None = None
+    ) -> None:
+        """Set patterns to blackbox scripts."""
+        session = self._require_session()
+        params: dict[str, Any] = {"patterns": patterns}
+        if skip_anonymous is not None:
+            params["skipAnonymous"] = skip_anonymous
+        await session.send("Debugger.setBlackboxPatterns", params)
+
+    async def debugger_set_blackboxed_ranges(
+        self, script_id: str, positions: list[dict[str, Any]]
+    ) -> None:
+        """Set blackboxed ranges for a script."""
+        session = self._require_session()
+        await session.send("Debugger.setBlackboxedRanges", {"scriptId": script_id, "positions": positions})
+
+    async def debugger_set_breakpoint(
+        self, location: dict[str, Any], condition: str | None = None
+    ) -> dict[str, Any]:
+        """Set a breakpoint at a script location."""
+        session = self._require_session()
+        params: dict[str, Any] = {"location": location}
+        if condition is not None:
+            params["condition"] = condition
+        return dict(await session.send("Debugger.setBreakpoint", params))
+
+    async def debugger_set_breakpoint_by_url(
+        self, line_number: int,
+        url: str | None = None,
+        url_regex: str | None = None,
+        script_hash: str | None = None,
+        column_number: int | None = None,
+        condition: str | None = None,
+    ) -> dict[str, Any]:
+        """Set a breakpoint by script URL, regex, or hash."""
+        session = self._require_session()
+        params: dict[str, Any] = {"lineNumber": line_number}
+        if url is not None:
+            params["url"] = url
+        if url_regex is not None:
+            params["urlRegex"] = url_regex
+        if script_hash is not None:
+            params["scriptHash"] = script_hash
+        if column_number is not None:
+            params["columnNumber"] = column_number
+        if condition is not None:
+            params["condition"] = condition
+        return dict(await session.send("Debugger.setBreakpointByUrl", params))
+
+    async def debugger_set_breakpoint_on_function_call(
+        self, object_id: str, condition: str | None = None
+    ) -> None:
+        """Set a breakpoint before each call to the given function."""
+        session = self._require_session()
+        params: dict[str, Any] = {"objectId": object_id}
+        if condition is not None:
+            params["condition"] = condition
+        await session.send("Debugger.setBreakpointOnFunctionCall", params)
+
+    async def debugger_set_breakpoints_active(self, active: bool) -> None:
+        """Enable or disable all breakpoints."""
+        session = self._require_session()
+        await session.send("Debugger.setBreakpointsActive", {"active": active})
+
+    async def debugger_set_instrumentation_breakpoint(self, instrumentation: str) -> None:
+        """Set instrumentation breakpoint."""
+        session = self._require_session()
+        await session.send("Debugger.setInstrumentationBreakpoint", {"instrumentation": instrumentation})
+
+    async def debugger_set_pause_on_exceptions(self, state: str) -> None:
+        """Set pause on exceptions mode."""
+        session = self._require_session()
+        await session.send("Debugger.setPauseOnExceptions", {"state": state})
+
+    async def debugger_set_return_value(self, new_value: dict[str, Any]) -> None:
+        """Set the return value of the current function."""
+        session = self._require_session()
+        await session.send("Debugger.setReturnValue", {"newValue": new_value})
+
+    async def debugger_set_script_source(
+        self, script_id: str, source: str,
+        dry_run: bool | None = None,
+        allow_top_frame_editing: bool | None = None,
+    ) -> dict[str, Any]:
+        """Set the source code of a script."""
+        session = self._require_session()
+        params: dict[str, Any] = {"scriptId": script_id, "source": source}
+        if dry_run is not None:
+            params["dryRun"] = dry_run
+        if allow_top_frame_editing is not None:
+            params["allowTopFrameEditing"] = allow_top_frame_editing
+        return dict(await session.send("Debugger.setScriptSource", params))
+
+    async def debugger_set_skip_all_pauses(self, skip: bool) -> None:
+        """Skip all pauses."""
+        session = self._require_session()
+        await session.send("Debugger.setSkipAllPauses", {"skip": skip})
+
+    async def debugger_set_variable_value(
+        self, call_frame_id: str, scope_number: int,
+        variable_name: str, new_value: dict[str, Any],
+    ) -> None:
+        """Set the value of a variable in a call frame."""
+        session = self._require_session()
+        await session.send("Debugger.setVariableValue", {
+            "callFrameId": call_frame_id, "scopeNumber": scope_number,
+            "variableName": variable_name, "newValue": new_value,
+        })
+
+    async def debugger_step_into(
+        self, break_on_async_call: bool | None = None,
+        skip_list: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Step into the next function call."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if break_on_async_call is not None:
+            params["breakOnAsyncCall"] = break_on_async_call
+        if skip_list is not None:
+            params["skipList"] = skip_list
+        await session.send("Debugger.stepInto", params)
+
+    async def debugger_step_out(self) -> None:
+        """Step out of the current function."""
+        session = self._require_session()
+        await session.send("Debugger.stepOut", {})
+
+    async def debugger_step_over(
+        self, skip_list: list[dict[str, Any]] | None = None
+    ) -> None:
+        """Step over the next function call."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if skip_list is not None:
+            params["skipList"] = skip_list
+        await session.send("Debugger.stepOver", params)
+
+    # ── HeapProfiler ──────────────────────────────────────
+
+    async def heap_profiler_add_inspected_heap_object(self, heap_object_id: str) -> None:
+        """Enable console to refer to the node with given id via $x."""
+        session = self._require_session()
+        await session.send("HeapProfiler.addInspectedHeapObject", {"heapObjectId": heap_object_id})
+
+    async def heap_profiler_collect_garbage(self) -> None:
+        """Force garbage collection."""
+        session = self._require_session()
+        await session.send("HeapProfiler.collectGarbage", {})
+
+    async def heap_profiler_disable(self) -> None:
+        """Disable the HeapProfiler domain."""
+        session = self._require_session()
+        await session.send("HeapProfiler.disable", {})
+
+    async def heap_profiler_enable(self) -> None:
+        """Enable the HeapProfiler domain."""
+        session = self._require_session()
+        await session.send("HeapProfiler.enable", {})
+
+    async def heap_profiler_get_heap_object_id(self, object_id: str) -> str:
+        """Get the heap object ID for a remote object."""
+        session = self._require_session()
+        result = await session.send("HeapProfiler.getHeapObjectId", {"objectId": object_id})
+        return str(result.get("heapObjectId", ""))
+
+    async def heap_profiler_get_object_by_heap_object_id(
+        self, heap_object_id: str, object_group: str | None = None
+    ) -> dict[str, Any]:
+        """Get a remote object by heap object ID."""
+        session = self._require_session()
+        params: dict[str, Any] = {"heapObjectId": heap_object_id}
+        if object_group is not None:
+            params["objectGroup"] = object_group
+        return dict(await session.send("HeapProfiler.getObjectByHeapObjectId", params))
+
+    async def heap_profiler_get_sampling_profile(self) -> dict[str, Any]:
+        """Get the sampling heap profile."""
+        session = self._require_session()
+        return dict(await session.send("HeapProfiler.getSamplingProfile", {}))
+
+    async def heap_profiler_start_sampling(
+        self, sampling_interval: float | None = None,
+        stack_depth: float | None = None,
+        include_objects_collected_by_major_gc: bool = False,
+        include_objects_collected_by_minor_gc: bool = False,
+    ) -> None:
+        """Start sampling heap allocations."""
+        session = self._require_session()
+        params: dict[str, Any] = {
+            "includeObjectsCollectedByMajorGC": include_objects_collected_by_major_gc,
+            "includeObjectsCollectedByMinorGC": include_objects_collected_by_minor_gc,
+        }
+        if sampling_interval is not None:
+            params["samplingInterval"] = sampling_interval
+        if stack_depth is not None:
+            params["stackDepth"] = stack_depth
+        await session.send("HeapProfiler.startSampling", params)
+
+    async def heap_profiler_start_tracking_heap_objects(self, track_allocations: bool = False) -> None:
+        """Start tracking heap object allocation."""
+        session = self._require_session()
+        await session.send("HeapProfiler.startTrackingHeapObjects", {"trackAllocations": track_allocations})
+
+    async def heap_profiler_stop_sampling(self) -> dict[str, Any]:
+        """Stop sampling heap allocations and return the profile."""
+        session = self._require_session()
+        return dict(await session.send("HeapProfiler.stopSampling", {}))
+
+    async def heap_profiler_stop_tracking_heap_objects(
+        self, report_progress: bool = False,
+        capture_numeric_value: bool = False,
+        expose_internals: bool = False,
+    ) -> dict[str, Any]:
+        """Stop tracking heap object allocation."""
+        session = self._require_session()
+        return dict(await session.send("HeapProfiler.stopTrackingHeapObjects", {
+            "reportProgress": report_progress,
+            "captureNumericValue": capture_numeric_value,
+            "exposeInternals": expose_internals,
+        }))
+
+    async def heap_profiler_take_heap_snapshot(
+        self, report_progress: bool = False,
+        capture_numeric_value: bool = False,
+        expose_internals: bool = False,
+    ) -> None:
+        """Take a heap snapshot."""
+        session = self._require_session()
+        await session.send("HeapProfiler.takeHeapSnapshot", {
+            "reportProgress": report_progress,
+            "captureNumericValue": capture_numeric_value,
+            "exposeInternals": expose_internals,
+        })
+
+    # ── SmartCardEmulation ────────────────────────────────
+
+    async def smart_card_emulation_disable(self) -> None:
+        """Disable the SmartCardEmulation domain."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.disable", {})
+
+    async def smart_card_emulation_enable(self) -> None:
+        """Enable the SmartCardEmulation domain."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.enable", {})
+
+    async def smart_card_emulation_report_begin_transaction_result(
+        self, request_id: str, handle: int
+    ) -> None:
+        """Report the result of beginning a transaction."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportBeginTransactionResult", {"requestId": request_id, "handle": handle})
+
+    async def smart_card_emulation_report_connect_result(
+        self, request_id: str, handle: int, active_protocol: str | None = None
+    ) -> None:
+        """Report the result of connecting to a card."""
+        session = self._require_session()
+        params: dict[str, Any] = {"requestId": request_id, "handle": handle}
+        if active_protocol is not None:
+            params["activeProtocol"] = active_protocol
+        await session.send("SmartCardEmulation.reportConnectResult", params)
+
+    async def smart_card_emulation_report_data_result(
+        self, request_id: str, data: str
+    ) -> None:
+        """Report the result of a data transfer."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportDataResult", {"requestId": request_id, "data": data})
+
+    async def smart_card_emulation_report_error(
+        self, request_id: str, result_code: str
+    ) -> None:
+        """Report an error result for a request."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportError", {"requestId": request_id, "resultCode": result_code})
+
+    async def smart_card_emulation_report_establish_context_result(
+        self, request_id: str, context_id: int
+    ) -> None:
+        """Report the result of establishing a context."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportEstablishContextResult", {"requestId": request_id, "contextId": context_id})
+
+    async def smart_card_emulation_report_get_status_change_result(
+        self, request_id: str, reader_states: list[dict[str, Any]]
+    ) -> None:
+        """Report the result of getting status changes."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportGetStatusChangeResult", {"requestId": request_id, "readerStates": reader_states})
+
+    async def smart_card_emulation_report_list_readers_result(
+        self, request_id: str, readers: list[str]
+    ) -> None:
+        """Report the result of listing readers."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportListReadersResult", {"requestId": request_id, "readers": readers})
+
+    async def smart_card_emulation_report_plain_result(self, request_id: str) -> None:
+        """Report a plain result."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportPlainResult", {"requestId": request_id})
+
+    async def smart_card_emulation_report_release_context_result(self, request_id: str) -> None:
+        """Report the result of releasing a context."""
+        session = self._require_session()
+        await session.send("SmartCardEmulation.reportReleaseContextResult", {"requestId": request_id})
+
+    async def smart_card_emulation_report_status_result(
+        self, request_id: str, reader_name: str, state: str, atr: str,
+        protocol: str | None = None,
+    ) -> None:
+        """Report the status of a card."""
+        session = self._require_session()
+        params: dict[str, Any] = {"requestId": request_id, "readerName": reader_name, "state": state, "atr": atr}
+        if protocol is not None:
+            params["protocol"] = protocol
+        await session.send("SmartCardEmulation.reportStatusResult", params)
+
+    # ── IndexedDB ─────────────────────────────────────────
+
+    async def indexed_db_clear_object_store(
+        self, database_name: str, object_store_name: str,
+        security_origin: str | None = None,
+        storage_key: str | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> None:
+        """Clears all entries from an object store."""
+        session = self._require_session()
+        params: dict[str, Any] = {"databaseName": database_name, "objectStoreName": object_store_name}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        await session.send("IndexedDB.clearObjectStore", params)
+
+    async def indexed_db_delete_database(
+        self, database_name: str,
+        security_origin: str | None = None,
+        storage_key: str | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> None:
+        """Deletes a database."""
+        session = self._require_session()
+        params: dict[str, Any] = {"databaseName": database_name}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        await session.send("IndexedDB.deleteDatabase", params)
+
+    async def indexed_db_delete_object_store_entries(
+        self, database_name: str, object_store_name: str, key_range: dict[str, Any],
+        security_origin: str | None = None,
+        storage_key: str | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> None:
+        """Delete a range of entries from an object store."""
+        session = self._require_session()
+        params: dict[str, Any] = {"databaseName": database_name, "objectStoreName": object_store_name, "keyRange": key_range}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        await session.send("IndexedDB.deleteObjectStoreEntries", params)
+
+    async def indexed_db_disable(self) -> None:
+        """Disables events from backend."""
+        session = self._require_session()
+        await session.send("IndexedDB.disable", {})
+
+    async def indexed_db_enable(self) -> None:
+        """Enables events from backend."""
+        session = self._require_session()
+        await session.send("IndexedDB.enable", {})
+
+    async def indexed_db_get_metadata(
+        self, database_name: str, object_store_name: str,
+        security_origin: str | None = None,
+        storage_key: str | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Gets metadata of an object store."""
+        session = self._require_session()
+        params: dict[str, Any] = {"databaseName": database_name, "objectStoreName": object_store_name}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        return dict(await session.send("IndexedDB.getMetadata", params))
+
+    async def indexed_db_request_data(
+        self, database_name: str, object_store_name: str,
+        security_origin: str | None = None,
+        storage_key: str | None = None,
+        index_name: str = "",
+        skip_count: int = 0,
+        page_size: int = 10,
+        key_range: dict[str, Any] | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Requests data from object store or index."""
+        session = self._require_session()
+        params: dict[str, Any] = {"databaseName": database_name, "objectStoreName": object_store_name, "indexName": index_name, "skipCount": skip_count, "pageSize": page_size}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if key_range is not None:
+            params["keyRange"] = key_range
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        return dict(await session.send("IndexedDB.requestData", params))
+
+    async def indexed_db_request_database(
+        self, database_name: str,
+        security_origin: str | None = None,
+        storage_key: str | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Requests database with given name."""
+        session = self._require_session()
+        params: dict[str, Any] = {"databaseName": database_name}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        return dict(await session.send("IndexedDB.requestDatabase", params))
+
+    async def indexed_db_request_database_names(
+        self, security_origin: str | None = None,
+        storage_key: str | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Requests database names."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        return dict(await session.send("IndexedDB.requestDatabaseNames", params))
+
+    # ── LayerTree ─────────────────────────────────────────
+
+    async def layer_tree_compositing_reasons(self, layer_id: str) -> dict[str, Any]:
+        """Provides the reasons why the given layer was composited."""
+        session = self._require_session()
+        return dict(await session.send("LayerTree.compositingReasons", {"layerId": layer_id}))
+
+    async def layer_tree_disable(self) -> None:
+        """Disables compositing tree inspection."""
+        session = self._require_session()
+        await session.send("LayerTree.disable", {})
+
+    async def layer_tree_enable(self) -> None:
+        """Enables compositing tree inspection."""
+        session = self._require_session()
+        await session.send("LayerTree.enable", {})
+
+    async def layer_tree_load_snapshot(self, tiles: list[dict[str, Any]]) -> str:
+        """Returns the snapshot identifier."""
+        session = self._require_session()
+        result = await session.send("LayerTree.loadSnapshot", {"tiles": tiles})
+        return str(result.get("snapshotId", ""))
+
+    async def layer_tree_make_snapshot(self, layer_id: str) -> str:
+        """Returns the layer snapshot identifier."""
+        session = self._require_session()
+        result = await session.send("LayerTree.makeSnapshot", {"layerId": layer_id})
+        return str(result.get("snapshotId", ""))
+
+    async def layer_tree_profile_snapshot(
+        self, snapshot_id: str,
+        min_repeat_count: int | None = None,
+        min_duration: float | None = None,
+        clip_rect: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Profile a layer snapshot."""
+        session = self._require_session()
+        params: dict[str, Any] = {"snapshotId": snapshot_id}
+        if min_repeat_count is not None:
+            params["minRepeatCount"] = min_repeat_count
+        if min_duration is not None:
+            params["minDuration"] = min_duration
+        if clip_rect is not None:
+            params["clipRect"] = clip_rect
+        return dict(await session.send("LayerTree.profileSnapshot", params))
+
+    async def layer_tree_release_snapshot(self, snapshot_id: str) -> None:
+        """Releases layer snapshot."""
+        session = self._require_session()
+        await session.send("LayerTree.releaseSnapshot", {"snapshotId": snapshot_id})
+
+    async def layer_tree_replay_snapshot(
+        self, snapshot_id: str,
+        from_step: int | None = None,
+        to_step: int | None = None,
+        scale: float | None = None,
+    ) -> dict[str, Any]:
+        """Replays the layer snapshot."""
+        session = self._require_session()
+        params: dict[str, Any] = {"snapshotId": snapshot_id}
+        if from_step is not None:
+            params["fromStep"] = from_step
+        if to_step is not None:
+            params["toStep"] = to_step
+        if scale is not None:
+            params["scale"] = scale
+        return dict(await session.send("LayerTree.replaySnapshot", params))
+
+    async def layer_tree_snapshot_command_log(self, snapshot_id: str) -> dict[str, Any]:
+        """Replays the layer snapshot and returns canvas log."""
+        session = self._require_session()
+        return dict(await session.send("LayerTree.snapshotCommandLog", {"snapshotId": snapshot_id}))
+
+    # ── FedCM ─────────────────────────────────────────────
+
+    async def fed_cm_click_dialog_button(self, dialog_id: str, dialog_button: str) -> None:
+        """Click a FedCM dialog button."""
+        session = self._require_session()
+        await session.send("FedCM.clickDialogButton", {"dialogId": dialog_id, "dialogButton": dialog_button})
+
+    async def fed_cm_disable(self) -> None:
+        """Disable the FedCM domain."""
+        session = self._require_session()
+        await session.send("FedCM.disable", {})
+
+    async def fed_cm_dismiss_dialog(self, dialog_id: str, trigger_cooldown: bool = False) -> None:
+        """Dismiss a FedCM dialog."""
+        session = self._require_session()
+        await session.send("FedCM.dismissDialog", {"dialogId": dialog_id, "triggerCooldown": trigger_cooldown})
+
+    async def fed_cm_enable(self, disable_rejection_delay: bool = False) -> None:
+        """Enable the FedCM domain."""
+        session = self._require_session()
+        await session.send("FedCM.enable", {"disableRejectionDelay": disable_rejection_delay})
+
+    async def fed_cm_open_url(
+        self, dialog_id: str, account_index: int, account_url_type: str
+    ) -> None:
+        """Open a URL in a FedCM dialog."""
+        session = self._require_session()
+        await session.send("FedCM.openURL", {"dialogId": dialog_id, "accountIndex": account_index, "accountUrlType": account_url_type})
+
+    async def fed_cm_reset_cooldown(self) -> None:
+        """Reset the FedCM cooldown."""
+        session = self._require_session()
+        await session.send("FedCM.resetCooldown", {})
+
+    async def fed_cm_select_account(self, dialog_id: str, account_index: int) -> None:
+        """Select an account in a FedCM dialog."""
+        session = self._require_session()
+        await session.send("FedCM.selectAccount", {"dialogId": dialog_id, "accountIndex": account_index})
+
+    # ── CacheStorage ──────────────────────────────────────
+
+    async def cache_storage_delete_cache(self, cache_id: str) -> None:
+        """Deletes a cache."""
+        session = self._require_session()
+        await session.send("CacheStorage.deleteCache", {"cacheId": cache_id})
+
+    async def cache_storage_delete_entry(self, cache_id: str, request: str) -> None:
+        """Deletes a cache entry."""
+        session = self._require_session()
+        await session.send("CacheStorage.deleteEntry", {"cacheId": cache_id, "request": request})
+
+    async def cache_storage_request_cache_names(
+        self, security_origin: str | None = None,
+        storage_key: str | None = None,
+        storage_bucket: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Requests cache names."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if security_origin is not None:
+            params["securityOrigin"] = security_origin
+        if storage_key is not None:
+            params["storageKey"] = storage_key
+        if storage_bucket is not None:
+            params["storageBucket"] = storage_bucket
+        result = await session.send("CacheStorage.requestCacheNames", params)
+        return list(result.get("caches", []))
+
+    async def cache_storage_request_cached_response(
+        self, cache_id: str, request_url: str, request_headers: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Fetches cache entry."""
+        session = self._require_session()
+        return dict(await session.send("CacheStorage.requestCachedResponse", {
+            "cacheId": cache_id, "requestUrl": request_url, "requestHeaders": request_headers,
+        }))
+
+    async def cache_storage_request_entries(
+        self, cache_id: str,
+        skip_count: int | None = None,
+        page_size: int | None = None,
+        path_filter: str | None = None,
+    ) -> dict[str, Any]:
+        """Requests data from cache."""
+        session = self._require_session()
+        params: dict[str, Any] = {"cacheId": cache_id}
+        if skip_count is not None:
+            params["skipCount"] = skip_count
+        if page_size is not None:
+            params["pageSize"] = page_size
+        if path_filter is not None:
+            params["pathFilter"] = path_filter
+        return dict(await session.send("CacheStorage.requestEntries", params))
+
+    # ── DOMStorage ────────────────────────────────────────
+
+    async def dom_storage_clear(self, storage_id: dict[str, Any]) -> None:
+        """Clear all DOM storage items."""
+        session = self._require_session()
+        await session.send("DOMStorage.clear", {"storageId": storage_id})
+
+    async def dom_storage_clear_dom_storage_items(self, storage_id: dict[str, Any]) -> None:
+        """Alias for clear."""
+        session = self._require_session()
+        await session.send("DOMStorage.clear", {"storageId": storage_id})
+
+    async def dom_storage_disable(self) -> None:
+        """Disable storage tracking."""
+        session = self._require_session()
+        await session.send("DOMStorage.disable", {})
+
+    async def dom_storage_enable(self) -> None:
+        """Enable storage tracking."""
+        session = self._require_session()
+        await session.send("DOMStorage.enable", {})
+
+    async def dom_storage_get_dom_storage_items(self, storage_id: dict[str, Any]) -> list[dict[str, Any]]:
+        """Get DOM storage items."""
+        session = self._require_session()
+        result = await session.send("DOMStorage.getDOMStorageItems", {"storageId": storage_id})
+        return list(result.get("items", []))
+
+    async def dom_storage_remove_dom_storage_item(
+        self, storage_id: dict[str, Any], key: str
+    ) -> None:
+        """Remove a DOM storage item."""
+        session = self._require_session()
+        await session.send("DOMStorage.removeDOMStorageItem", {"storageId": storage_id, "key": key})
+
+    async def dom_storage_set_dom_storage_item(
+        self, storage_id: dict[str, Any], key: str, value: str
+    ) -> None:
+        """Set a DOM storage item."""
+        session = self._require_session()
+        await session.send("DOMStorage.setDOMStorageItem", {"storageId": storage_id, "key": key, "value": value})
+
+    # ── EventBreakpoints ──────────────────────────────────
+
+    async def event_breakpoints_clear_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Remove a breakpoint on a particular native event."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.clearInstrumentationBreakpoint", {"eventName": event_name})
+
+    async def event_breakpoints_disable(self) -> None:
+        """Remove all breakpoints."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.disable", {})
+
+    async def event_breakpoints_remove_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Remove a breakpoint on a particular native event."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.removeInstrumentationBreakpoint", {"eventName": event_name})
+
+    async def event_breakpoints_set_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Set a breakpoint on a particular native event."""
+        session = self._require_session()
+        await session.send("EventBreakpoints.setInstrumentationBreakpoint", {"eventName": event_name})
+
+    # ── Extensions ────────────────────────────────────────
+
+    async def extensions_get_extensions(self) -> list[dict[str, Any]]:
+        """Gets a list of all unpacked extensions."""
+        session = self._require_session()
+        result = await session.send("Extensions.getExtensions", {})
+        return list(result.get("extensions", []))
+
+    async def extensions_load_unpacked(
+        self, path: str, enable_in_incognito: bool = False
+    ) -> dict[str, Any]:
+        """Installs an unpacked extension from the filesystem."""
+        session = self._require_session()
+        return dict(await session.send("Extensions.loadUnpacked", {"path": path, "enableInIncognito": enable_in_incognito}))
+
+    async def extensions_uninstall(self, extension_id: str) -> None:
+        """Uninstalls an unpacked extension."""
+        session = self._require_session()
+        await session.send("Extensions.uninstall", {"id": extension_id})
+
+    # ── HeadlessExperimental ──────────────────────────────
+
+    async def headless_experimental_begin_frame(
+        self, frame_time_ticks: float | None = None,
+        interval: float | None = None,
+        no_display_updates: bool | None = None,
+        screenshot: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Send a BeginFrame to the target."""
+        session = self._require_session()
+        params: dict[str, Any] = {}
+        if frame_time_ticks is not None:
+            params["frameTimeTicks"] = frame_time_ticks
+        if interval is not None:
+            params["interval"] = interval
+        if no_display_updates is not None:
+            params["noDisplayUpdates"] = no_display_updates
+        if screenshot is not None:
+            params["screenshot"] = screenshot
+        return dict(await session.send("HeadlessExperimental.beginFrame", params))
+
+    async def headless_experimental_disable(self) -> None:
+        """Disable the HeadlessExperimental domain."""
+        session = self._require_session()
+        await session.send("HeadlessExperimental.disable", {})
+
+    async def headless_experimental_enable(self) -> None:
+        """Enable the HeadlessExperimental domain."""
+        session = self._require_session()
+        await session.send("HeadlessExperimental.enable", {})
+
+    # ── SystemInfo ────────────────────────────────────────
+
+    async def system_info_get_feature_state(self, feature_state: str) -> dict[str, Any]:
+        """Returns information about the feature state."""
+        session = self._require_session()
+        return dict(await session.send("SystemInfo.getFeatureState", {"featureState": feature_state}))
+
+    async def system_info_get_info(self) -> dict[str, Any]:
+        """Returns information about the system."""
+        session = self._require_session()
+        return dict(await session.send("SystemInfo.getInfo", {}))
+
+    async def system_info_get_process_info(self) -> dict[str, Any]:
+        """Returns information about all running processes."""
+        session = self._require_session()
+        return dict(await session.send("SystemInfo.getProcessInfo", {}))
+
+    # ── DeviceOrientation ─────────────────────────────────
+
+    async def device_orientation_clear_device_orientation_override(self) -> None:
+        """Clear the device orientation override."""
+        session = self._require_session()
+        await session.send("DeviceOrientation.clearDeviceOrientationOverride", {})
+
+    async def device_orientation_set_device_orientation_override(
+        self, alpha: float, beta: float, gamma: float
+    ) -> None:
+        """Set a device orientation override."""
+        session = self._require_session()
+        await session.send("DeviceOrientation.setDeviceOrientationOverride", {"alpha": alpha, "beta": beta, "gamma": gamma})
+
+    # ── DOMDebugger ───────────────────────────────────────
+
+    async def dom_debugger_get_event_listeners(
+        self, object_id: str, depth: int | None = None, pierce: bool | None = None
+    ) -> list[dict[str, Any]]:
+        """Get event listeners for a DOM node."""
+        session = self._require_session()
+        params: dict[str, Any] = {"objectId": object_id}
+        if depth is not None:
+            params["depth"] = depth
+        if pierce is not None:
+            params["pierce"] = pierce
+        result = await session.send("DOMDebugger.getEventListeners", params)
+        return list(result.get("listeners", []))
+
+    async def dom_debugger_remove_dom_breakpoint(self, node_id: int, type: str) -> None:
+        """Remove a DOM breakpoint from a node."""
+        session = self._require_session()
+        await session.send("DOMDebugger.removeDOMBreakpoint", {"nodeId": node_id, "type": type})
+
+    async def dom_debugger_remove_event_listener_breakpoint(
+        self, event_name: str, target_name: str | None = None
+    ) -> None:
+        """Remove an event listener breakpoint."""
+        session = self._require_session()
+        params: dict[str, Any] = {"eventName": event_name}
+        if target_name is not None:
+            params["targetName"] = target_name
+        await session.send("DOMDebugger.removeEventListenerBreakpoint", params)
+
+    async def dom_debugger_remove_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Remove an instrumentation breakpoint."""
+        session = self._require_session()
+        await session.send("DOMDebugger.removeInstrumentationBreakpoint", {"eventName": event_name})
+
+    async def dom_debugger_remove_xhr_breakpoint(self, url: str) -> None:
+        """Remove an XHR breakpoint."""
+        session = self._require_session()
+        await session.send("DOMDebugger.removeXHRBreakpoint", {"url": url})
+
+    async def dom_debugger_set_break_on_csp_violation(self, violation_types: list[str]) -> None:
+        """Set breakpoints on CSP violations."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setBreakOnCSPViolation", {"violationTypes": violation_types})
+
+    async def dom_debugger_set_dom_breakpoint(self, node_id: int, type: str) -> None:
+        """Set a DOM breakpoint on a node."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setDOMBreakpoint", {"nodeId": node_id, "type": type})
+
+    async def dom_debugger_set_event_listener_breakpoint(
+        self, event_name: str, target_name: str | None = None
+    ) -> None:
+        """Set an event listener breakpoint."""
+        session = self._require_session()
+        params: dict[str, Any] = {"eventName": event_name}
+        if target_name is not None:
+            params["targetName"] = target_name
+        await session.send("DOMDebugger.setEventListenerBreakpoint", params)
+
+    async def dom_debugger_set_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Set an instrumentation breakpoint."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setInstrumentationBreakpoint", {"eventName": event_name})
+
+    async def dom_debugger_set_xhr_breakpoint(self, url: str) -> None:
+        """Set an XHR breakpoint."""
+        session = self._require_session()
+        await session.send("DOMDebugger.setXHRBreakpoint", {"url": url})
+
+    # ── DOMSnapshot ───────────────────────────────────────
+
+    async def dom_snapshot_capture_snapshot(
+        self, computed_styles: list[str],
+        include_paint_order: bool = False,
+        include_dom_rects: bool = False,
+        include_blended_background_colors: bool = False,
+        include_text_color_opacities: bool = False,
+    ) -> dict[str, Any]:
+        """Capture a document snapshot."""
+        session = self._require_session()
+        return dict(await session.send("DOMSnapshot.captureSnapshot", {
+            "computedStyles": computed_styles,
+            "includePaintOrder": include_paint_order,
+            "includeDOMRects": include_dom_rects,
+            "includeBlendedBackgroundColors": include_blended_background_colors,
+            "includeTextColorOpacities": include_text_color_opacities,
+        }))
+
+    async def dom_snapshot_disable(self) -> None:
+        """Disable the DOM snapshot agent."""
+        session = self._require_session()
+        await session.send("DOMSnapshot.disable", {})
+
+    async def dom_snapshot_enable(self) -> None:
+        """Enable the DOM snapshot agent."""
+        session = self._require_session()
+        await session.send("DOMSnapshot.enable", {})
+
+    async def dom_snapshot_get_snapshot(
+        self, computed_style_whitelist: list[str],
+        include_event_listeners: bool | None = None,
+        include_paint_order: bool | None = None,
+        include_user_agent_shadow_tree: bool | None = None,
+    ) -> dict[str, Any]:
+        """Get a DOM snapshot."""
+        session = self._require_session()
+        params: dict[str, Any] = {"computedStyleWhitelist": computed_style_whitelist}
+        if include_event_listeners is not None:
+            params["includeEventListeners"] = include_event_listeners
+        if include_paint_order is not None:
+            params["includePaintOrder"] = include_paint_order
+        if include_user_agent_shadow_tree is not None:
+            params["includeUserAgentShadowTree"] = include_user_agent_shadow_tree
+        return dict(await session.send("DOMSnapshot.getSnapshot", params))
+
+    # ── DeviceAccess ──────────────────────────────────────
+
+    async def device_access_cancel_prompt(self, request_id: str) -> None:
+        """Cancel a prompt."""
+        session = self._require_session()
+        await session.send("DeviceAccess.cancelPrompt", {"id": request_id})
+
+    async def device_access_disable(self) -> None:
+        """Disable events in this domain."""
+        session = self._require_session()
+        await session.send("DeviceAccess.disable", {})
+
+    async def device_access_enable(self) -> None:
+        """Enable events in this domain."""
+        session = self._require_session()
+        await session.send("DeviceAccess.enable", {})
+
+    async def device_access_select_prompt(self, request_id: str, device_id: str) -> None:
+        """Select a device in response to a prompt."""
+        session = self._require_session()
+        await session.send("DeviceAccess.selectPrompt", {"id": request_id, "deviceId": device_id})
+
+    # ── Remaining single methods ──────────────────────────
+
+    async def dom_get_attribute(self, node_id: int, name: str | None = None) -> dict[str, Any]:
+        """Get attributes of a node."""
+        session = self._require_session()
+        params: dict[str, Any] = {"nodeId": node_id}
+        if name is not None:
+            params["name"] = name
+        return dict(await session.send("DOM.getAttributes", params))
+
+    async def webauthn_remove_virtual_authenticator(self, authenticator_id: str) -> None:
+        """Remove a virtual authenticator."""
+        session = self._require_session()
+        await session.send("WebAuthn.removeVirtualAuthenticator", {"authenticatorId": authenticator_id})
+
+    async def crash_report_context_get_entries(self) -> list[dict[str, Any]]:
+        """Return all entries in the CrashReportContext."""
+        session = self._require_session()
+        result = await session.send("CrashReportContext.getEntries", {})
+        return list(result.get("entries", []))
+
+    async def digital_credentials_set_virtual_wallet_behavior(
+        self, action: str,
+        protocol: str | None = None,
+        response: dict[str, Any] | None = None,
+        frame_id: str | None = None,
+    ) -> None:
+        """Set the behavior of the virtual wallet."""
+        session = self._require_session()
+        params: dict[str, Any] = {"action": action}
+        if protocol is not None:
+            params["protocol"] = protocol
+        if response is not None:
+            params["response"] = response
+        if frame_id is not None:
+            params["frameId"] = frame_id
+        await session.send("DigitalCredentials.setVirtualWalletBehavior", params)
+
+    async def file_system_get_directory(
+        self, storage_key: str, path_components: list[str], bucket_name: str = ""
+    ) -> dict[str, Any]:
+        """Get a file system directory."""
+        session = self._require_session()
+        return dict(await session.send("FileSystem.getDirectory", {
+            "storageKey": storage_key, "pathComponents": path_components, "bucketName": bucket_name,
+        }))
 
 
 class TabHandle(CDPBackend):

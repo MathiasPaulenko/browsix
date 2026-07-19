@@ -161,23 +161,21 @@ class TestBiDiModifyResponse:
 
     @pytest.mark.asyncio
     async def test_bidi_modify_response_uses_cdp_bridge(self) -> None:
-        """BiDiBackend.modify_response should use CDP bridge (Fetch.fulfillRequest)."""
+        """BiDiBackend.modify_response should use network.add_intercept."""
         from wavexis.backend.bidi import BiDiBackend
 
         backend = BiDiBackend()
         client = MagicMock()
-        client.cdp.send_command = AsyncMock()
-        client.cdp.on = MagicMock()
+        client.network = MagicMock()
+        client.network.add_intercept = AsyncMock()
+        client.network.continue_response = AsyncMock()
         backend._client = client
+        backend._context = "ctx-1"
 
         modifications = {"status": 500, "body": "error"}
         await backend.modify_response({"urlPattern": "*"}, modifications)
 
-        client.cdp.on.assert_called_once_with("Fetch.requestPaused", client.cdp.on.call_args[0][1])
-        send_call = client.cdp.send_command.call_args
-        assert send_call[0][0] == "Fetch.enable"
-        patterns = send_call[0][1]["patterns"]
-        assert patterns[0]["requestStage"] == "Response"
+        client.network.add_intercept.assert_called_once()
 
 
 class TestCLIModify:

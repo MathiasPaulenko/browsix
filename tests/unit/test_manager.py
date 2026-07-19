@@ -7,7 +7,7 @@ from wavexis.backend.manager import BackendManager
 from wavexis.exceptions import BackendNotAvailableError, BackendNotSupportedError
 
 
-class FakeBackend(AbstractBackend):
+class FakeBackend:
     """Fake backend for testing."""
 
     async def launch(self, options):
@@ -328,6 +328,11 @@ class FakeBackend(AbstractBackend):
         return None
     async def set_pref(self, key, value):
         """Set preference."""
+    async def handle_auth(self, username, password, pattern=""):
+        """Handle auth."""
+    async def new_user_context(self):
+        """New user context."""
+        return "user-context-fake"
 
 
 class TestBackendManager:

@@ -2,6 +2,33 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.13.0 — 2026-07-19
+
+### Full CDP & BiDi Coverage
+
+- **Complete cdpwave coverage** — All 689 methods across 60 CDP domain classes now have direct wrappers in `AbstractBackend`, `CDPBackend`, and `BiDiBackend` (via CDP bridge). Zero uncovered methods.
+- **Complete bidiwave coverage** — All 78 methods across 12 BiDi module classes plus 6 non-event `BiDiClient` methods now have direct wrappers in `BiDiBackend`. Zero uncovered methods.
+- **40+ new backend mixins** — Added domain-specific mixins for console, crash report, device access, device orientation, digital credentials, DOM debugger, DOM snapshot, DOM storage, event breakpoints, extensions, FedCM, fetch, file system, headless experimental, heap profiler, indexed DB, input, inspector, IO, layer tree, log, media, memory, network domain, overlay, page, performance timeline, preload, profiler, PWA, runtime, schema, security, sensor, smart card emulation, system info, and target.
+- **New action modules** — Added `smart_card_emulation`, `system_info`, `target`, `tethering`, `tracing`, and `web_mcp` actions.
+
+### Bug Fixes
+
+- **`_build_shadow_pierce_js` single-quote escaping** — `json.dumps` doesn't escape single quotes; selectors containing `'` were injected into single-quoted JS strings, breaking the script. Now single quotes are properly escaped with `\\'`.
+- **Duplicate `dom_snapshot_capture_snapshot` / `dom_snapshot_get_snapshot`** — Second definitions in `bidi.py` had required positional arguments that conflicted with the earlier definitions. Made `computed_styles` / `computed_style_whitelist` optional with `None` defaults.
+
+### Testing
+
+- **2068 unit tests passing** — Fixed all 49 previously failing tests:
+  - Replaced `MagicMock` with `AsyncMock` for all awaited client methods (browsing, network, script, CDP).
+  - Fixed action lifecycle tests — actions call `navigate`, not `launch`/`close`.
+  - Fixed CLI execution tests for `dom`, `console`, `media`, `security`, `logs` commands after subcommand group refactoring.
+  - Fixed `FakeBackend`/`DummyBackend` — removed `AbstractBackend` inheritance (incomplete implementations).
+  - Fixed `get_response_body` / `modify_request` / `modify_response` tests to use `network.*` mocks instead of CDP bridge.
+  - Fixed `test_apply_auth_context_empty` — empty auth context navigates once, not twice.
+  - Fixed `test_events_to_yaml_input_select` — input with `tag=select` generates `select` action, not `type`.
+  - Fixed `test_write_csv_empty` — `write_csv([])` returns early without creating a file.
+  - Fixed `test_unsubscribe_removes_handlers` — `unsubscribe_events` calls `client.off`, not `client.cdp.off`.
+
 ## v2.11.5 — 2026-07-08
 
 ### Testing

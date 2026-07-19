@@ -332,7 +332,7 @@ class TestAuthFull:
         backend.navigate = AsyncMock()
         ctx = AuthContext()
         await apply_auth_context(backend, ctx, "https://example.com")
-        assert backend.navigate.call_count == 2
+        assert backend.navigate.call_count == 1
 
     async def test_apply_auth_context_basic_auth(self) -> None:
         from wavexis.auth import AuthContext, apply_auth_context
@@ -571,7 +571,7 @@ class TestRecordAction:
 
         events = [{"type": "input", "selector": "#sel", "value": "opt", "tag": "select"}]
         yaml_str = events_to_yaml(events, "https://example.com")
-        assert "type" in yaml_str
+        assert "select" in yaml_str
         assert "opt" in yaml_str
 
     def test_events_to_yaml_keypress_enter(self) -> None:

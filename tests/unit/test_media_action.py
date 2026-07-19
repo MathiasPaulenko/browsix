@@ -69,5 +69,4 @@ class TestMediaAction:
         backend = self._make_backend()
         params = MediaParams(url="https://example.com", action="list")
         await MediaAction(params).execute(backend)
-        backend.launch.assert_called_once()
-        backend.close.assert_called_once()
+        backend.navigate.assert_called_once()

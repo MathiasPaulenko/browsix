@@ -32,16 +32,18 @@ class TestBiDiBackendPhase5:
         backend = self._make_bidi_backend()
         backend._client.emulation = MagicMock()
         backend._client.emulation.set_network_conditions = AsyncMock()
+        backend._client.cdp = MagicMock()
+        backend._client.cdp.send_command = AsyncMock()
         asyncio.run(backend.throttle_network(ThrottleParams()))
         backend._client.emulation.set_network_conditions.assert_called_once()
 
     def test_set_cache_disabled_supported(self) -> None:
         """Test set cache disabled supported."""
         backend = self._make_bidi_backend()
-        backend._client.cdp = MagicMock()
-        backend._client.cdp.send_command = AsyncMock()
+        backend._client.network = MagicMock()
+        backend._client.network.set_cache_behavior = AsyncMock()
         asyncio.run(backend.set_cache_disabled(True))
-        backend._client.cdp.send_command.assert_called_once()
+        backend._client.network.set_cache_behavior.assert_called_once()
 
     def test_mock_response_supported(self) -> None:
         """Test mock response supported."""

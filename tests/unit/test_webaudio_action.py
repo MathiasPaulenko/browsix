@@ -28,6 +28,11 @@ class TestWebAudioAction:
         backend.webaudio_get_context = AsyncMock(
             return_value={"contextId": "ctx1", "contextType": "realtime"}
         )
+        backend.webaudio_enable = AsyncMock()
+        backend.webaudio_disable = AsyncMock()
+        backend.webaudio_get_realtime_data = AsyncMock(
+            return_value={"contextId": "ctx1", "currentTime": 1.5, "currentSampleFrame": 0}
+        )
         return backend
 
     async def test_list_contexts(self) -> None:
@@ -64,9 +69,40 @@ class TestWebAudioAction:
             await WebAudioAction(params).execute(backend)
 
     async def test_lifecycle(self) -> None:
-        """Test the action lifecycle (launch, execute, close)."""
+        """Test the action lifecycle (navigate, execute)."""
         backend = self._make_backend()
         params = WebAudioParams(url="https://example.com", action="list")
         await WebAudioAction(params).execute(backend)
-        backend.launch.assert_called_once()
-        backend.close.assert_called_once()
+        backend.navigate.assert_called_once()
+        backend.webaudio_get_contexts.assert_called_once()
+
+    async def test_enable(self) -> None:
+        """Test enable action."""
+        backend = self._make_backend()
+        params = WebAudioParams(action="enable")
+        result = await WebAudioAction(params).execute(backend)
+        assert result is None
+        backend.webaudio_enable.assert_called_once()
+
+    async def test_disable(self) -> None:
+        """Test disable action."""
+        backend = self._make_backend()
+        params = WebAudioParams(action="disable")
+        result = await WebAudioAction(params).execute(backend)
+        assert result is None
+        backend.webaudio_disable.assert_called_once()
+
+    async def test_get_realtime_data(self) -> None:
+        """Test get-realtime-data action."""
+        backend = self._make_backend()
+        params = WebAudioParams(action="get-realtime-data", context_id="ctx1")
+        result = await WebAudioAction(params).execute(backend)
+        assert result["contextId"] == "ctx1"
+        backend.webaudio_get_realtime_data.assert_called_once_with("ctx1")
+
+    async def test_get_realtime_data_missing_id_raises(self) -> None:
+        """Test that get-realtime-data without context_id raises."""
+        backend = self._make_backend()
+        params = WebAudioParams(action="get-realtime-data")
+        with pytest.raises(ValueError, match="context_id is required"):
+            await WebAudioAction(params).execute(backend)

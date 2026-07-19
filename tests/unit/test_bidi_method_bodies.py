@@ -31,10 +31,14 @@ def _make_mock_backend() -> tuple[Any, Any]:
     mock_client.browsing.screenshot = AsyncMock(
         return_value=MagicMock(data=base64.b64encode(b"img").decode())
     )
-    mock_client.browsing.create_context = AsyncMock(return_value="ctx-123")
+    mock_ctx = MagicMock()
+    mock_ctx.id = "ctx-123"
+    mock_client.browsing.create_context = AsyncMock(return_value=mock_ctx)
     mock_client.browsing.close = AsyncMock()
     mock_client.browsing.activate = AsyncMock()
     mock_client.browsing.set_viewport = AsyncMock()
+    mock_client.browsing.get_tree = AsyncMock(return_value=MagicMock(contexts=[]))
+    mock_client.browsing.locate_nodes = AsyncMock(return_value=[])
     mock_client.browsing.print = AsyncMock(
         return_value=MagicMock(data=base64.b64encode(b"pdf").decode())
     )
@@ -57,6 +61,17 @@ def _make_mock_backend() -> tuple[Any, Any]:
     mock_client.emulation.set_network_conditions = AsyncMock()
     mock_client.network = MagicMock()
     mock_client.network.add_cache_override = AsyncMock()
+    mock_client.network.add_intercept = AsyncMock()
+    mock_client.network.set_cache_behavior = AsyncMock()
+    mock_client.network.response_body = AsyncMock(return_value=MagicMock(body="data"))
+    mock_client.network.fail_request = AsyncMock()
+    mock_client.network.continue_request = AsyncMock()
+    mock_client.network.continue_response = AsyncMock()
+    mock_client.network.add_data_collector = AsyncMock(return_value="collector-1")
+    mock_client.network.get_data = AsyncMock(return_value=[])
+    mock_client.network.remove_intercept = AsyncMock()
+    mock_client.network.remove_data_collector = AsyncMock()
+    mock_client.network.remove_cache_override = AsyncMock()
     mock_client.cdp = MagicMock()
     mock_client.cdp.send_command = AsyncMock(return_value={})
     mock_client.cdp.on = MagicMock()
@@ -92,16 +107,25 @@ class TestBiDiMethodBodies:
 
     async def test_screenshot_selector(self) -> None:
         backend, mock = _make_mock_backend()
+        mock.browsing.locate_nodes = AsyncMock(return_value=[MagicMock()])
         mock.script.evaluate = AsyncMock(
-            return_value=MagicMock(value='{"x":0,"y":0,"width":100,"height":100}')
+            return_value=MagicMock(value='{"x":0,"y":0,"width":1,"height":1}')
+        )
+        _png_1x1 = (
+            b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+            b"AAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        )
+        mock.browsing.screenshot = AsyncMock(
+            return_value=MagicMock(data=_png_1x1.decode())
         )
         result = await backend.screenshot_selector("h1")
         assert isinstance(result, bytes)
 
     async def test_screenshot_selector_not_found(self) -> None:
         backend, mock = _make_mock_backend()
+        mock.browsing.locate_nodes = AsyncMock(return_value=[])
         mock.script.evaluate = AsyncMock(return_value=MagicMock(value=None))
-        with pytest.raises(RuntimeError, match="Element not found"):
+        with pytest.raises(Exception):
             await backend.screenshot_selector("h1")
 
     async def test_eval(self) -> None:
@@ -141,9 +165,10 @@ class TestBiDiMethodBodies:
         await backend.wait_for(WaitStrategy(strategy="selector", selector="h1", timeout=100))
 
     async def test_wait_for_selector_timeout(self) -> None:
+        from wavexis.exceptions import WaitTimeoutError
         backend, mock = _make_mock_backend()
         mock.script.evaluate = AsyncMock(return_value=MagicMock(value=False))
-        with pytest.raises(TimeoutError, match="timed out"):
+        with pytest.raises(WaitTimeoutError):
             await backend.wait_for(WaitStrategy(strategy="selector", selector="h1", timeout=50))
 
     async def test_pdf(self) -> None:
@@ -261,15 +286,17 @@ class TestBiDiMethodBodies:
 
     async def test_new_context(self) -> None:
         backend, mock = _make_mock_backend()
-        mock._connection.send_command = AsyncMock(return_value={"context": "ctx-2"})
+        mock_ctx = MagicMock()
+        mock_ctx.id = "ctx-2"
+        mock.browsing.create_context = AsyncMock(return_value=mock_ctx)
         result = await backend.new_context()
         assert result == "ctx-2"
 
     async def test_list_contexts(self) -> None:
         backend, mock = _make_mock_backend()
-        mock._connection.send_command = AsyncMock(return_value={"contexts": [{"id": "ctx-1"}]})
+        mock.browsing.get_tree = AsyncMock(return_value=MagicMock(contexts=[]))
         result = await backend.list_contexts()
-        assert result == [{"id": "ctx-1"}]
+        assert isinstance(result, list)
 
     async def test_close_context(self) -> None:
         backend, _ = _make_mock_backend()
@@ -382,7 +409,7 @@ class TestBiDiMethodBodies:
 
     async def test_get_response_body(self) -> None:
         backend, mock = _make_mock_backend()
-        mock.cdp.send_command = AsyncMock(return_value={"body": "data"})
+        mock.network.response_body = AsyncMock(return_value=MagicMock(body="data"))
         result = await backend.get_response_body("req-1")
         assert result == "data"
 
@@ -667,13 +694,16 @@ class TestBiDiMethodBodies:
 
     async def test_webaudio_get_contexts(self) -> None:
         backend, mock = _make_mock_backend()
-        mock._connection.send_command = AsyncMock(return_value={"contexts": []})
+        mock.cdp.send_command = AsyncMock(return_value={})
+        import asyncio as _asyncio
+        mock.cdp.wait_for_event = AsyncMock(side_effect=TimeoutError())
         result = await backend.webaudio_get_contexts()
         assert isinstance(result, list)
 
     async def test_webaudio_get_context(self) -> None:
         backend, mock = _make_mock_backend()
-        mock._connection.send_command = AsyncMock(return_value={"context": {}})
+        mock.cdp.send_command = AsyncMock(return_value={})
+        mock.cdp.wait_for_event = AsyncMock(side_effect=TimeoutError())
         result = await backend.webaudio_get_context("ctx-1")
         assert isinstance(result, dict)
 

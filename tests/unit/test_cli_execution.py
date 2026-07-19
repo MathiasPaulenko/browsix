@@ -142,8 +142,8 @@ class TestCLIExecutionCapture:
 
     def test_dom_executes(self) -> None:
         backend = _make_mock_backend()
-        with patch("wavexis.cli._capture._get_backend", return_value=backend):
-            result = runner.invoke(app, ["dom", "https://example.com"])
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["dom", "document", "https://example.com"])
         assert result.exit_code == 0
 
     def test_scrape_executes(self) -> None:
@@ -174,13 +174,13 @@ class TestCLIExecutionCapture:
 
     def test_console_executes(self) -> None:
         backend = _make_mock_backend()
-        with patch("wavexis.cli._capture._get_backend", return_value=backend):
-            result = runner.invoke(app, ["console", "https://example.com"])
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["console", "enable", "https://example.com"])
         assert result.exit_code == 0
 
     def test_logs_executes(self) -> None:
         backend = _make_mock_backend()
-        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+        with patch("wavexis.cli._navigation._get_backend", return_value=backend):
             result = runner.invoke(app, ["logs", "https://example.com"])
         assert result.exit_code == 0
 
@@ -440,8 +440,8 @@ class TestCLIExecutionExperimental:
 
     def test_media_executes(self) -> None:
         backend = _make_mock_backend()
-        with patch("wavexis.cli._experimental._get_backend", return_value=backend):
-            result = runner.invoke(app, ["media", "list", "https://example.com"])
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["media", "enable", "https://example.com"])
         assert result.exit_code == 0
 
 
@@ -538,14 +538,14 @@ class TestCLIExecutionAdvancedFull:
 
     def test_security_executes(self) -> None:
         backend = _make_mock_backend()
-        with patch("wavexis.cli._advanced._get_backend", return_value=backend):
-            result = runner.invoke(app, ["security", "https://example.com"])
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["security", "enable", "https://example.com"])
         assert result.exit_code == 0
 
     def test_security_ignore_cert(self) -> None:
         backend = _make_mock_backend()
-        with patch("wavexis.cli._advanced._get_backend", return_value=backend):
-            result = runner.invoke(app, ["security", "https://example.com", "-a", "ignore_cert"])
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["security", "set-ignore-certificate-errors", "https://example.com", "true"])
         assert result.exit_code == 0
 
     def test_lighthouse_executes(self) -> None:
@@ -633,7 +633,7 @@ class TestCLIExecutionDebug:
 
     def test_logs_executes(self) -> None:
         backend = _make_mock_backend()
-        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+        with patch("wavexis.cli._navigation._get_backend", return_value=backend):
             result = runner.invoke(app, ["logs", "https://example.com"])
         assert result.exit_code == 0
 

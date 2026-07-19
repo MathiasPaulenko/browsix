@@ -96,6 +96,4 @@ class TestAnimationAction:
         backend = self._make_backend()
         params = AnimationParams(url="https://example.com", action="list")
         await AnimationAction(params).execute(backend)
-        backend.launch.assert_called_once()
         backend.navigate.assert_called_once()
-        backend.close.assert_called_once()

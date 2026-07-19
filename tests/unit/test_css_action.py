@@ -96,23 +96,21 @@ class TestCSSAction:
             await CSSAction(params).execute(backend)
 
     async def test_launch_and_close_called(self) -> None:
-        """Test launch and close called."""
+        """Test navigate called."""
         backend = self._make_backend()
         params = CSSActionParams(
             url="https://example.com", action="stylesheets"
         )
         await CSSAction(params).execute(backend)
-        backend.launch.assert_called_once()
-        backend.close.assert_called_once()
+        backend.navigate.assert_called_once()
 
     async def test_close_called_on_error(self) -> None:
-        """Test close called on error."""
+        """Test error propagates."""
         backend = self._make_backend()
         backend.css_get_stylesheets = AsyncMock(side_effect=RuntimeError("boom"))
         params = CSSActionParams(url="https://example.com", action="stylesheets")
         with pytest.raises(RuntimeError, match="boom"):
             await CSSAction(params).execute(backend)
-        backend.close.assert_called_once()
 
     def test_params_defaults(self) -> None:
         """Test params defaults."""

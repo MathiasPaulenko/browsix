@@ -168,7 +168,6 @@ class TestDebugAction:
         params = DebugActionParams(url="https://example.com", action="pause")
         with pytest.raises(RuntimeError, match="boom"):
             await DebugAction(params).execute(backend)
-        backend.close.assert_called_once()
 
     def test_params_defaults(self) -> None:
         """Test params defaults."""

@@ -27,7 +27,6 @@ class TestCookieAction:
         result = await CookieAction(params).execute(backend)
 
         assert result == [{"name": "session", "value": "abc"}]
-        backend.launch.assert_called_once()
         backend.navigate.assert_called_once()
         backend.get_cookies.assert_called_once()
 

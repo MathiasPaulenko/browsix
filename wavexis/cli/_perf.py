@@ -90,6 +90,49 @@ def perf_css_coverage(
         return
     _write_json_output(result, output, "CSS coverage")
 
+@perf_app.command("disable")
+def performance_disable() -> None:
+    """Disable the Performance domain."""
+    _run_async(_perf_domain_op(lambda b: b.performance_disable()))
+    typer.echo("Performance domain disabled")
+
+@perf_app.command("enable")
+def performance_enable() -> None:
+    """Enable the Performance domain."""
+    _run_async(_perf_domain_op(lambda b: b.performance_enable()))
+    typer.echo("Performance domain enabled")
+
+@perf_app.command("get-metrics")
+def performance_get_metrics(
+    output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
+) -> None:
+    """Get current values of run-time metrics."""
+    result = _run_async(_perf_domain_op(lambda b: b.performance_get_metrics()))
+    _write_json_output(result, output, "metrics")
+
+@perf_app.command("timeline-enable")
+def performance_timeline_enable() -> None:
+    """Enable the PerformanceTimeline domain to receive timeline events."""
+    _run_async(_perf_domain_op(lambda b: b.performance_timeline_enable()))
+    typer.echo("PerformanceTimeline domain enabled")
+
+@perf_app.command("set-time-domain")
+def performance_set_time_domain(
+    time_domain: str = typer.Argument(..., help="Time domain ('timeTicks' or 'threadTicks')"),
+) -> None:
+    """Set the time domain for collecting and reporting durations."""
+    _run_async(_perf_domain_op(lambda b: b.performance_set_time_domain(time_domain)))
+    typer.echo(f"Time domain set to {time_domain}")
+
+async def _perf_domain_op(action_fn: Any) -> Any:
+    """Async helper for Performance domain operations."""
+    backend = _get_backend()
+    try:
+        await backend.launch(_browser_options())
+        return await action_fn(backend)
+    finally:
+        await _close_backend(backend)
+
 async def _perf_action(
     url: str, action: str, duration_ms: int = 3000
 ) -> dict[str, Any]:

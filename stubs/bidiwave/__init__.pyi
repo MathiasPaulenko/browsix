@@ -16,6 +16,8 @@ class BiDiClient:
     storage: Any
     permissions: Any
     emulation: Any
+    preload: Any
+    input: Any
     cdp: Any
     _connection: Any
 

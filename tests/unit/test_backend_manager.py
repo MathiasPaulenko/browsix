@@ -11,7 +11,7 @@ from wavexis.backend.manager import BackendManager
 from wavexis.exceptions import BackendNotAvailableError, BackendNotSupportedError
 
 
-class DummyBackend(AbstractBackend):
+class DummyBackend:
     """Dummy backend for testing."""
 
     def __init__(self) -> None:

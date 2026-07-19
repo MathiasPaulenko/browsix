@@ -81,5 +81,4 @@ class TestBluetoothAction:
             url="https://example.com", action="emulate", name="Test"
         )
         await BluetoothAction(params).execute(backend)
-        backend.launch.assert_called_once()
-        backend.close.assert_called_once()
+        backend.navigate.assert_called_once()

@@ -44,6 +44,8 @@ def _make_bidi_backend() -> Any:
     backend._client.cdp.send_command = AsyncMock(return_value={})
     backend._client.cdp.on = MagicMock()
     backend._client.cdp.off = MagicMock()
+    backend._client.on_log_entry = AsyncMock(return_value="log-sub-1")
+    backend._client.off = MagicMock()
     return backend
 
 
@@ -119,8 +121,9 @@ class TestGetResponseBodyBiDi:
     def test_returns_body(self) -> None:
         """Test that get_response_body returns the body."""
         backend = _make_bidi_backend()
-        backend._client.cdp.send_command = AsyncMock(
-            return_value={"body": "<html>response</html>"}
+        backend._client.network = MagicMock()
+        backend._client.network.response_body = AsyncMock(
+            return_value=MagicMock(body="<html>response</html>")
         )
         result = asyncio.run(backend.get_response_body("req-123"))
         assert result == "<html>response</html>"
@@ -346,4 +349,4 @@ class TestSubscribeEventsBiDi:
             backend.subscribe_events(["console"], lambda e: None)
         )
         asyncio.run(backend.unsubscribe_events(sub_id))
-        backend._client.cdp.off.assert_called()
+        backend._client.off.assert_called()

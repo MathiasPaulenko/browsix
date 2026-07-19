@@ -283,7 +283,8 @@ class TestHarParams:
     def test_defaults(self):
         """Test defaults."""
         params = HarParams()
-        assert params.wait == 3000
+        assert params.wait.strategy == "load"
+        assert params.wait.timeout == 30000
         assert params.filter is None
         assert params.timeout == 30000
 

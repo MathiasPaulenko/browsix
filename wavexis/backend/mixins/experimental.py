@@ -59,6 +59,103 @@ class ExperimentalBackend(ABC):
             List of credential dicts.
         """
 
+    @abstractmethod
+    async def webauthn_enable(self) -> None:
+        """Enable the WebAuthn domain."""
+
+    @abstractmethod
+    async def webauthn_disable(self) -> None:
+        """Disable the WebAuthn domain."""
+
+    @abstractmethod
+    async def webauthn_get_credential(
+        self, authenticator_id: str, credential_id: str
+    ) -> dict[str, Any]:
+        """Get a specific credential from a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            credential_id: The credential ID.
+
+        Returns:
+            Credential dict.
+        """
+
+    @abstractmethod
+    async def webauthn_remove_credential(
+        self, authenticator_id: str, credential_id: str
+    ) -> None:
+        """Remove a credential from a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            credential_id: The credential ID.
+        """
+
+    @abstractmethod
+    async def webauthn_clear_credentials(self, authenticator_id: str) -> None:
+        """Clear all credentials from a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+        """
+
+    @abstractmethod
+    async def webauthn_set_user_verified(
+        self, authenticator_id: str, is_user_verified: bool
+    ) -> None:
+        """Set the user-verified flag on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            is_user_verified: Whether the user is verified.
+        """
+
+    @abstractmethod
+    async def webauthn_set_automatic_presence_simulation(
+        self, authenticator_id: str, enabled: bool
+    ) -> None:
+        """Set automatic presence simulation on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            enabled: Whether to enable presence simulation.
+        """
+
+    @abstractmethod
+    async def webauthn_set_credential_properties(
+        self,
+        authenticator_id: str,
+        credential_id: str,
+        backup_state: bool = False,
+        backup_eligibility: bool = False,
+    ) -> None:
+        """Set credential properties on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            credential_id: The credential ID.
+            backup_state: The backup state.
+            backup_eligibility: The backup eligibility.
+        """
+
+    @abstractmethod
+    async def webauthn_set_response_override_bits(
+        self,
+        authenticator_id: str,
+        is_bogus_signature: bool = False,
+        is_bad_uv: bool = False,
+        is_bad_up: bool = False,
+    ) -> None:
+        """Set response override bits on a virtual authenticator.
+
+        Args:
+            authenticator_id: The authenticator ID.
+            is_bogus_signature: Whether to return bogus signatures.
+            is_bad_uv: Whether to return bad UV responses.
+            is_bad_up: Whether to return bad UP responses.
+        """
+
     # ── WebAudio ──────────────────────────────────────────
 
     @abstractmethod
@@ -78,6 +175,25 @@ class ExperimentalBackend(ABC):
 
         Returns:
             Audio context dict.
+        """
+
+    @abstractmethod
+    async def webaudio_enable(self) -> None:
+        """Enable the WebAudio domain."""
+
+    @abstractmethod
+    async def webaudio_disable(self) -> None:
+        """Disable the WebAudio domain."""
+
+    @abstractmethod
+    async def webaudio_get_realtime_data(self, context_id: str) -> dict[str, Any]:
+        """Get realtime data for a WebAudio context.
+
+        Args:
+            context_id: The audio context ID.
+
+        Returns:
+            Dict with realtime audio data.
         """
 
     # ── Media ─────────────────────────────────────────────
@@ -122,6 +238,46 @@ class ExperimentalBackend(ABC):
     @abstractmethod
     async def cast_stop(self) -> None:
         """Stop active cast mirroring."""
+
+    @abstractmethod
+    async def cast_enable(self) -> None:
+        """Enable the Cast domain."""
+
+    @abstractmethod
+    async def cast_disable(self) -> None:
+        """Disable the Cast domain."""
+
+    @abstractmethod
+    async def cast_set_sink_to_use(self, sink_name: str) -> None:
+        """Set a sink to use for cast.
+
+        Args:
+            sink_name: The cast sink name.
+        """
+
+    @abstractmethod
+    async def cast_start_desktop_mirroring(self, sink_name: str) -> None:
+        """Start desktop mirroring to a cast sink.
+
+        Args:
+            sink_name: The cast sink name.
+        """
+
+    @abstractmethod
+    async def cast_start_tab_mirroring(self, sink_name: str) -> None:
+        """Start tab mirroring to a cast sink.
+
+        Args:
+            sink_name: The cast sink name.
+        """
+
+    @abstractmethod
+    async def cast_stop_casting(self, sink_name: str) -> None:
+        """Stop casting to a specific sink.
+
+        Args:
+            sink_name: The cast sink name.
+        """
 
     # ── Bluetooth ─────────────────────────────────────────
 
@@ -190,3 +346,31 @@ class ExperimentalBackend(ABC):
             key: The preference key.
             value: The value to set.
         """
+
+    # ── Tethering ─────────────────────────────────────────
+
+    @abstractmethod
+    async def tethering_bind(self, port: int) -> None:
+        """Bind a port for tethering (accept incoming connections).
+
+        Args:
+            port: The port number to bind.
+        """
+
+    @abstractmethod
+    async def tethering_unbind(self, port: int) -> None:
+        """Unbind a port from tethering.
+
+        Args:
+            port: The port number to unbind.
+        """
+
+    # ── WebMcp ────────────────────────────────────────────
+
+    @abstractmethod
+    async def web_mcp_enable(self) -> None:
+        """Enable the WebMcp domain."""
+
+    @abstractmethod
+    async def web_mcp_disable(self) -> None:
+        """Disable the WebMcp domain."""

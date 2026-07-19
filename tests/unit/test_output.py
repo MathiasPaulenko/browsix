@@ -54,7 +54,7 @@ class TestOutput:
         """Test write csv empty."""
         path = str(tmp_path / "empty.csv")
         Output.write_csv([], path)
-        assert Path(path).read_text(encoding="utf-8") == ""
+        assert not Path(path).exists()
 
     def test_write_csv_different_keys(self, tmp_path: Path):
         """Test write csv different keys."""

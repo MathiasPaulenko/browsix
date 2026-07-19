@@ -26,6 +26,7 @@ __all__ = [
     "SensorParams",
     "ScreencastParams",
     "StorageParams",
+    "SystemInfoParams",
     "AnimationParams",
     "CSSParams",
     "DebugParams",
@@ -556,9 +557,30 @@ class StorageParams:
         store: IndexedDB object store name.
         action: Storage action — "get", "set", "clear", "list",
             "cache-list", "cache-entries", "cache-delete",
-            "indexeddb-list", "indexeddb-get", "indexeddb-clear".
+            "indexeddb-list", "indexeddb-get", "indexeddb-clear",
+            "clear-data-for-storage-key", "delete-bucket",
+            "related-website-sets", "shared-storage-metadata",
+            "get-storage-key", "get-storage-key-for-frame",
+            "reset-shared-storage-budget", "run-bounce-tracking",
+            "set-cookies", "set-ig-auction-tracking",
+            "set-ig-tracking", "set-protected-audience-k-anonymity",
+            "set-shared-storage-tracking", "set-bucket-tracking",
+            "track-cache-origin", "track-cache-key",
+            "track-idb-origin", "track-idb-key",
+            "untrack-cache-origin", "untrack-cache-key",
+            "untrack-idb-origin", "untrack-idb-key".
         wait: Wait strategy after navigation.
         browser: Browser launch options.
+        origin: Origin for origin-based operations.
+        storage_key: Storage key for key-based operations.
+        bucket_name: Storage bucket name.
+        owner_origin: Owner origin for shared storage operations.
+        frame_id: Frame ID for storage key operations.
+        cookies: List of cookie dicts for set-cookies.
+        enable: Boolean flag for tracking toggle actions.
+        context_id: Auction context ID for set-ig-auction-tracking.
+        hashed_mac_key: Hashed MAC key for set-protected-audience-k-anonymity.
+        storage_types: Comma-separated storage types for clear-data-for-storage-key.
     """
 
     url: str = ""
@@ -571,6 +593,21 @@ class StorageParams:
     action: str = "get"
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+    origin: str | None = None
+    storage_key: str | None = None
+    bucket_name: str | None = None
+    owner_origin: str | None = None
+    frame_id: str | None = None
+    cookies: list[dict[str, Any]] | None = None
+    enable: bool = False
+    context_id: int | None = None
+    hashed_mac_key: str | None = None
+    storage_types: str = "all"
+    cache_id: str | None = None
+    request_url: str | None = None
+    request_headers: list[dict[str, str]] | None = None
+    skip_count: int = 0
+    page_size: int = 100
 
 
 @dataclass
@@ -686,5 +723,25 @@ class HeaderParams:
     action: str = "set-headers"
     headers: dict[str, str] = field(default_factory=dict)
     user_agent: str = ""
+    wait: WaitStrategy = field(default_factory=WaitStrategy)
+    browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+
+@dataclass
+class SystemInfoParams:
+    """Parameters for system info operations.
+
+    Attributes:
+        url: URL to navigate to before system info operations.
+        action: System info action — "get-info", "get-process-info",
+            "get-feature-state".
+        feature_name: Feature name for "get-feature-state" action.
+        wait: Wait strategy after navigation.
+        browser: Browser launch options.
+    """
+
+    url: str = ""
+    action: str = "get-info"
+    feature_name: str | None = None
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
