@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import NetworkParams
+from wavexis.exceptions import ActionError
 
 
 class NetworkAction(BaseAction[NetworkParams, Any]):
@@ -50,9 +51,9 @@ class NetworkAction(BaseAction[NetworkParams, Any]):
 
         if params.action == "cookies_delete":
             if not params.name:
-                raise ValueError("name is required for cookies_delete action")
+                raise ActionError("name is required for cookies_delete action")
             if not params.domain:
-                raise ValueError("domain is required for cookies_delete action")
+                raise ActionError("domain is required for cookies_delete action")
             await backend.delete_cookie(params.name, params.domain)
             return None
 
@@ -70,4 +71,4 @@ class NetworkAction(BaseAction[NetworkParams, Any]):
                 await backend.set_user_agent(params.user_agent)
             return None
 
-        raise ValueError(f"Unknown network action: {params.action}")
+        raise ActionError(f"Unknown network action: {params.action}")

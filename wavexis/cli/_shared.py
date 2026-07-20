@@ -135,7 +135,10 @@ def _load_global_config() -> None:
     except ImportError:
         if ctx.verbose:
             _echo(f"Warning: failed to load config from {config_path}: PyYAML not installed")
-    except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+    except (OSError, ValueError, TypeError) as exc:
+        if ctx.verbose:
+            _echo(f"Warning: failed to load config from {config_path}: {exc}")
+    except Exception as exc:
         if ctx.verbose:
             _echo(f"Warning: failed to load config from {config_path}: {exc}")
 

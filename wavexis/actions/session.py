@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import CookieParams
 from wavexis.exceptions import WavexisError
+from wavexis.output import validate_path
 
 
 @dataclass
@@ -46,6 +48,8 @@ class SessionData:
     def from_json(cls, data: str) -> SessionData:
         """Deserialize session data from JSON string."""
         obj = json.loads(data)
+        if not isinstance(obj, dict):
+            raise WavexisError("Session data must be a JSON object")
         return cls(
             cookies=obj.get("cookies", []),
             local_storage=obj.get("local_storage", {}),
@@ -80,7 +84,11 @@ class SessionSaveAction(BaseAction[Path, str]):
             url=str(url) if url else "",
         )
         json_str = data.to_json()
-        self.params.write_text(json_str, encoding="utf-8")
+        try:
+            session_path = validate_path(self.params)
+            await asyncio.to_thread(session_path.write_text, json_str, encoding="utf-8")
+        except OSError as e:
+            raise WavexisError(f"Failed to write session file: {e}") from e
         return json_str
 
 
@@ -93,7 +101,13 @@ class SessionLoadAction(BaseAction[Path, None]):
         Args:
             backend: The browser backend with an active session.
         """
-        data = SessionData.from_json(self.params.read_text(encoding="utf-8"))
+        try:
+            raw = await asyncio.to_thread(validate_path(self.params).read_text, encoding="utf-8")
+            data = SessionData.from_json(raw)
+        except OSError as e:
+            raise WavexisError(f"Failed to read session file: {e}") from e
+        except json.JSONDecodeError as e:
+            raise WavexisError(f"Invalid session JSON: {e}") from e
 
         for cookie in data.cookies:
             cp = CookieParams(

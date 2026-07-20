@@ -17,10 +17,12 @@ from wavexis.actions.scrape import ScrapeAction
 from wavexis.actions.screenshot import ScreenshotAction
 from wavexis.cli._shared import (
     Output,
+    WavexisError,
     _browser_options,
     _close_backend,
     _echo,
     _get_backend,
+    _handle_error,
     _progress,
     _run_async,
     _write_json_output,
@@ -36,6 +38,7 @@ from wavexis.config import (
     ScreenshotParams,
     WaitStrategy,
 )
+from wavexis.output import validate_path
 
 
 @app.command()
@@ -207,12 +210,13 @@ def eval(
 
     Use --assert to create CI gates that pass/fail based on the result.
     """
-    if file and not expression:
-        expression = f"@{file}"
-    elif file:
-        from pathlib import Path
-
-        expression = Path(file).read_text(encoding="utf-8")
+    if file:
+        try:
+            expression = validate_path(file).read_text(encoding="utf-8")
+        except OSError as e:
+            _handle_error(WavexisError(f"Failed to read expression file: {e}"))
+            return
+        file = None
 
     result = _run_async(_eval(url, expression, await_promise, file))
     if result is None:
@@ -461,9 +465,12 @@ async def _scrape(
                             _progress(completed, total, url)
 
             tasks = [_scrape_one(u) for u in urls]
-            gathered = await asyncio.gather(*tasks)
+            gathered = await asyncio.gather(*tasks, return_exceptions=True)
             results: list[dict[str, Any]] = []
-            for batch in gathered:
+            for url, batch in zip(urls, gathered, strict=True):
+                if isinstance(batch, Exception):
+                    _echo(f"Error scraping {url}: {batch}")
+                    continue
                 results.extend(batch)
             return results
 

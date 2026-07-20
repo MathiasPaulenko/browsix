@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -42,7 +43,8 @@ class OverlayAction(BaseAction[OverlayParams, None]):
         Raises:
             ValueError: If the action is not recognized or selector is missing.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
         await self._run_action(backend)
 
     async def _run_action(self, backend: AbstractBackend) -> None:
@@ -57,9 +59,9 @@ class OverlayAction(BaseAction[OverlayParams, None]):
         action = self.params.action
         if action == "highlight":
             if not self.params.selector:
-                raise ValueError("selector is required for highlight action")
+                raise ActionError("selector is required for highlight action")
             await backend.overlay_highlight(self.params.selector, self.params.color)
         elif action == "clear":
             await backend.overlay_clear()
         else:
-            raise ValueError(f"Unknown overlay action: {action}")
+            raise ActionError(f"Unknown overlay action: {action}")

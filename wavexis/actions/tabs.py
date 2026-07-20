@@ -7,6 +7,7 @@ from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -50,4 +51,4 @@ class TabsAction(BaseAction[TabsParams, Any]):
         if params.action == "activate":
             await backend.activate_tab(params.tab_id)
             return None
-        raise ValueError(f"Unknown tabs action: {params.action}")
+        raise ActionError(f"Unknown tabs action: {params.action}")

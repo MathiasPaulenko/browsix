@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 class PermissionsAction(BaseAction[str, None]):
@@ -51,5 +52,5 @@ class PermissionsAction(BaseAction[str, None]):
         elif self._action == "reset":
             await backend.reset_permissions()
         else:
-            raise ValueError(f"Unknown permissions action: {self._action}")
+            raise ActionError(f"Unknown permissions action: {self._action}")
         return None

@@ -51,7 +51,8 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
         Returns:
             Dict with category scores and detailed metrics.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
 
         cats = self.params.categories or [
             "performance",
@@ -135,10 +136,13 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
             })()
         """
         cwv: dict[str, Any] = {}
-        with contextlib.suppress(Exception):
+        try:
             cwv_result = await backend.eval(cwv_js, await_promise=True)
             if isinstance(cwv_result, dict):
                 cwv = cwv_result
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
 
         lcp = cwv.get("lcp", 0)
         cls = cwv.get("cls", 0)

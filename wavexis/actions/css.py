@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, CSSParams, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -46,7 +47,8 @@ class CSSAction(BaseAction[CSSActionParams, dict[str, Any] | list[dict[str, Any]
         Raises:
             ValueError: If the action is not recognized or required params missing.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
         return await self._run_action(backend)
 
     async def _run_action(self, backend: AbstractBackend) -> dict[str, Any] | list[dict[str, Any]]:
@@ -64,19 +66,19 @@ class CSSAction(BaseAction[CSSActionParams, dict[str, Any] | list[dict[str, Any]
         action = self.params.action
         if action == "styles":
             if not self.params.selector:
-                raise ValueError("selector is required for styles action")
+                raise ActionError("selector is required for styles action")
             return await backend.css_get_styles(self.params.selector)
         if action == "stylesheets":
             return await backend.css_get_stylesheets()
         if action == "rules":
             if not self.params.stylesheet_id:
-                raise ValueError("stylesheet_id is required for rules action")
+                raise ActionError("stylesheet_id is required for rules action")
             return await backend.css_get_rules(self.params.stylesheet_id)
         if action == "computed":
             if not self.params.selector:
-                raise ValueError("selector is required for computed action")
+                raise ActionError("selector is required for computed action")
             return await backend.css_get_computed(self.params.selector)
-        raise ValueError(f"Unknown CSS action: {action}")
+        raise ActionError(f"Unknown CSS action: {action}")
 
 
 def css_action_from_config(params: CSSParams) -> CSSAction:

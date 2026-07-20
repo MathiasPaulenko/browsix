@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -229,3 +230,47 @@ class TestConfigCommand:
         result = runner.invoke(_cli.app, ["config", "show"])
         assert result.exit_code == 0
         assert "backend: cdp" in result.output
+
+    def test_config_init_permission_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A permission error writing the initial config should exit cleanly."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        with patch.object(Path, "write_text", side_effect=PermissionError("denied")):
+            result = runner.invoke(_cli.app, ["config", "init"])
+        assert result.exit_code == 1
+        assert "failed to create config" in result.output.lower()
+
+    def test_config_show_permission_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unreadable config file should exit cleanly, not traceback."""
+        config_dir = tmp_path / ".wavexis"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text("backend: cdp\n", encoding="utf-8")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        with patch.object(Path, "read_text", side_effect=PermissionError("denied")):
+            result = runner.invoke(_cli.app, ["config", "show"])
+        assert result.exit_code == 1
+        assert "failed to read config" in result.output.lower()
+
+    def test_config_set_permission_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A permission error updating the config should exit cleanly."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        with patch.object(Path, "write_text", side_effect=PermissionError("denied")):
+            result = runner.invoke(
+                _cli.app, ["config", "set", "--key", "backend", "--value", "cdp"]
+            )
+        assert result.exit_code == 1
+        assert "failed to write config" in result.output.lower()

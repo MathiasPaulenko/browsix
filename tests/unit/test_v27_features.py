@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import pathlib
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from wavexis.exceptions import SessionNotInitializedError
+from wavexis.exceptions import SessionNotInitializedError, WavexisError
 
 
 @pytest.mark.unit
@@ -76,6 +77,48 @@ class TestExtensionInstall:
         backend = BiDiBackend()
         with pytest.raises(SessionNotInitializedError, match="not launched"):
             asyncio.run(backend.extension_install("/fake/path"))
+
+    def test_cdp_install_unreadable_crx(self, tmp_path: Any, monkeypatch: Any) -> None:
+        """CDP backend raises WavexisError when extension file cannot be read."""
+        from wavexis.backend.cdp import CDPBackend
+
+        crx_file = tmp_path / "ext.crx"
+        crx_file.write_bytes(b"fake-crx-data")
+
+        def _raise(*args: Any, **kwargs: Any) -> None:
+            raise PermissionError("denied")
+
+        monkeypatch.setattr(pathlib.Path, "read_bytes", _raise)
+
+        backend = CDPBackend()
+        mock_session = MagicMock()
+        mock_session.send = AsyncMock(return_value={})
+        backend._session = mock_session
+
+        with pytest.raises(WavexisError, match="Failed to read extension file"):
+            asyncio.run(backend.extension_install(str(crx_file)))
+
+    def test_bidi_install_unreadable_crx(self, tmp_path: Any, monkeypatch: Any) -> None:
+        """BiDi backend raises WavexisError when extension file cannot be read."""
+        from wavexis.backend.bidi import BiDiBackend
+
+        crx_file = tmp_path / "ext.crx"
+        crx_file.write_bytes(b"fake-crx-data")
+
+        def _raise(*args: Any, **kwargs: Any) -> None:
+            raise PermissionError("denied")
+
+        monkeypatch.setattr(pathlib.Path, "read_bytes", _raise)
+
+        backend = BiDiBackend()
+        mock_client = MagicMock()
+        mock_client.cdp = MagicMock()
+        mock_client.cdp.send_command = AsyncMock(return_value={})
+        backend._client = mock_client
+        backend._context = "ctx-123"
+
+        with pytest.raises(WavexisError, match="Failed to read extension file"):
+            asyncio.run(backend.extension_install(str(crx_file)))
 
 
 @pytest.mark.unit

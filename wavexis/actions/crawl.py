@@ -11,7 +11,7 @@ from urllib.parse import urljoin, urlparse
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import WaitStrategy
-from wavexis.exceptions import WavexisError
+from wavexis.exceptions import ActionError, WavexisError
 
 
 @dataclass
@@ -47,6 +47,9 @@ class CrawlAction(BaseAction[CrawlParams, list[dict[str, Any]]]):
         Returns:
             List of page dicts with url, title, links, and depth.
         """
+        if not self.params.start_url:
+            raise ActionError("start_url is required for crawl action")
+
         results: list[dict[str, Any]] = []
         visited: set[str] = set()
         queue: list[tuple[str, int]] = [(self.params.start_url, 0)]

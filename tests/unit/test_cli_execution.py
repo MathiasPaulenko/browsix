@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -139,6 +139,16 @@ class TestCLIExecutionCapture:
         with patch("wavexis.cli._capture._get_backend", return_value=backend):
             result = runner.invoke(app, ["eval", "https://example.com", "--expression", "1+1"])
         assert result.exit_code == 0
+
+    def test_eval_unreadable_file(self, tmp_path: Path) -> None:
+        """An unreadable expression file should exit cleanly."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._capture._get_backend", return_value=backend):
+            result = runner.invoke(
+                app, ["eval", "https://example.com", "--file", str(tmp_path / "expr.js")]
+            )
+        assert result.exit_code == 1
+        assert "failed to read expression file" in result.output.lower()
 
     def test_dom_executes(self) -> None:
         backend = _make_mock_backend()
@@ -288,6 +298,14 @@ class TestCLIExecutionAdvanced:
             result = runner.invoke(app, ["headers", '{"X-Custom": "value"}'])
         assert result.exit_code == 0
 
+    def test_headers_missing_file_exits_cleanly(self) -> None:
+        """A missing @file should produce a clean error, not a traceback."""
+        with patch("wavexis.cli._network._get_backend") as mock_get:
+            result = runner.invoke(app, ["headers", "@does_not_exist.json"])
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower() or "unreadable" in result.output.lower()
+        mock_get.assert_not_called()
+
     def test_user_agent_executes(self) -> None:
         backend = _make_mock_backend()
         with patch("wavexis.cli._network._get_backend", return_value=backend):
@@ -389,6 +407,20 @@ class TestCLIExecutionSession:
             result = runner.invoke(app, ["session", "save", "https://example.com", "-o", out])
         assert result.exit_code == 0
 
+    def test_session_save_unwritable(self, tmp_path: Path) -> None:
+        """A write failure while saving a session should exit cleanly."""
+        backend = _make_mock_backend()
+        backend.eval = AsyncMock(return_value={})
+        backend.get_cookies = AsyncMock(return_value=[])
+        out = str(tmp_path / "session.json")
+        with (
+            patch("wavexis.cli._session._get_backend", return_value=backend),
+            patch("wavexis.actions.session.Path.write_text", side_effect=PermissionError("denied")),
+        ):
+            result = runner.invoke(app, ["session", "save", "https://example.com", "-o", out])
+        assert result.exit_code == 1
+        assert "failed to write session" in result.output.lower()
+
     def test_session_list_executes(self, tmp_path: Path) -> None:
         with patch("pathlib.Path.home", return_value=tmp_path):
             result = runner.invoke(app, ["session", "list"])
@@ -489,6 +521,45 @@ class TestCLIExecutionWorkflow:
                 ],
             )
         assert result.exit_code == 0
+
+    def test_batch_unreadable_urls_file_exits_cleanly(self, tmp_path: Path) -> None:
+        """An unreadable URLs file should produce a clean error, not a traceback."""
+        urls_file = tmp_path / "urls.txt"
+        urls_file.write_text("https://example.com\n")
+        with (
+            patch("pathlib.Path.read_text", side_effect=PermissionError("denied")),
+            patch("wavexis.cli._workflow._get_backend") as mock_get,
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "batch",
+                    str(urls_file),
+                    "screenshot",
+                    "--output-dir",
+                    str(tmp_path / "out"),
+                ],
+            )
+        assert result.exit_code == 1
+        assert "unreadable" in result.output.lower() or "not found" in result.output.lower()
+        mock_get.assert_not_called()
+
+    def test_record_unwritable_output_exits_cleanly(self, tmp_path: Path) -> None:
+        """A failure to write the recorded config should produce a clean error."""
+        with patch("pathlib.Path.write_text", side_effect=PermissionError("denied")):
+            result = runner.invoke(
+                app,
+                [
+                    "record",
+                    "https://example.com",
+                    "-o",
+                    str(tmp_path / "out.yml"),
+                    "--actions",
+                    "screenshot",
+                ],
+            )
+        assert result.exit_code == 1
+        assert "failed to write" in result.output.lower()
 
 
 @pytest.mark.unit
@@ -598,6 +669,16 @@ class TestCLIExecutionAdvancedFull:
             result = runner.invoke(app, ["lighthouse", "https://example.com", "-t", "ttfb_ms=800"])
         assert result.exit_code == 0
 
+    def test_lighthouse_missing_budget_file_exits_cleanly(self) -> None:
+        """A missing budget file should produce a clean error, not a traceback."""
+        with patch("wavexis.cli._advanced._get_backend") as mock_get:
+            result = runner.invoke(
+                app, ["lighthouse", "https://example.com", "-b", "does_not_exist.json"]
+            )
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower() or "unreadable" in result.output.lower()
+        mock_get.assert_not_called()
+
     def test_extension_install(self) -> None:
         backend = _make_mock_backend()
         backend.extension_install = AsyncMock(return_value="ext-123")
@@ -691,6 +772,16 @@ class TestCLIExecutionConfig:
             result = runner.invoke(app, ["config", "set", "--key", "backend", "--value", "cdp"])
         assert result.exit_code == 0
 
+    def test_auth_missing_context_file_exits_cleanly(self) -> None:
+        """A missing auth context file should produce a clean error, not a traceback."""
+        with patch("wavexis.cli._config._get_backend") as mock_get:
+            result = runner.invoke(
+                app, ["auth", "does_not_exist.json", "https://example.com"]
+            )
+        assert result.exit_code == 1
+        assert "auth context" in result.output.lower()
+        mock_get.assert_not_called()
+
 
 @pytest.mark.unit
 class TestCLIExecutionNL:
@@ -752,6 +843,33 @@ class TestCLIExecutionSessionFull:
     def test_session_load_not_found(self) -> None:
         result = runner.invoke(app, ["session", "load", "nonexistent.json"])
         assert result.exit_code == 1
+
+    def test_session_load_unreadable(self, tmp_path: Path) -> None:
+        """A read failure while loading a session should exit cleanly."""
+        backend = _make_mock_backend()
+        session_file = tmp_path / "session.json"
+        session_file.write_text('{"cookies":[],"local_storage":{},"session_storage":{},"url":""}')
+        with (
+            patch("wavexis.cli._session._get_backend", return_value=backend),
+            patch("wavexis.actions.session.Path.read_text", side_effect=PermissionError("denied")),
+        ):
+            result = runner.invoke(
+                app, ["session", "load", "https://example.com", "-o", str(session_file)]
+            )
+        assert result.exit_code == 1
+        assert "failed to read session" in result.output.lower()
+
+    def test_session_load_invalid_json(self, tmp_path: Path) -> None:
+        """A malformed session JSON file should exit cleanly."""
+        backend = _make_mock_backend()
+        session_file = tmp_path / "session.json"
+        session_file.write_text("not valid json")
+        with patch("wavexis.cli._session._get_backend", return_value=backend):
+            result = runner.invoke(
+                app, ["session", "load", "https://example.com", "-o", str(session_file)]
+            )
+        assert result.exit_code == 1
+        assert "invalid session json" in result.output.lower()
 
     def test_session_delete(self, tmp_path: Path) -> None:
         sessions_dir = tmp_path / ".wavexis" / "sessions"
@@ -1044,3 +1162,119 @@ class TestCLIExecutionServeCLI:
     def test_ws_help(self) -> None:
         result = runner.invoke(app, ["ws", "--help"])
         assert result.exit_code == 0
+
+
+@pytest.mark.unit
+class TestCLISameLoopCleanup:
+    """Regression tests for Bug #89/#90: backend cleanup must run on the same event loop."""
+
+    def test_record_interactive_closes_on_same_loop(self) -> None:
+        """Verify record --interactive runs close_backend on the same event loop."""
+        backend = _make_mock_backend()
+        backend.new_tab_handle = AsyncMock()
+
+        with (
+            patch("wavexis.cli._workflow._get_backend", return_value=backend),
+            patch(
+                "wavexis.actions.record.record_session",
+                new_callable=AsyncMock,
+                return_value="yaml",
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "record",
+                    "https://example.com",
+                    "--interactive",
+                    "--duration",
+                    "1",
+                    "-o",
+                    "out.yml",
+                ],
+            )
+        assert result.exit_code == 0
+        backend.close.assert_awaited()
+
+    def test_repl_closes_on_same_loop(self) -> None:
+        """Verify repl command runs close_backend on the same event loop."""
+        backend = _make_mock_backend()
+
+        with (
+            patch("wavexis.cli._config._get_backend", return_value=backend),
+            patch("wavexis.repl.repl_loop", new_callable=AsyncMock, return_value=[]),
+        ):
+            result = runner.invoke(app, ["repl"])
+        assert result.exit_code == 0
+        backend.close.assert_awaited()
+
+
+class TestBatchFilenameSanitization:
+    """Regression tests for filename sanitization in batch workflow writes."""
+
+    def test_batch_screenshot_sanitizes_url_with_invalid_chars(self, tmp_path: Path) -> None:
+        from tests.unit.test_concurrent_tabs import FakeBackend
+
+        backend = FakeBackend()
+
+        urls_file = tmp_path / "urls.txt"
+        urls_file.write_text("https://example.com?x=1&y=2\n")
+        out_dir = tmp_path / "out"
+
+        with patch("wavexis.cli._workflow._get_backend", return_value=backend):
+            result = runner.invoke(
+                app,
+                [
+                    "batch",
+                    str(urls_file),
+                    "screenshot",
+                    "--output-dir",
+                    str(out_dir),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert any(out_dir.iterdir())
+
+    def test_scrape_parallel_continues_on_error(self) -> None:
+        """One failing URL must not abort parallel scraping for the rest."""
+        from wavexis.actions.scrape import ScrapeAction
+
+        backend = _make_mock_backend()
+        tab = MagicMock()
+        tab.close = AsyncMock()
+        tab.navigate = AsyncMock()
+        backend.new_tab_handle = AsyncMock(return_value=tab)
+
+        side_effects = [
+            ValueError("bad url"),
+            [{"url": "https://ok.com", "result": "ok"}],
+        ]
+
+        with (
+            patch("wavexis.cli._capture._get_backend", return_value=backend),
+            patch.object(
+                ScrapeAction, "execute", new=AsyncMock(side_effect=side_effects)
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "scrape",
+                    "--concurrency",
+                    "2",
+                    "https://bad.com",
+                    "https://ok.com",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "ok" in result.output
+
+    def test_sanitize_filename_handles_path_separators_and_reserved_chars(self) -> None:
+        from wavexis.cli._workflow import _sanitize_filename
+
+        assert "://" not in _sanitize_filename("https://a.com/b/c")
+        assert "/" not in _sanitize_filename("https://a.com/b/c")
+        assert "?" not in _sanitize_filename("https://a.com?q=1")
+        assert _sanitize_filename("https://example.com") == "https_example.com"

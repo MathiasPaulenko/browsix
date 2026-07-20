@@ -291,7 +291,7 @@ class TestHarParams:
         assert params.wait.strategy == "load"
         assert params.wait.timeout == 30000
         assert params.filter is None
-        assert params.timeout == 30000
+        assert params.timeout == 5000
 
     def test_with_filter(self):
         """Test with filter."""

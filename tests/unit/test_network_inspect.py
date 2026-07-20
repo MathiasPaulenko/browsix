@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import pathlib
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from wavexis.exceptions import WavexisError
 
 
 def _make_cdp_backend() -> Any:
@@ -193,6 +196,20 @@ class TestReplayHarCDP:
 
         asyncio.run(backend.replay_har(str(har_path), url_filter="api.example"))
         backend._session.runtime.evaluate.assert_called_once()
+
+    def test_unreadable_har_raises(self, tmp_path: Any, monkeypatch: Any) -> None:
+        """Test that replay_har raises WavexisError when HAR file is unreadable."""
+        backend = _make_cdp_backend()
+        har_path = tmp_path / "test.har"
+        har_path.write_text('{"log": {"entries": []}}')
+
+        def _raise(*args: Any, **kwargs: Any) -> None:
+            raise PermissionError("denied")
+
+        monkeypatch.setattr(pathlib.Path, "read_text", _raise)
+
+        with pytest.raises(WavexisError, match="Failed to read HAR file"):
+            asyncio.run(backend.replay_har(str(har_path)))
 
 
 @pytest.mark.unit

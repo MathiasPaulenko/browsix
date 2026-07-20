@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import AnimationParams
+from wavexis.exceptions import ActionError
 
 
 class AnimationAction(BaseAction[AnimationParams, Any]):
@@ -31,20 +32,20 @@ class AnimationAction(BaseAction[AnimationParams, Any]):
 
         if action == "pause":
             if not self.params.animation_id:
-                raise ValueError("animation_id is required for pause action")
+                raise ActionError("animation_id is required for pause action")
             await backend.animation_pause(self.params.animation_id)
             return None
 
         if action == "play":
             if not self.params.animation_id:
-                raise ValueError("animation_id is required for play action")
+                raise ActionError("animation_id is required for play action")
             await backend.animation_play(self.params.animation_id)
             return None
 
         if action == "seek":
             if not self.params.animation_id or self.params.time_ms is None:
-                raise ValueError("animation_id and time_ms are required for seek action")
+                raise ActionError("animation_id and time_ms are required for seek action")
             await backend.animation_seek(self.params.animation_id, self.params.time_ms)
             return None
 
-        raise ValueError(f"Unknown animation action: {action}")
+        raise ActionError(f"Unknown animation action: {action}")

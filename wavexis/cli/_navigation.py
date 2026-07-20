@@ -21,6 +21,7 @@ from wavexis.actions.navigate import (
 from wavexis.actions.tabs import TabsAction, TabsParams
 from wavexis.cli._shared import (
     Output,
+    WavexisError,
     _browser_options,
     _close_backend,
     _get_backend,
@@ -162,7 +163,7 @@ async def _contexts(action: str, context_id: str) -> Any:
             return None
         if action == "user-context":
             return await backend.new_user_context()
-        raise ValueError(f"Unknown context action: {action}")
+        raise WavexisError(f"Unknown context action: {action}")
     finally:
         await _close_backend(backend)
 
@@ -245,6 +246,8 @@ def page_frame_tree(
 ) -> None:
     """Get the current page frame tree."""
     result = _run_async(_page_op(lambda b: b.page_get_frame_tree()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -254,6 +257,8 @@ def page_layout_metrics(
 ) -> None:
     """Get page layout metrics (viewport, content size, etc.)."""
     result = _run_async(_page_op(lambda b: b.page_get_layout_metrics()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -263,6 +268,8 @@ def page_history(
 ) -> None:
     """Get the navigation history for the current page."""
     result = _run_async(_page_op(lambda b: b.page_get_navigation_history()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -369,6 +376,8 @@ def page_manifest(
 ) -> None:
     """Get the web app manifest for the current page."""
     result = _run_async(_page_op(lambda b: b.page_get_app_manifest()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -378,6 +387,8 @@ def page_resource_tree(
 ) -> None:
     """Get the resource tree for the current page."""
     result = _run_async(_page_op(lambda b: b.page_get_resource_tree()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -415,8 +426,7 @@ def page_capture_screenshot(
     if output == "-":
         typer.echo(base64.b64decode(data), nl=False)
     else:
-        with open(output, "wb") as f:
-            f.write(base64.b64decode(data))
+        Output.write_bytes(base64.b64decode(data), output)
         typer.echo(f"Screenshot saved to {output}")
 
 
@@ -479,6 +489,8 @@ def page_ad_script_ancestry(
 ) -> None:
     """Get the ad script ancestry for a frame."""
     result = _run_async(_page_op(lambda b: b.page_get_ad_script_ancestry(frame_id)))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -488,6 +500,8 @@ def page_annotated_content(
 ) -> None:
     """Get annotated page content."""
     result = _run_async(_page_op(lambda b: b.page_get_annotated_page_content()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -497,6 +511,8 @@ def page_app_id(
 ) -> None:
     """Get the app ID for the current page."""
     result = _run_async(_page_op(lambda b: b.page_get_app_id()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -506,6 +522,8 @@ def page_installability_errors(
 ) -> None:
     """Get installability errors for the current page."""
     result = _run_async(_page_op(lambda b: b.page_get_installability_errors()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -515,6 +533,8 @@ def page_manifest_icons(
 ) -> None:
     """Get manifest icons for the current page."""
     result = _run_async(_page_op(lambda b: b.page_get_manifest_icons()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -524,6 +544,8 @@ def page_origin_trials(
 ) -> None:
     """Get origin trials for the current page."""
     result = _run_async(_page_op(lambda b: b.page_get_origin_trials()))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -534,6 +556,8 @@ def page_permissions_policy_state(
 ) -> None:
     """Get permissions policy state for a frame."""
     result = _run_async(_page_op(lambda b: b.page_get_permissions_policy_state(frame_id)))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -554,6 +578,8 @@ def page_produce_compilation_cache(
 ) -> None:
     """Produce compilation cache for the given URL."""
     result = _run_async(_page_op(lambda b: b.page_produce_compilation_cache(url)))
+    if result is None:
+        return
     Output.write_json(result, output)
 
 
@@ -597,6 +623,8 @@ def page_search_in_resource(
             lambda b: b.page_search_in_resource(frame_id, url, query, case_sensitive, is_regex)
         )
     )
+    if result is None:
+        return
     Output.write_json(result, output)
 
 

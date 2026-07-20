@@ -117,6 +117,8 @@ def performance_get_metrics(
 ) -> None:
     """Get current values of run-time metrics."""
     result = _run_async(_perf_domain_op(lambda b: b.performance_get_metrics()))
+    if result is None:
+        return
     _write_json_output(result, output, "metrics")
 
 

@@ -42,7 +42,8 @@ class ExtractAction(BaseAction[ExtractParams, list[dict[str, Any]]]):
         Returns:
             List of dicts with field names mapped to extracted text/HTML.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
 
         schema_json = json.dumps(self.params.schema)
         if self.params.selector:

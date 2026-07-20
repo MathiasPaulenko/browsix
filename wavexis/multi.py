@@ -13,7 +13,8 @@ import yaml
 
 from wavexis.actions.base import BaseAction
 from wavexis.actions.cache import ActionCache
-from wavexis.exceptions import MultiConfigError
+from wavexis.exceptions import MultiConfigError, WavexisError
+from wavexis.output import validate_path
 
 __all__ = ["parse_yaml", "execute_actions"]
 
@@ -64,9 +65,13 @@ def parse_yaml(path: Path) -> list[dict[str, Any]]:
     Raises:
         MultiConfigError: If the config structure is invalid.
     """
-    if not path.exists():
+    valid_path = validate_path(path)
+    if not valid_path.exists():
         raise MultiConfigError("file", f"Config file not found: {path}")
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        raw = yaml.safe_load(valid_path.read_text(encoding="utf-8"))
+    except OSError as e:
+        raise MultiConfigError("file", f"Config file not found or unreadable: {e}") from e
     if not isinstance(raw, dict):
         raise MultiConfigError("root", "Config must be a YAML mapping")
     variables = raw.get("vars", {})
@@ -126,7 +131,18 @@ async def execute_actions(
                 await tab.close()
 
         tasks = [_run_in_tab(ad) for ad in actions]
-        return await asyncio.gather(*tasks)
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+
+        failures: list[str] = []
+        for i, result in enumerate(gathered):
+            if isinstance(result, Exception):
+                action_type = next(iter(actions[i]))
+                failures.append(f"actions[{i}] ({action_type}): {result}")
+
+        if failures:
+            raise WavexisError("One or more actions failed:\n" + "\n".join(failures))
+
+        return gathered
 
     results: list[Any] = []
     for action_dict in actions:

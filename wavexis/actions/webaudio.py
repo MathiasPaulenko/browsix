@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -51,7 +52,7 @@ class WebAudioAction(BaseAction[WebAudioParams, Any]):
 
         if action == "get":
             if not self.params.context_id:
-                raise ValueError("context_id is required for get action")
+                raise ActionError("context_id is required for get action")
             return await backend.webaudio_get_context(self.params.context_id)
 
         if action == "enable":
@@ -64,7 +65,7 @@ class WebAudioAction(BaseAction[WebAudioParams, Any]):
 
         if action == "get-realtime-data":
             if not self.params.context_id:
-                raise ValueError("context_id is required for get-realtime-data action")
+                raise ActionError("context_id is required for get-realtime-data action")
             return await backend.webaudio_get_realtime_data(self.params.context_id)
 
-        raise ValueError(f"Unknown WebAudio action: {action}")
+        raise ActionError(f"Unknown WebAudio action: {action}")

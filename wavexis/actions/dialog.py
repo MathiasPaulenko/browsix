@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 class DialogAction(BaseAction[str, None]):
@@ -51,5 +52,5 @@ class DialogAction(BaseAction[str, None]):
         elif self._action == "dismiss":
             await backend.dialog_dismiss()
         else:
-            raise ValueError(f"Unknown dialog action: {self._action}")
+            raise ActionError(f"Unknown dialog action: {self._action}")
         return None

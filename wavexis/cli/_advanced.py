@@ -16,6 +16,7 @@ from wavexis.cli._shared import (
     app,
 )
 from wavexis.config import WaitStrategy
+from wavexis.output import validate_path
 
 
 @app.command()
@@ -279,20 +280,21 @@ def lighthouse(
     budgets: dict[str, float] = {}
 
     if budget:
-        from pathlib import Path
-
         try:
-            budget_text = Path(budget).read_text(encoding="utf-8")
+            budget_text = validate_path(budget).read_text(encoding="utf-8")
             loaded = json.loads(budget_text)
         except json.JSONDecodeError as e:
             typer.echo(f"Error: invalid JSON in budget file: {e}", err=True)
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
+        except OSError as e:
+            typer.echo(f"Error: budget file not found or unreadable: {e}", err=True)
+            raise typer.Exit(1) from e
         if isinstance(loaded, dict):
             try:
                 budgets = {k: float(v) for k, v in loaded.items()}
             except (ValueError, TypeError) as e:
                 typer.echo(f"Error: invalid budget value: {e}", err=True)
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
 
     if threshold:
         for t in threshold:
@@ -301,8 +303,11 @@ def lighthouse(
                 try:
                     budgets[key.strip()] = float(val.strip())
                 except ValueError:
-                    typer.echo(f"Error: invalid threshold value '{val.strip()}' for '{key.strip()}'", err=True)
-                    raise typer.Exit(1)
+                    typer.echo(
+                        f"Error: invalid threshold value '{val.strip()}' for '{key.strip()}'",
+                        err=True,
+                    )
+                    raise typer.Exit(1) from None
 
     async def _lighthouse() -> dict[str, Any]:
         backend = _get_backend()

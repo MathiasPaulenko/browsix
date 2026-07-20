@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 class AccessibilityAction(BaseAction[Any, Any]):
@@ -53,4 +54,4 @@ class AccessibilityAction(BaseAction[Any, Any]):
         elif self._action == "ancestors":
             return await backend.a11y_ancestors(self._node_id)
         else:
-            raise ValueError(f"Unknown a11y action: {self._action}")
+            raise ActionError(f"Unknown a11y action: {self._action}")

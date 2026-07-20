@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -45,6 +46,8 @@ class HARReplayAction(BaseAction[HARReplayParams, dict[str, Any]]):
         Returns:
             Dict with replayed count and any errors.
         """
+        if not self.params.har_path:
+            raise ActionError("har_path is required for har_replay action")
         if self.params.url:
             await backend.navigate(self.params.url, self.params.wait)
         await backend.replay_har(self.params.har_path, self.params.url_filter)

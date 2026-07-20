@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -65,13 +66,13 @@ class ServiceWorkerAction(BaseAction[ServiceWorkerParams, Any]):
 
         if action == "unregister":
             if not self.params.registration_id:
-                raise ValueError("registration_id is required for unregister action")
+                raise ActionError("registration_id is required for unregister action")
             await backend.sw_unregister(self.params.registration_id)
             return None
 
         if action == "update":
             if not self.params.registration_id:
-                raise ValueError("registration_id is required for update action")
+                raise ActionError("registration_id is required for update action")
             await backend.sw_update(self.params.registration_id)
             return None
 
@@ -85,7 +86,7 @@ class ServiceWorkerAction(BaseAction[ServiceWorkerParams, Any]):
 
         if action == "deliver-push":
             if not self.params.origin or not self.params.registration_id:
-                raise ValueError("origin and registration_id are required for deliver-push")
+                raise ActionError("origin and registration_id are required for deliver-push")
             await backend.sw_deliver_push_message(
                 self.params.origin,
                 self.params.registration_id,
@@ -95,7 +96,7 @@ class ServiceWorkerAction(BaseAction[ServiceWorkerParams, Any]):
 
         if action == "dispatch-sync":
             if not self.params.origin or not self.params.registration_id:
-                raise ValueError("origin and registration_id are required for dispatch-sync")
+                raise ActionError("origin and registration_id are required for dispatch-sync")
             await backend.sw_dispatch_sync_event(
                 self.params.origin,
                 self.params.registration_id,
@@ -106,31 +107,31 @@ class ServiceWorkerAction(BaseAction[ServiceWorkerParams, Any]):
 
         if action == "get-messages":
             if not self.params.worker_id:
-                raise ValueError("worker_id is required for get-messages")
+                raise ActionError("worker_id is required for get-messages")
             return await backend.sw_get_messages(self.params.worker_id)
 
         if action == "inspect":
             if not self.params.worker_id:
-                raise ValueError("worker_id is required for inspect")
+                raise ActionError("worker_id is required for inspect")
             await backend.sw_inspect_worker(self.params.worker_id)
             return None
 
         if action == "skip-waiting":
             if not self.params.scope_url:
-                raise ValueError("scope_url is required for skip-waiting")
+                raise ActionError("scope_url is required for skip-waiting")
             await backend.sw_skip_waiting(self.params.scope_url)
             return None
 
         if action == "start-worker":
             if not self.params.scope_url:
-                raise ValueError("scope_url is required for start-worker")
+                raise ActionError("scope_url is required for start-worker")
             await backend.sw_start_worker(self.params.scope_url)
             return None
 
         if action == "stop-worker":
             if not self.params.worker_id:
-                raise ValueError("worker_id is required for stop-worker")
+                raise ActionError("worker_id is required for stop-worker")
             await backend.sw_stop_worker(self.params.worker_id)
             return None
 
-        raise ValueError(f"Unknown service worker action: {action}")
+        raise ActionError(f"Unknown service worker action: {action}")

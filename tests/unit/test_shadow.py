@@ -193,8 +193,10 @@ class TestBuildShadowPierceJs:
         assert "button" in js
 
     def test_selector_escaping(self) -> None:
-        """Test that single quotes in selectors are escaped."""
+        """Test that selectors with single quotes are properly handled."""
         from wavexis.backend.cdp import CDPBackend
 
         js = CDPBackend._build_shadow_pierce_js(["[data-test='foo']"])
-        assert "\\'" in js
+        # json.dumps produces a valid JS string literal with double quotes
+        assert '"[data-test=' in js or "'[data-test=" in js
+        assert "foo" in js

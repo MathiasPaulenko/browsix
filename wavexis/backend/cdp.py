@@ -30,7 +30,9 @@ from wavexis.exceptions import (
     NavigationError,
     SessionNotInitializedError,
     WaitTimeoutError,
+    WavexisError,
 )
+from wavexis.output import validate_path
 
 try:
     from cdpwave import CDPClient, CDPSession
@@ -113,18 +115,27 @@ class CDPBackend(AbstractBackend):
                 user_data_dir=options.user_data_dir,  # type: ignore[call-arg]
                 extra_args=extra_args if extra_args else None,
             )
-        self._session = await self._client.new_page()
 
-        if options.user_agent:
-            await self._session.emulation.set_user_agent_override(user_agent=options.user_agent)
+        client = self._client
+        try:
+            self._session = await client.new_page()
 
-        if options.extra_headers:
-            await self._session.network.set_extra_http_headers(options.extra_headers)
+            if options.user_agent:
+                await self._session.emulation.set_user_agent_override(user_agent=options.user_agent)
 
-        if options.stealth:
-            from wavexis.actions.stealth import get_stealth_js
+            if options.extra_headers:
+                await self._session.network.set_extra_http_headers(options.extra_headers)
 
-            await self._session.runtime.evaluate(get_stealth_js(), await_promise=False)
+            if options.stealth:
+                from wavexis.actions.stealth import get_stealth_js
+
+                await self._session.runtime.evaluate(get_stealth_js(), await_promise=False)
+        except Exception:
+            self._session = None
+            self._client = None
+            with contextlib.suppress(Exception):
+                await client.close()
+            raise
 
     async def close(self) -> None:
         """Close the browser client and release resources."""
@@ -177,6 +188,20 @@ class CDPBackend(AbstractBackend):
                 await session.wait_for_network_idle(idle_time=0.5, timeout=timeout_sec)
             except TimeoutError:
                 raise WaitTimeoutError("networkidle", timeout_ms) from None
+        elif wait.strategy == "url":
+            if not wait.url_pattern:
+                raise ValueError("url wait strategy requires a url_pattern")
+            import time as _time
+
+            deadline = _time.monotonic() + timeout_sec
+            while _time.monotonic() < deadline:
+                result = await session.runtime.evaluate("window.location.href")
+                href = result.get("result", {}).get("value", "") or ""
+                if wait.url_pattern in href:
+                    break
+                await asyncio.sleep(0.1)
+            else:
+                raise WaitTimeoutError("url", timeout_ms) from None
 
     async def screenshot(self, params: ScreenshotParams) -> bytes:
         """Take a screenshot of the current page.
@@ -233,6 +258,8 @@ class CDPBackend(AbstractBackend):
         root_node_id = doc.get("root", {}).get("nodeId", 0)
         node = await session.dom.query_selector(root_node_id, selector)
         node_id = node.get("nodeId", 0)
+        if node_id == 0:
+            raise ElementNotFoundError(selector)
         box = await session.dom.get_box_model(node_id)
         model = box.get("model", {})
         borders = model.get("border", [])
@@ -863,7 +890,10 @@ class CDPBackend(AbstractBackend):
         await session.emulation.set_emulated_media(media=params.media)
 
         paper_dims = PAPER_SIZES.get(params.paper, PAPER_SIZES["letter"])
-        margin_val = float(params.margin.replace("in", "").replace("cm", ""))
+        import re as _re
+
+        margin_match = _re.match(r"([\d.]+)", params.margin)
+        margin_val = float(margin_match.group(1)) if margin_match else 0.4
 
         result = await session.page.print_to_pdf(
             landscape=params.landscape,
@@ -904,19 +934,22 @@ class CDPBackend(AbstractBackend):
 
         session.on("Page.screencastFrame", on_frame)
 
-        await session.send(
-            "Page.startScreencast",
-            {
-                "format": params.format,
-                "quality": params.quality,
-                "maxWidth": params.max_width,
-                "maxHeight": params.max_height,
-            },
-        )
+        try:
+            await session.send(
+                "Page.startScreencast",
+                {
+                    "format": params.format,
+                    "quality": params.quality,
+                    "maxWidth": params.max_width,
+                    "maxHeight": params.max_height,
+                },
+            )
 
-        await asyncio.sleep(params.duration)
+            await asyncio.sleep(params.duration)
 
-        await session.send("Page.stopScreencast")
+            await session.send("Page.stopScreencast")
+        finally:
+            session.off("Page.screencastFrame", on_frame)
 
         return frames
 
@@ -994,8 +1027,11 @@ class CDPBackend(AbstractBackend):
 
         session.on("Runtime.consoleAPICalled", on_console_api)
 
-        await session.runtime.enable()
-        await asyncio.sleep(0.5)
+        try:
+            await session.runtime.enable()
+            await asyncio.sleep(0.5)
+        finally:
+            session.off("Runtime.consoleAPICalled", on_console_api)
 
         return entries
 
@@ -1029,8 +1065,11 @@ class CDPBackend(AbstractBackend):
 
         session.on("Log.entryAdded", on_log_entry)
 
-        await session.log.enable()
-        await asyncio.sleep(0.5)
+        try:
+            await session.log.enable()
+            await asyncio.sleep(0.5)
+        finally:
+            session.off("Log.entryAdded", on_log_entry)
 
         return entries
 
@@ -1148,7 +1187,7 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         if selector:
             escaped = json.dumps(selector)
-            js = f"document.querySelector('{escaped}').scrollIntoView()"
+            js = f"document.querySelector({escaped}).scrollIntoView()"
         else:
             js = f"window.scrollBy({x}, {y})"
         await session.runtime.evaluate(js)
@@ -1528,7 +1567,7 @@ class CDPBackend(AbstractBackend):
         """Build JS that generates CSS selector suggestions for an element."""
         return (
             f"(function(){{"
-            f"var el=document.querySelector('{escaped}');"
+            f"var el=document.querySelector({escaped});"
             f"if(!el)return null;"
             f"var s=[];var t=el.tagName.toLowerCase();"
             f"var id=el.id;"
@@ -1563,7 +1602,7 @@ class CDPBackend(AbstractBackend):
         escaped = json.dumps(query)
         return (
             f"(function(){{"
-            f"var q='{escaped}'.toLowerCase().trim();"
+            f"var q={escaped}.toLowerCase().trim();"
             f"var words=q.split(/\\s+/);"
             f"var els=Array.from(document.querySelectorAll('*'));"
             f"var results=[];"
@@ -1740,9 +1779,14 @@ class CDPBackend(AbstractBackend):
         session.on("Network.responseReceived", on_response)
         session.on("Network.loadingFinished", on_loading_finished)
 
-        await session.network.enable()
-        await self.navigate(params.url, WaitStrategy(strategy="load"))
-        await asyncio.sleep(params.timeout / 1000)
+        try:
+            await session.network.enable()
+            await self.navigate(params.url, WaitStrategy(strategy="load"))
+            await asyncio.sleep(params.timeout / 1000)
+        finally:
+            session.off("Network.requestWillBeSent", on_request)
+            session.off("Network.responseReceived", on_response)
+            session.off("Network.loadingFinished", on_loading_finished)
 
         entries: list[dict[str, Any]] = []
         for req_id, req_data in requests.items():
@@ -2065,7 +2109,7 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         escaped = json.dumps(selector)
         js = (
-            f"(function(){{var el=document.querySelector('{escaped}');"
+            f"(function(){{var el=document.querySelector({escaped});"
             f"if(!el)return false;"
             f"var rect=el.getBoundingClientRect();"
             f"return rect.width>0&&rect.height>0;}})()"
@@ -2087,7 +2131,7 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         escaped = json.dumps(selector)
         js = (
-            f"(function(){{var el=document.querySelector('{escaped}');"
+            f"(function(){{var el=document.querySelector({escaped});"
             f"if(!el)return;var rect=el.getBoundingClientRect();"
             f"if(rect.top<0||rect.bottom>window.innerHeight||"
             f"rect.left<0||rect.right>window.innerWidth)"
@@ -2154,9 +2198,10 @@ class CDPBackend(AbstractBackend):
             await self._wait_for_element(selector)
         await self._scroll_into_view_if_needed(selector)
         escaped = json.dumps(selector)
+        escaped_val = json.dumps(value)
         js = (
-            f"(function(){{var el=document.querySelector('{escaped}');"
-            f"if(!el)return false;el.focus();el.value='{value}';"
+            f"(function(){{var el=document.querySelector({escaped});"
+            f"if(!el)return false;el.focus();el.value={escaped_val};"
             f"el.dispatchEvent(new Event('input',{{bubbles:true}}));"
             f"el.dispatchEvent(new Event('change',{{bubbles:true}}));"
             f"return true;}})()"
@@ -2176,8 +2221,8 @@ class CDPBackend(AbstractBackend):
         escaped = json.dumps(selector)
         escaped_val = json.dumps(value)
         js = (
-            f"(function(){{var el=document.querySelector('{escaped}');"
-            f"if(!el)return false;el.value='{escaped_val}';"
+            f"(function(){{var el=document.querySelector({escaped});"
+            f"if(!el)return false;el.value={escaped_val};"
             f"el.dispatchEvent(new Event('change',{{bubbles:true}}));"
             f"return true;}})()"
         )
@@ -2281,7 +2326,7 @@ class CDPBackend(AbstractBackend):
         escaped_iframe = json.dumps(iframe_selector)
         escaped_expr = json.dumps(expression)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return null;"
             f"return (function(){{{escaped_expr}}}).call(f.contentDocument);}})()"
         )
@@ -2305,9 +2350,9 @@ class CDPBackend(AbstractBackend):
         escaped_iframe = json.dumps(iframe_selector)
         escaped_sel = json.dumps(selector)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return false;"
-            f"var el=f.contentDocument.querySelector('{escaped_sel}');"
+            f"var el=f.contentDocument.querySelector({escaped_sel});"
             f"if(!el)return false;"
             f"var rect=el.getBoundingClientRect();"
             f"return rect.width>0&&rect.height>0;}})()"
@@ -2336,9 +2381,9 @@ class CDPBackend(AbstractBackend):
         escaped_iframe = json.dumps(iframe_selector)
         escaped_sel = json.dumps(selector)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return false;"
-            f"var el=f.contentDocument.querySelector('{escaped_sel}');"
+            f"var el=f.contentDocument.querySelector({escaped_sel});"
             f"if(!el)return false;"
             f"el.scrollIntoView({{block:'center',behavior:'instant'}});"
             f"el.dispatchEvent(new MouseEvent('click',{{bubbles:true}}));"
@@ -2366,11 +2411,11 @@ class CDPBackend(AbstractBackend):
         escaped_sel = json.dumps(selector)
         escaped_val = json.dumps(value)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return false;"
-            f"var el=f.contentDocument.querySelector('{escaped_sel}');"
+            f"var el=f.contentDocument.querySelector({escaped_sel});"
             f"if(!el)return false;"
-            f"el.focus();el.value='{escaped_val}';"
+            f"el.focus();el.value={escaped_val};"
             f"el.dispatchEvent(new Event('input',{{bubbles:true}}));"
             f"el.dispatchEvent(new Event('change',{{bubbles:true}}));"
             f"return true;}})()"
@@ -2392,11 +2437,11 @@ class CDPBackend(AbstractBackend):
         Returns:
             JavaScript IIFE that returns the final element or null.
         """
-        escaped = [json.dumps(s).replace("'", "\\'") for s in selectors]
-        parts = [f"var el=document.querySelector('{escaped[0]}')"]
+        escaped = [json.dumps(s) for s in selectors]
+        parts = [f"var el=document.querySelector({escaped[0]})"]
         for sel in escaped[1:]:
             parts.append(
-                f"if(!el||!el.shadowRoot)return null;el=el.shadowRoot.querySelector('{sel}')"
+                f"if(!el||!el.shadowRoot)return null;el=el.shadowRoot.querySelector({sel})"
             )
         parts.append("return el")
         body = ";".join(parts)
@@ -2492,7 +2537,7 @@ class CDPBackend(AbstractBackend):
         js = (
             f"(function(){{var el=({pierce_js});"
             f"if(!el)return false;"
-            f"el.focus();el.value='{escaped_val}';"
+            f"el.focus();el.value={escaped_val};"
             f"el.dispatchEvent(new Event('input',{{bubbles:true,composed:true}}));"
             f"el.dispatchEvent(new Event('change',{{bubbles:true,composed:true}}));"
             f"return true;}})()"
@@ -2598,10 +2643,14 @@ class CDPBackend(AbstractBackend):
             fulfilled[0] = True
 
         session.on("Fetch.requestPaused", on_request_paused)
-        await session.send(
-            "Fetch.enable",
-            {"patterns": [{"urlPattern": url, "requestStage": "Response"}]},
-        )
+        try:
+            await session.send(
+                "Fetch.enable",
+                {"patterns": [{"urlPattern": url, "requestStage": "Response"}]},
+            )
+        except Exception:
+            session.off("Fetch.requestPaused", on_request_paused)
+            raise
 
     # ── Network inspection (W3, W6, W7) ───────────────────
 
@@ -2621,7 +2670,9 @@ class CDPBackend(AbstractBackend):
                 {"requestId": request_id},
             )
             return result.get("postData")
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
             return None
 
     async def get_response_body(self, request_id: str) -> str | None:
@@ -2640,7 +2691,9 @@ class CDPBackend(AbstractBackend):
                 {"requestId": request_id},
             )
             return result.get("body")
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
             return None
 
     async def modify_request(
@@ -2678,7 +2731,11 @@ class CDPBackend(AbstractBackend):
             )
 
         session.on("Fetch.requestPaused", on_request_paused)
-        await session.send("Fetch.enable", {"patterns": [pattern]})
+        try:
+            await session.send("Fetch.enable", {"patterns": [pattern]})
+        except Exception:
+            session.off("Fetch.requestPaused", on_request_paused)
+            raise
 
     async def modify_response(
         self,
@@ -2727,7 +2784,11 @@ class CDPBackend(AbstractBackend):
             )
 
         session.on("Fetch.requestPaused", on_request_paused)
-        await session.send("Fetch.enable", {"patterns": [response_pattern]})
+        try:
+            await session.send("Fetch.enable", {"patterns": [response_pattern]})
+        except Exception:
+            session.off("Fetch.requestPaused", on_request_paused)
+            raise
 
     async def replay_har(self, har_path: str, url_filter: str = "") -> None:
         """Replay network requests from a HAR file.
@@ -2740,9 +2801,11 @@ class CDPBackend(AbstractBackend):
             url_filter: Optional URL pattern to filter which entries to replay.
         """
         session = self._require_session()
-        from pathlib import Path
 
-        content = await asyncio.to_thread(Path(har_path).read_text, encoding="utf-8")
+        try:
+            content = await asyncio.to_thread(validate_path(har_path).read_text, encoding="utf-8")
+        except OSError as e:
+            raise WavexisError(f"Failed to read HAR file: {e}") from e
         har_data = json.loads(content)
 
         entries = har_data.get("log", {}).get("entries", [])
@@ -2815,10 +2878,14 @@ class CDPBackend(AbstractBackend):
                 )
 
         session.on("Fetch.authRequired", on_auth_required)
-        await session.send(
-            "Fetch.enable",
-            {"patterns": [{"urlPattern": url_pattern}]},
-        )
+        try:
+            await session.send(
+                "Fetch.enable",
+                {"patterns": [{"urlPattern": url_pattern}]},
+            )
+        except Exception:
+            session.off("Fetch.authRequired", on_auth_required)
+            raise
 
     async def network_clear_browser_cache(self) -> None:
         """Clear the browser cache."""
@@ -2911,6 +2978,7 @@ class CDPBackend(AbstractBackend):
             "capture_screenshots": capture_screenshots,
             "capture_network": capture_network,
             "capture_console": capture_console,
+            "handlers": [],
         }
 
         if capture_network:
@@ -2940,6 +3008,8 @@ class CDPBackend(AbstractBackend):
 
             session.on("Network.requestWillBeSent", on_network_request)
             session.on("Network.responseReceived", on_network_response)
+            state["handlers"].append(("Network.requestWillBeSent", on_network_request))
+            state["handlers"].append(("Network.responseReceived", on_network_response))
 
         if capture_console:
             await session.runtime.enable()
@@ -2954,6 +3024,7 @@ class CDPBackend(AbstractBackend):
                 )
 
             session.on("Runtime.consoleAPICalled", on_console_api)
+            state["handlers"].append(("Runtime.consoleAPICalled", on_console_api))
 
         if capture_screenshots:
             screenshot = await session.page.capture_screenshot()
@@ -3014,19 +3085,22 @@ class CDPBackend(AbstractBackend):
                     trace_events.append({"raw_size": len(raw)})
 
         session.on("Tracing.tracingComplete", _on_tracing_complete)
-        await session.send("Tracing.end", {})
+        try:
+            await session.send("Tracing.end", {})
 
-        if state["capture_screenshots"]:
-            screenshot = await session.page.capture_screenshot()
-            if screenshot:
-                state["screenshots"].append(
-                    {
-                        "timestamp": time.time(),
-                        "data": screenshot,
-                    }
-                )
+            if state["capture_screenshots"]:
+                screenshot = await session.page.capture_screenshot()
+                if screenshot:
+                    state["screenshots"].append(
+                        {
+                            "timestamp": time.time(),
+                            "data": screenshot,
+                        }
+                    )
 
-        await asyncio.sleep(0.5)
+            await asyncio.sleep(0.5)
+        finally:
+            session.off("Tracing.tracingComplete", _on_tracing_complete)
 
         result: dict[str, Any] = {
             "trace_events": trace_events,
@@ -3034,6 +3108,8 @@ class CDPBackend(AbstractBackend):
             "network": state["network"],
             "console": state["console"],
         }
+        for event_name, handler in state.get("handlers", []):
+            session.off(event_name, handler)
         del traces[trace_id]
         return result
 
@@ -3123,9 +3199,9 @@ class CDPBackend(AbstractBackend):
                 handlers[cdp_event] = handler
 
                 if evt_type in ("network_request", "network_response"):
-                    asyncio.ensure_future(session.network.enable())
+                    await session.network.enable()
                 elif evt_type == "console":
-                    asyncio.ensure_future(session.runtime.enable())
+                    await session.runtime.enable()
 
         self._subscriptions[sub_id] = handlers
         return sub_id
@@ -3221,20 +3297,20 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         import tempfile
 
-        download_dir = tempfile.mkdtemp()
-        await session.send(
-            "Page.setDownloadBehavior",
-            {"behavior": "allow", "downloadPath": download_dir},
-        )
+        with tempfile.TemporaryDirectory() as download_dir:
+            await session.send(
+                "Page.setDownloadBehavior",
+                {"behavior": "allow", "downloadPath": download_dir},
+            )
 
-        await asyncio.sleep(2)
+            await asyncio.sleep(2)
 
-        def _list_files() -> list[Path]:
-            return list(Path(download_dir).iterdir())
+            def _list_files() -> list[Path]:
+                return list(Path(download_dir).iterdir())
 
-        for fpath in await asyncio.to_thread(_list_files):
-            if await asyncio.to_thread(Path(fpath).is_file):
-                return await asyncio.to_thread(Path(fpath).read_bytes)
+            for fpath in await asyncio.to_thread(_list_files):
+                if await asyncio.to_thread(Path(fpath).is_file):
+                    return await asyncio.to_thread(Path(fpath).read_bytes)
 
         return b""
 
@@ -3752,12 +3828,15 @@ class CDPBackend(AbstractBackend):
                 trace_events.append({"error": "No stream handle in tracingComplete"})
 
         session.on("Tracing.tracingComplete", _on_tracing_complete)
-        await session.send(
-            "Tracing.start",
-            {"traceType": "devtools-timeline"},
-        )
-        await asyncio.sleep(duration_ms / 1000)
-        await session.send("Tracing.end", {})
+        try:
+            await session.send(
+                "Tracing.start",
+                {"traceType": "devtools-timeline"},
+            )
+            await asyncio.sleep(duration_ms / 1000)
+            await session.send("Tracing.end", {})
+        finally:
+            session.off("Tracing.tracingComplete", _on_tracing_complete)
         return {"traceEvents": trace_events}
 
     async def perf_profile(self, duration_ms: int = 3000) -> dict[str, Any]:
@@ -3911,7 +3990,9 @@ class CDPBackend(AbstractBackend):
         node_id = await self._find_node(selector)
         try:
             inline = await session.send("CSS.getInlineStyles", {"nodeId": node_id})
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
             escaped = json.dumps(selector)
             inline = await session.runtime.evaluate(
                 expression=(
@@ -3926,7 +4007,9 @@ class CDPBackend(AbstractBackend):
             inline = inline.get("result", {}).get("value", {})
         try:
             computed = await session.send("CSS.getComputedStyleForNode", {"nodeId": node_id})
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
             escaped = json.dumps(selector)
             computed = await session.runtime.evaluate(
                 expression=(
@@ -3955,7 +4038,9 @@ class CDPBackend(AbstractBackend):
             result = await session.send("CSS.getLayoutTreeAndStyles", {})
             stylesheets = result.get("stylesheets", [])
             return [dict(s) for s in stylesheets] if stylesheets else []
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
             js = (
                 "Array.from(document.styleSheets).map((s, i) => ({"
                 "styleSheetId: String(i), "
@@ -4265,11 +4350,6 @@ class CDPBackend(AbstractBackend):
             "CSS.setScopeText", {"styleSheetId": stylesheet_id, "scopeId": scope_id, "text": text}
         )
 
-    async def css_set_style_sheet_text(self, stylesheet_id: str, text: str) -> None:
-        """Set the text content of a stylesheet by ID."""
-        session = self._require_session()
-        await session.send("CSS.setStyleSheetText", {"styleSheetId": stylesheet_id, "text": text})
-
     async def css_set_style_text(self, edits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Set style texts for multiple edits."""
         session = self._require_session()
@@ -4388,10 +4468,14 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         await session.debugger.enable()
         paused_event = asyncio.Event()
-        session.on("Debugger.paused", lambda _: paused_event.set())
-        await session.debugger.pause()
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(paused_event.wait(), timeout=5.0)
+        handler = lambda _: paused_event.set()  # noqa: E731
+        session.on("Debugger.paused", handler)
+        try:
+            await session.debugger.pause()
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(paused_event.wait(), timeout=5.0)
+        finally:
+            session.off("Debugger.paused", handler)
 
     async def debug_resume(self) -> None:
         """Resume JavaScript execution after a pause."""
@@ -4526,30 +4610,15 @@ class CDPBackend(AbstractBackend):
         )
         return dict(result) if result else {}
 
-    async def debug_pause(self) -> None:
-        """Pause JavaScript execution."""
-        session = self._require_session()
-        await session.send("Debugger.pause", {})
-
     async def debug_pause_on_async_call(self, operation: str) -> None:
         """Pause on an async call operation."""
         session = self._require_session()
         await session.send("Debugger.pauseOnAsyncCall", {"operation": operation})
 
-    async def debug_remove_breakpoint(self, breakpoint_id: str) -> None:
-        """Remove a breakpoint by ID."""
-        session = self._require_session()
-        await session.send("Debugger.removeBreakpoint", {"breakpointId": breakpoint_id})
-
     async def debug_restart_frame(self, call_frame_id: str) -> None:
         """Restart a call frame by ID."""
         session = self._require_session()
         await session.send("Debugger.restartFrame", {"callFrameId": call_frame_id})
-
-    async def debug_resume(self) -> None:
-        """Resume JavaScript execution."""
-        session = self._require_session()
-        await session.send("Debugger.resume", {})
 
     async def debug_set_async_call_stack_depth(self, depth: int) -> None:
         """Set the async call stack depth."""
@@ -6409,17 +6478,21 @@ class CDPBackend(AbstractBackend):
         import os
 
         session = self._require_session()
-        is_dir = await asyncio.to_thread(os.path.isdir, path)
+        valid_path = validate_path(path)
+        is_dir = await asyncio.to_thread(os.path.isdir, valid_path)
         if is_dir:
-            abs_path = await asyncio.to_thread(os.path.abspath, path)
+            abs_path = await asyncio.to_thread(os.path.abspath, valid_path)
             ext_id = hashlib.sha256(abs_path.encode()).hexdigest()[:32]
             await session.send(
                 "Extensions.loadUnpacked",
                 {"path": abs_path},
             )
         else:
-            ext_id = hashlib.sha256(path.encode()).hexdigest()[:32]
-            data = await asyncio.to_thread(lambda: Path(path).read_bytes())
+            ext_id = hashlib.sha256(str(valid_path).encode()).hexdigest()[:32]
+            try:
+                data = await asyncio.to_thread(lambda: valid_path.read_bytes())
+            except OSError as e:
+                raise WavexisError(f"Failed to read extension file: {e}") from e
             await session.send(
                 "Extensions.load",
                 {"data": data.hex(), "id": ext_id},
@@ -9983,9 +10056,10 @@ class CDPBackend(AbstractBackend):
     ) -> dict[str, Any]:
         """Installs an unpacked extension from the filesystem."""
         session = self._require_session()
+        valid_path = validate_path(path)
         return dict(
             await session.send(
-                "Extensions.loadUnpacked", {"path": path, "enableInIncognito": enable_in_incognito}
+                "Extensions.loadUnpacked", {"path": str(valid_path), "enableInIncognito": enable_in_incognito}
             )
         )
 

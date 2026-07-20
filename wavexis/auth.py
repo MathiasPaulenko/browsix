@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from wavexis.output import validate_path
+
 if TYPE_CHECKING:
     from wavexis.backend.base import AbstractBackend
     from wavexis.config import WaitStrategy
@@ -60,7 +62,7 @@ def load_auth_context(path: str) -> AuthContext:
         FileNotFoundError: If the file does not exist.
         json.JSONDecodeError: If the file is not valid JSON.
     """
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = json.loads(validate_path(path).read_text(encoding="utf-8"))
     password = data.get("password")
     if password and not os.environ.get("WAVEXIS_AUTH_NO_WARN"):
         logger.warning(
@@ -90,7 +92,8 @@ def load_auth(path: str | Path) -> list[dict[str, str]]:
         FileNotFoundError: If the file does not exist.
         json.JSONDecodeError: If the file is not valid JSON.
     """
-    data: list[dict[str, str]] | dict[str, Any] = json.loads(Path(path).read_text(encoding="utf-8"))
+    valid_path = validate_path(path)
+    data: list[dict[str, str]] | dict[str, Any] = json.loads(valid_path.read_text(encoding="utf-8"))
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
@@ -111,7 +114,7 @@ def load_headers(path: str | Path) -> dict[str, str]:
         FileNotFoundError: If the file does not exist.
         json.JSONDecodeError: If the file is not valid JSON.
     """
-    data: dict[str, str] = json.loads(Path(path).read_text(encoding="utf-8"))
+    data: dict[str, str] = json.loads(validate_path(path).read_text(encoding="utf-8"))
     if isinstance(data, dict):
         if "headers" in data and isinstance(data["headers"], dict):
             return data["headers"]
@@ -145,7 +148,8 @@ async def apply_auth_context(
     if ctx.username and ctx.password:
         cred = base64.b64encode(f"{ctx.username}:{ctx.password}".encode()).decode()
         await backend.set_headers({"Authorization": f"Basic {cred}"})
-    await backend.navigate(url, wait)
+    if url:
+        await backend.navigate(url, wait)
     cookies_set = False
     for cookie in ctx.cookies:
         cookies_set = True
@@ -156,5 +160,5 @@ async def apply_auth_context(
             path=cookie.get("path", "/"),
         )
         await backend.set_cookie(cp)
-    if cookies_set:
+    if cookies_set and url:
         await backend.navigate(url, wait)

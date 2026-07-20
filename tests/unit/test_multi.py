@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -40,6 +41,16 @@ actions:
         """Test that missing file raises an appropriate error."""
         with pytest.raises(MultiConfigError, match="file"):
             parse_yaml(tmp_path / "nonexistent.yml")
+
+    def test_unreadable_file(self, tmp_path: Path) -> None:
+        """An existing but unreadable config file should raise MultiConfigError."""
+        config = tmp_path / "config.yml"
+        config.write_text("actions:\n  - screenshot:\n      url: https://example.com\n")
+        with (
+            patch("pathlib.Path.read_text", side_effect=PermissionError("denied")),
+            pytest.raises(MultiConfigError, match="unreadable"),
+        ):
+            parse_yaml(config)
 
     def test_non_dict_root(self, tmp_path: Path) -> None:
         """Test non dict root."""
@@ -131,3 +142,32 @@ class TestExecuteActions:
         actions = [{"unknown_action": {"url": "https://example.com"}}]
         with pytest.raises(MultiConfigError, match="unknown_action"):
             await execute_actions(actions, backend)
+
+    async def test_parallel_returns_exceptions_without_aborting(self) -> None:
+        """One failing action should not abort other parallel actions."""
+        from wavexis.exceptions import WavexisError
+
+        backend = MagicMock()
+        tab_mock = MagicMock()
+        tab_mock.close = AsyncMock()
+        backend.new_tab_handle = AsyncMock(return_value=tab_mock)
+
+        async def mixed_dispatch(
+            action_type: str, params: dict, backend: Any, cache: Any = None
+        ) -> Any:
+            if action_type == "screenshot":
+                return b"png"
+            raise ValueError("intentional")
+
+        with (
+            pytest.raises(WavexisError, match="intentional"),
+            patch("wavexis.multi._dispatch", side_effect=mixed_dispatch),
+        ):
+            await execute_actions(
+                [
+                    {"screenshot": {"url": "https://example.com"}},
+                    {"eval": {"url": "https://example.com", "expression": "1"}},
+                ],
+                backend,
+                parallel=True,
+            )

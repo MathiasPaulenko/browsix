@@ -1,10 +1,13 @@
 """Unit tests for serve mode (wavexis.serve)."""
 
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from wavexis.backend.base import AbstractBackend
+from wavexis.exceptions import ActionError, WavexisError
 
 
 def _has_aiohttp() -> bool:
@@ -175,6 +178,56 @@ class TestServeHandlerMocks:
         assert resp.content_type == "image/png"
         data = await resp.read()
         assert data.startswith(b"\x89PNG")
+        await client.close()
+
+    async def test_screenshot_endpoint_returns_500_on_wavexis_error(self) -> None:
+        """A backend action failure should produce a clean JSON 500 response."""
+        from unittest.mock import patch
+
+        from aiohttp.test_utils import TestClient, TestServer
+
+        from wavexis.exceptions import WavexisError
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        mock_backend.screenshot = AsyncMock(side_effect=WavexisError("backend failure"))
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            resp = await client.post(
+                "/screenshot",
+                json={"url": "https://example.com"},
+            )
+        assert resp.status == 500
+        assert resp.content_type == "application/json"
+        data = await resp.json()
+        assert "error" in data
+        assert "backend failure" in data["error"]
+        await client.close()
+
+    async def test_screenshot_endpoint_rejects_non_object_json_body(self) -> None:
+        """Test screenshot endpoint rejects non-object JSON body."""
+        from aiohttp.test_utils import TestClient, TestServer
+
+        from wavexis.serve import create_app
+
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        resp = await client.post(
+            "/screenshot",
+            json=[1, 2, 3],
+        )
+        assert resp.status == 400
+        data = await resp.json()
+        assert "error" in data
         await client.close()
 
     async def test_pdf_endpoint(self) -> None:
@@ -522,7 +575,9 @@ class TestServeHandlerMocks:
             new_callable=AsyncMock,
             return_value=mock_backend,
         ):
-            resp = await client.post("/dom/get", json={"url": "https://example.com"})
+            resp = await client.post(
+                "/dom/get", json={"url": "https://example.com", "selector": "body"}
+            )
         assert resp.status == 200
         await client.close()
 
@@ -792,6 +847,42 @@ class TestServeHandlerMocks:
         assert "middleware" in data
         await client.close()
 
+    async def test_auth_endpoint_missing_context_file_returns_400(
+        self, tmp_path: Path
+    ) -> None:
+        """A missing or invalid auth context file should return 400, not 500."""
+        from unittest.mock import patch
+
+        from aiohttp.test_utils import TestClient, TestServer
+
+        import wavexis.serve as serve_mod
+        from wavexis.serve import create_app
+
+        bad_context = tmp_path / "bad_auth.json"
+        bad_context.write_text("not json", encoding="utf-8")
+        serve_mod.set_allowed_base_dir(str(tmp_path))
+        try:
+            mock_backend = self._make_mock_backend()
+            app = create_app(base_dir=str(tmp_path))
+            server = TestServer(app)
+            client = TestClient(server)
+            await client.start_server()
+            with patch(
+                "wavexis.backend.manager.BackendManager.select_with_fallback",
+                new_callable=AsyncMock,
+                return_value=mock_backend,
+            ):
+                resp = await client.post(
+                    "/auth",
+                    json={"context": str(bad_context), "url": "https://example.com"},
+                )
+            assert resp.status == 400
+            text = await resp.text()
+            assert "auth context" in text.lower()
+            await client.close()
+        finally:
+            serve_mod.set_allowed_base_dir(None)
+
 
 @pytest.mark.unit
 class TestServeUtilities:
@@ -805,6 +896,80 @@ class TestServeUtilities:
             ScreenshotParams, {"url": "https://example.com", "unknown": "ignored"}
         )
         assert params.url == "https://example.com"
+
+    def test_safe_params_nested_wait_strategy(self) -> None:
+        from wavexis.config import ScreenshotParams, WaitStrategy
+        from wavexis.serve import _safe_params
+
+        params = _safe_params(
+            ScreenshotParams,
+            {"url": "https://example.com", "wait": {"strategy": "selector", "selector": "#main"}},
+        )
+        assert isinstance(params.wait, WaitStrategy)
+        assert params.wait.strategy == "selector"
+        assert params.wait.selector == "#main"
+
+    def test_safe_params_nested_browser_options(self) -> None:
+        from wavexis.config import BrowserOptions, ScreenshotParams
+        from wavexis.serve import _safe_params
+
+        params = _safe_params(
+            ScreenshotParams,
+            {"url": "https://example.com", "browser": {"headless": False, "width": 1920}},
+        )
+        assert isinstance(params.browser, BrowserOptions)
+        assert params.browser.headless is False
+        assert params.browser.width == 1920
+
+    def test_safe_params_nested_optional_wait(self) -> None:
+        from wavexis.config import PDFParams, WaitStrategy
+        from wavexis.serve import _safe_params
+
+        params = _safe_params(
+            PDFParams,
+            {"url": "https://example.com", "wait": {"strategy": "networkidle", "timeout": 60000}},
+        )
+        assert isinstance(params.wait, WaitStrategy)
+        assert params.wait.strategy == "networkidle"
+        assert params.wait.timeout == 60000
+
+    def test_safe_params_nested_cookie_params(self) -> None:
+        from wavexis.config import CookieActionParams, CookieParams
+        from wavexis.serve import _safe_params
+
+        params = _safe_params(
+            CookieActionParams,
+            {
+                "url": "https://example.com",
+                "action": "set",
+                "cookie": {"name": "session", "value": "abc123", "domain": ".example.com"},
+            },
+        )
+        assert isinstance(params.cookie, CookieParams)
+        assert params.cookie.name == "session"
+        assert params.cookie.value == "abc123"
+        assert params.cookie.domain == ".example.com"
+
+    def test_safe_params_dict_field_not_converted(self) -> None:
+        from wavexis.config import HeaderParams
+        from wavexis.serve import _safe_params
+
+        params = _safe_params(
+            HeaderParams,
+            {"url": "https://example.com", "headers": {"X-Custom": "value"}},
+        )
+        assert isinstance(params.headers, dict)
+        assert params.headers == {"X-Custom": "value"}
+
+    def test_safe_params_none_value_for_optional_field(self) -> None:
+        from wavexis.config import NetworkParams
+        from wavexis.serve import _safe_params
+
+        params = _safe_params(
+            NetworkParams,
+            {"url": "https://example.com", "action": "cookies_get", "cookie": None},
+        )
+        assert params.cookie is None
 
     def test_token_bucket_acquire(self) -> None:
         import asyncio
@@ -857,12 +1022,56 @@ class TestServeUtilities:
         with pytest.raises(WavexisError):
             _validate_path("/etc/passwd")
 
+    def test_validate_path_empty_string(self, tmp_path) -> None:
+        from wavexis.exceptions import WavexisError
+        from wavexis.serve import _validate_path, set_allowed_base_dir
+
+        set_allowed_base_dir(str(tmp_path))
+        with pytest.raises(WavexisError, match="non-empty"):
+            _validate_path("")
+
+    def test_validate_path_none_value(self, tmp_path) -> None:
+        from wavexis.exceptions import WavexisError
+        from wavexis.serve import _validate_path, set_allowed_base_dir
+
+        set_allowed_base_dir(str(tmp_path))
+        with pytest.raises(WavexisError, match="non-empty"):
+            _validate_path(None)  # type: ignore[arg-type]
+
     def test_set_ws_max_connections(self) -> None:
         import wavexis.serve as serve_mod
 
         serve_mod.set_ws_max_connections(10)
         assert serve_mod._ws_max_connections == 10
         serve_mod.set_ws_max_connections(20)
+
+    async def test_websocket_connection_counter_decremented_on_prepare_error(self) -> None:
+        """If ws.prepare raises, _ws_connections must still be decremented."""
+        from unittest.mock import patch
+
+        import wavexis.serve as serve_mod
+
+        serve_mod._ws_connections = 0
+        original_max = serve_mod._ws_max_connections
+        serve_mod._ws_max_connections = 10
+        try:
+            with patch("wavexis.serve._import_aiohttp") as mock_import:
+                web = MagicMock()
+                web.WSMsgType = MagicMock()
+                web.Response.return_value = MagicMock()
+                ws = MagicMock()
+                ws.prepare = AsyncMock(side_effect=RuntimeError("prepare failed"))
+                ws.close = AsyncMock()
+                web.WebSocketResponse.return_value = ws
+                mock_import.return_value = web
+
+                request = MagicMock()
+                with pytest.raises(RuntimeError, match="prepare failed"):
+                    await serve_mod.handle_websocket(request)
+
+            assert serve_mod._ws_connections == 0
+        finally:
+            serve_mod._ws_max_connections = original_max
 
     def test_backend_pool(self) -> None:
         import asyncio
@@ -904,3 +1113,39 @@ class TestServeUtilities:
 
         app = create_app(api_key="test-key")
         assert app is not None
+
+
+@pytest.mark.unit
+class TestJSONErrorMiddleware:
+    """Tests for _json_error_middleware."""
+
+    async def test_wavexis_error_is_raised(self) -> None:
+        """WavexisError must not be turned into a 400 JSON response."""
+        from wavexis.serve import _json_error_middleware
+
+        async def _handler(request: Any) -> Any:
+            raise WavexisError("boom")
+
+        with pytest.raises(WavexisError, match="boom"):
+            await _json_error_middleware(MagicMock(), _handler)
+
+    async def test_action_error_is_raised(self) -> None:
+        """ActionError (ValueError subclass) must not be turned into a 400 response."""
+        from wavexis.serve import _json_error_middleware
+
+        async def _handler(request: Any) -> Any:
+            raise ActionError("bad action")
+
+        with pytest.raises(ActionError, match="bad action"):
+            await _json_error_middleware(MagicMock(), _handler)
+
+    async def test_value_error_returns_400(self) -> None:
+        """Plain ValueError must still produce a 400 JSON response."""
+        from wavexis.serve import _json_error_middleware
+
+        async def _handler(request: Any) -> Any:
+            raise ValueError("plain value error")
+
+        response = await _json_error_middleware(MagicMock(), _handler)
+        assert response.status == 400
+        assert "invalid JSON body" in response.text

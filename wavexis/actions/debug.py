@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, DebugParams, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -75,17 +76,17 @@ class DebugAction(BaseAction[DebugActionParams, Any]):
         action = self.params.action
         if action == "breakpoint":
             if self.params.script_url is None or self.params.line is None:
-                raise ValueError("script_url and line are required for breakpoint action")
+                raise ActionError("script_url and line are required for breakpoint action")
             return await backend.debug_set_breakpoint(
                 self.params.script_url, self.params.line, self.params.condition
             )
         if action == "function_breakpoint":
             if not self.params.function_name:
-                raise ValueError("function_name is required for function_breakpoint action")
+                raise ActionError("function_name is required for function_breakpoint action")
             return await backend.debug_set_breakpoint_function(self.params.function_name)
         if action == "remove_breakpoint":
             if not self.params.breakpoint_id:
-                raise ValueError("breakpoint_id is required for remove_breakpoint action")
+                raise ActionError("breakpoint_id is required for remove_breakpoint action")
             await backend.debug_remove_breakpoint(self.params.breakpoint_id)
             return None
         if action == "step_over":
@@ -105,9 +106,9 @@ class DebugAction(BaseAction[DebugActionParams, Any]):
             return None
         if action == "listeners":
             if not self.params.selector:
-                raise ValueError("selector is required for listeners action")
+                raise ActionError("selector is required for listeners action")
             return await backend.debug_get_listeners(self.params.selector)
-        raise ValueError(f"Unknown debug action: {action}")
+        raise ActionError(f"Unknown debug action: {action}")
 
 
 def debug_action_from_config(params: DebugParams) -> DebugAction:

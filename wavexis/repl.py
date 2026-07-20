@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import shlex
-from pathlib import Path
 from typing import Any
 
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, ScreenshotParams, WaitStrategy
 from wavexis.exceptions import WavexisError
+from wavexis.output import validate_path
 
 __all__ = ["HELP_TEXT", "execute_repl_command", "parse_command", "repl_loop"]
 
@@ -87,7 +86,8 @@ async def execute_repl_command(
         )
         screenshot_data = await backend.screenshot(params)
         filename = args[0] if args else "screenshot.png"
-        await asyncio.to_thread(Path(filename).write_bytes, screenshot_data)
+        file_path = validate_path(filename)
+        await asyncio.to_thread(file_path.write_bytes, screenshot_data)
         return f"Screenshot saved to {filename} ({len(screenshot_data)} bytes)"
 
     if command == "eval":
@@ -227,8 +227,5 @@ async def repl_loop(
             output_fn(result)
 
         executed.append(line)
-
-    with contextlib.suppress(WavexisError, OSError):
-        await backend.close()
 
     return executed

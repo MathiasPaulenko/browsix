@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import HeaderParams
+from wavexis.exceptions import ActionError
 
 
 class HeaderAction(BaseAction[HeaderParams, Any]):
@@ -35,14 +36,14 @@ class HeaderAction(BaseAction[HeaderParams, Any]):
 
         if action == "set-headers":
             if not self.params.headers:
-                raise ValueError("headers is required for set-headers action")
+                raise ActionError("headers is required for set-headers action")
             await backend.set_headers(self.params.headers)
             return None
 
         if action == "set-user-agent":
             if not self.params.user_agent:
-                raise ValueError("user-agent is required for set-user-agent action")
+                raise ActionError("user-agent is required for set-user-agent action")
             await backend.set_user_agent(self.params.user_agent)
             return None
 
-        raise ValueError(f"Unknown header action: {action}")
+        raise ActionError(f"Unknown header action: {action}")

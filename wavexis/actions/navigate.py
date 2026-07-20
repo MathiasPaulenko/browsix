@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -32,6 +33,8 @@ class NavigateAction(BaseAction[NavigateParams, None]):
             backend: The browser backend to use.
         """
         params = self.params
+        if not params.url:
+            raise ActionError("url is required for navigate action")
         await backend.navigate(params.url, params.wait)
 
 

@@ -3,10 +3,61 @@
 import csv
 import json
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 
-from wavexis.output import Output
+from wavexis.output import Output, validate_path
+
+
+class TestValidatePath:
+    """Tests for the shared validate_path helper."""
+
+    def test_allows_safe_relative_path(self, tmp_path: Path):
+        path = str(tmp_path / "subdir" / "file.txt")
+        assert validate_path(path) == Path(path)
+
+    def test_allows_absolute_path(self, tmp_path: Path):
+        path = str(tmp_path / "file.txt")
+        assert validate_path(path) == Path(path)
+
+    def test_rejects_parent_directory_traversal(self):
+        with pytest.raises(ValueError, match="Invalid path"):
+            validate_path("../escape.txt")
+
+    def test_rejects_traversal_in_middle_of_path(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="Invalid path"):
+            validate_path(str(tmp_path / "safe" / ".." / "escape.txt"))
+
+    def test_rejects_null_byte(self):
+        with pytest.raises(ValueError, match="Invalid path"):
+            validate_path("foo\x00bar.txt")
+
+
+class TestOutputPathTraversal:
+    """Regression tests: Output helpers must reject traversal attempts."""
+
+    def test_write_bytes_rejects_traversal(self):
+        with pytest.raises(ValueError, match="Invalid path"):
+            Output.write_bytes(b"data", "../escape.bin")
+
+    def test_write_json_rejects_traversal(self):
+        with pytest.raises(ValueError, match="Invalid path"):
+            Output.write_json({"x": 1}, "../escape.json")
+
+    def test_write_text_rejects_traversal(self):
+        with pytest.raises(ValueError, match="Invalid path"):
+            Output.write_text("hello", "../escape.txt")
+
+    def test_write_csv_rejects_traversal(self):
+        with pytest.raises(ValueError, match="Invalid path"):
+            Output.write_csv([{"a": 1}], "../escape.csv")
+
+    def test_write_yaml_rejects_traversal(self):
+        with pytest.raises(ValueError, match="Invalid path"):
+            Output.write_yaml({"a": 1}, "../escape.yaml")
 
 
 class TestOutput:
@@ -72,6 +123,35 @@ class TestOutput:
         assert "c" in rows[0]
         assert rows[1]["c"] == "4"
 
+    def test_write_bytes_dash_means_stdout(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test write_bytes with path='-' writes to stdout.buffer."""
+        data = b"binary data"
+        Output.write_bytes(data, "-")
+        captured = capsys.readouterr()
+        assert "binary data" in captured.out
+
+    def test_write_json_dash_means_stdout(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test write_json with path='-' prints to stdout."""
+        data = {"key": "value"}
+        Output.write_json(data, "-")
+        captured = capsys.readouterr()
+        assert json.loads(captured.out) == data
+
+    def test_write_text_dash_means_stdout(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test write_text with path='-' prints to stdout."""
+        text = "hello stdout"
+        Output.write_text(text, "-")
+        captured = capsys.readouterr()
+        assert captured.out == "hello stdout\n"
+
+    def test_write_csv_dash_means_stdout(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test write_csv with path='-' prints to stdout."""
+        data = [{"name": "Alice", "age": 30}]
+        Output.write_csv(data, "-")
+        captured = capsys.readouterr()
+        assert "name" in captured.out
+        assert "Alice" in captured.out
+
 
 @pytest.mark.unit
 class TestOutputRichFallback:
@@ -94,3 +174,33 @@ class TestOutputRichFallback:
         Output.info("test info message")
         captured = capsys.readouterr()
         assert "test info message" in captured.out
+
+
+class TestOutputOSError:
+    """Regression tests: Output helpers must fail cleanly on write errors."""
+
+    @pytest.mark.parametrize(
+        "method,args,write_method",
+        [
+            ("write_bytes", (b"data",), "write_bytes"),
+            ("write_text", ("hello",), "write_text"),
+            ("write_json", ({"x": 1},), "write_text"),
+            ("write_yaml", ({"x": 1},), "write_text"),
+            ("write_csv", ([{"a": 1}],), "open"),
+        ],
+    )
+    def test_write_exits_on_oserror(
+        self,
+        method: str,
+        args: tuple[Any, ...],
+        write_method: str,
+        tmp_path: Path,
+    ) -> None:
+        """A write failure should produce a clean exit, not a traceback."""
+        bad_path = MagicMock()
+        getattr(bad_path, write_method).side_effect = PermissionError("denied")
+        with (
+            patch("wavexis.output.validate_path", return_value=bad_path),
+            pytest.raises(typer.Exit),
+        ):
+            getattr(Output, method)(*args, str(tmp_path / "out"))

@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -50,7 +51,7 @@ class BluetoothAction(BaseAction[BluetoothParams, Any]):
 
         if action == "emulate":
             if not self.params.name:
-                raise ValueError("name is required for emulate action")
+                raise ActionError("name is required for emulate action")
             await backend.bluetooth_emulate(self.params.name, self.params.address)
             return None
 
@@ -58,4 +59,4 @@ class BluetoothAction(BaseAction[BluetoothParams, Any]):
             await backend.bluetooth_stop()
             return None
 
-        raise ValueError(f"Unknown Bluetooth action: {action}")
+        raise ActionError(f"Unknown Bluetooth action: {action}")

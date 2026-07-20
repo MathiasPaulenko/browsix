@@ -42,7 +42,8 @@ class FormAction(BaseAction[FormParams, dict[str, Any]]):
         Returns:
             Dict with filled count and submit status.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
 
         filled = 0
         for selector, value in self.params.fields.items():

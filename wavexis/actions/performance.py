@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -45,7 +46,8 @@ class PerformanceAction(BaseAction[PerformanceParams, dict[str, Any]]):
         Raises:
             ValueError: If the action is not recognized.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
         return await self._run_action(backend)
 
     async def _run_action(self, backend: AbstractBackend) -> dict[str, Any]:
@@ -73,4 +75,4 @@ class PerformanceAction(BaseAction[PerformanceParams, dict[str, Any]]):
             return await backend.perf_coverage()
         if action == "css-coverage":
             return await backend.perf_css_coverage()
-        raise ValueError(f"Unknown performance action: {action}")
+        raise ActionError(f"Unknown performance action: {action}")

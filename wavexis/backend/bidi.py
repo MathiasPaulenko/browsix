@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
-from pathlib import Path
 from typing import Any
 
 try:
@@ -41,7 +41,9 @@ from wavexis.exceptions import (
     ElementNotFoundError,
     SessionNotInitializedError,
     WaitTimeoutError,
+    WavexisError,
 )
+from wavexis.output import validate_path
 
 try:
     from bidiwave import BiDiClient
@@ -198,38 +200,46 @@ class BiDiBackend(AbstractBackend):
         else:
             ws_url = "ws://localhost:9222/session"
         client = await BiDiClient.connect(ws_url)
-        self._client = client
-        await client.session.new()
-        self._context = await client.browsing.create_context()
+        try:
+            await client.session.new()
+            self._context = await client.browsing.create_context()
 
-        if options.width and options.height:
-            await client.browsing.set_viewport(
-                self._context,
-                viewport={"width": options.width, "height": options.height},
-            )
+            if options.width and options.height:
+                await client.browsing.set_viewport(
+                    self._context,
+                    viewport={"width": options.width, "height": options.height},
+                )
 
-        if options.user_agent:
-            await client.emulation.set_user_agent(
-                options.user_agent,
-                contexts=[self._context],
-            )
+            if options.user_agent:
+                await client.emulation.set_user_agent(
+                    options.user_agent,
+                    contexts=[self._context],
+                )
 
-        if options.extra_headers:
-            header_list = [{"name": k, "value": v} for k, v in options.extra_headers.items()]
-            await client.cdp.send_command(
-                "Network.setExtraRequestHeaders", {"headers": header_list}
-            )
+            if options.extra_headers:
+                header_list = [{"name": k, "value": v} for k, v in options.extra_headers.items()]
+                await client.cdp.send_command(
+                    "Network.setExtraRequestHeaders", {"headers": header_list}
+                )
 
-        if options.proxy:
-            await client.cdp.send_command(
-                "Network.setProxyOverride",
-                {"proxy": {"server": options.proxy}},
-            )
+            if options.proxy:
+                await client.cdp.send_command(
+                    "Network.setProxyOverride",
+                    {"proxy": {"server": options.proxy}},
+                )
 
-        if options.stealth:
-            from wavexis.actions.stealth import get_stealth_js
+            if options.stealth:
+                from wavexis.actions.stealth import get_stealth_js
 
-            await client.script.evaluate(self._context, get_stealth_js())
+                await client.script.evaluate(self._context, get_stealth_js())
+
+            self._client = client
+        except Exception:
+            with contextlib.suppress(Exception):
+                await client.close()
+            self._client = None
+            self._context = None
+            raise
 
     async def close(self) -> None:
         """Close the BiDi client and release resources."""
@@ -259,8 +269,8 @@ class BiDiBackend(AbstractBackend):
                 bidi_wait = "complete"
             elif wait.strategy == "domcontentloaded":
                 bidi_wait = "interactive"
-            elif wait.strategy == "selector":
-                # For selector, we navigate first then wait separately
+            elif wait.strategy in ("selector", "networkidle", "url"):
+                # For these strategies, navigate first then wait separately
                 await client.browsing.navigate(self._context, url, wait="complete")
                 self._current_url = url
                 await self.wait_for(wait)
@@ -268,7 +278,7 @@ class BiDiBackend(AbstractBackend):
             else:
                 raise ValueError(
                     f"Unsupported wait strategy for BiDi navigate: {wait.strategy}. "
-                    "Use 'load', 'domcontentloaded', or 'selector'."
+                    "Use 'load', 'domcontentloaded', 'selector', 'networkidle', or 'url'."
                 )
 
         try:
@@ -292,26 +302,29 @@ class BiDiBackend(AbstractBackend):
         if params.url:
             # Map wait strategy to BiDi wait parameter
             bidi_wait = "complete"
+            navigated = False
             if params.wait:
                 if params.wait.strategy == "load":
                     bidi_wait = "complete"
                 elif params.wait.strategy == "domcontentloaded":
                     bidi_wait = "interactive"
-                elif params.wait.strategy == "selector":
-                    # For selector, navigate first then wait separately
+                elif params.wait.strategy in ("selector", "networkidle", "url"):
+                    # For these strategies, navigate first then wait separately
                     await client.browsing.navigate(self._context, params.url, wait="complete")
                     await self.wait_for(params.wait)
+                    navigated = True
                 else:
                     bidi_wait = "complete"
 
-            timeout_ms: int = params.wait.timeout if params.wait is not None else 30000
-            try:
-                await client.browsing.navigate(self._context, params.url, wait=bidi_wait)
-            except TimeoutError:
-                raise WaitTimeoutError(
-                    params.wait.strategy if params.wait else "load",
-                    timeout_ms,
-                ) from None
+            if not navigated:
+                timeout_ms: int = params.wait.timeout if params.wait is not None else 30000
+                try:
+                    await client.browsing.navigate(self._context, params.url, wait=bidi_wait)
+                except TimeoutError:
+                    raise WaitTimeoutError(
+                        params.wait.strategy if params.wait else "load",
+                        timeout_ms,
+                    ) from None
 
         # Execute custom JS before screenshot if provided
         if params.js:
@@ -342,7 +355,7 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         escaped = json.dumps(selector)
         js = (
-            f"var el=document.querySelector('{escaped}');"
+            f"var el=document.querySelector({escaped});"
             f"el?JSON.stringify(el.getBoundingClientRect()):null"
         )
         result = await client.script.evaluate(self._context, js)
@@ -941,7 +954,7 @@ class BiDiBackend(AbstractBackend):
         while _time.monotonic() < deadline:
             if strategy.strategy == "selector" and strategy.selector:
                 escaped = json.dumps(strategy.selector)
-                js = f"!!document.querySelector('{escaped}')"
+                js = f"!!document.querySelector({escaped})"
                 result = await client.script.evaluate(self._context, js, await_promise=False)
                 if hasattr(result, "value") and result.value:
                     return
@@ -972,6 +985,13 @@ class BiDiBackend(AbstractBackend):
                 else:
                     if hasattr(self, "_networkidle_start"):
                         delattr(self, "_networkidle_start")
+            elif strategy.strategy == "url" and strategy.url_pattern:
+                result = await client.script.evaluate(
+                    self._context, "window.location.href", await_promise=False
+                )
+                href = getattr(result, "value", "") or ""
+                if strategy.url_pattern in href:
+                    return
             else:
                 raise ValueError(f"Unsupported wait strategy: {strategy.strategy}")
             await _asyncio.sleep(0.1)
@@ -987,9 +1007,13 @@ class BiDiBackend(AbstractBackend):
             PDF bytes.
         """
         client = self._require_launched()
-        await client.browsing.navigate(self._context, params.url, wait="complete")
+        if params.js:
+            await client.script.evaluate(self._context, params.js)
         paper = PAPER_SIZES.get(params.paper, PAPER_SIZES["letter"])
-        margin_val = float(params.margin.replace("in", "").replace("cm", ""))
+        import re as _re
+
+        margin_match = _re.match(r"([\d.]+)", params.margin)
+        margin_val = float(margin_match.group(1)) if margin_match else 0.4
         margin_dict = {
             "top": margin_val,
             "bottom": margin_val,
@@ -1022,11 +1046,6 @@ class BiDiBackend(AbstractBackend):
             List of image bytes (one per frame).
         """
         client = self._require_launched()
-        await client.browsing.navigate(
-            self._context,
-            params.url,
-            wait="complete",
-        )
         import asyncio as _asyncio
 
         frames: list[bytes] = []
@@ -1131,9 +1150,12 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         escaped = json.dumps(selector)
         prop = "outerHTML" if outer else "innerHTML"
-        js = f"document.querySelector('{escaped}').{prop}"
+        js = f"var el=document.querySelector({escaped});el?el.{prop}:null"
         result = await client.script.evaluate(self._context, js)
-        return str(result.value if hasattr(result, "value") else result)
+        value = result.value if hasattr(result, "value") else result
+        if not value:
+            raise ElementNotFoundError(selector)
+        return str(value)
 
     async def dom_query(
         self, selector: str, all: bool = False
@@ -1143,13 +1165,13 @@ class BiDiBackend(AbstractBackend):
         escaped = json.dumps(selector)
         if all:
             js = (
-                f"Array.from(document.querySelectorAll('{escaped}'))"
+                f"Array.from(document.querySelectorAll({escaped}))"
                 f".map(e=>({{tagName:e.tagName,id:e.id,className:e.className}}))"
             )
             result = await client.script.evaluate(self._context, js)
             return list(result.value if hasattr(result, "value") else result)
         js = (
-            f"var e=document.querySelector('{escaped}');"
+            f"var e=document.querySelector({escaped});"
             f"e?{{tagName:e.tagName,id:e.id,className:e.className}}:null"
         )
         result = await client.script.evaluate(self._context, js)
@@ -1161,7 +1183,11 @@ class BiDiBackend(AbstractBackend):
         escaped = json.dumps(selector)
         escaped_name = json.dumps(name)
         escaped_val = json.dumps(value)
-        js = f"document.querySelector('{escaped}').setAttribute('{escaped_name}','{escaped_val}')"
+        js = (
+            f"var el=document.querySelector({escaped});"
+            f"if(!el)throw new Error('Element not found');"
+            f"el.setAttribute({escaped_name},{escaped_val})"
+        )
         await client.script.evaluate(self._context, js)
 
     async def dom_get_attr(self, selector: str, name: str) -> str:
@@ -1169,7 +1195,11 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         escaped = json.dumps(selector)
         escaped_name = json.dumps(name)
-        js = f"document.querySelector('{escaped}').getAttribute('{escaped_name}')"
+        js = (
+            f"var el=document.querySelector({escaped});"
+            f"if(!el)throw new Error('Element not found');"
+            f"el.getAttribute({escaped_name})"
+        )
         result = await client.script.evaluate(self._context, js)
         return str(result.value if hasattr(result, "value") else result)
 
@@ -1178,21 +1208,25 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         escaped = json.dumps(selector)
         escaped_name = json.dumps(name)
-        js = f"document.querySelector('{escaped}').removeAttribute('{escaped_name}')"
+        js = (
+            f"var el=document.querySelector({escaped});"
+            f"if(!el)throw new Error('Element not found');"
+            f"el.removeAttribute({escaped_name})"
+        )
         await client.script.evaluate(self._context, js)
 
     async def dom_remove(self, selector: str) -> None:
         """Remove an element via script.evaluate."""
         client = self._require_launched()
         escaped = json.dumps(selector)
-        js = f"document.querySelector('{escaped}')?.remove()"
+        js = f"document.querySelector({escaped})?.remove()"
         await client.script.evaluate(self._context, js)
 
     async def dom_focus(self, selector: str) -> None:
         """Focus an element via script.evaluate."""
         client = self._require_launched()
         escaped = json.dumps(selector)
-        js = f"document.querySelector('{escaped}')?.focus()"
+        js = f"document.querySelector({escaped})?.focus()"
         await client.script.evaluate(self._context, js)
 
     async def dom_scroll(self, selector: str | None = None, x: int = 0, y: int = 0) -> None:
@@ -1200,7 +1234,7 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         if selector:
             escaped = json.dumps(selector)
-            js = f"document.querySelector('{escaped}')?.scrollIntoView()"
+            js = f"document.querySelector({escaped})?.scrollIntoView()"
         else:
             js = f"window.scrollTo({x},{y})"
         await client.script.evaluate(self._context, js)
@@ -1607,7 +1641,7 @@ class BiDiBackend(AbstractBackend):
         """Build JS that generates CSS selector suggestions for an element."""
         return (
             f"(function(){{"
-            f"var el=document.querySelector('{escaped}');"
+            f"var el=document.querySelector({escaped});"
             f"if(!el)return null;"
             f"var s=[];var t=el.tagName.toLowerCase();"
             f"var id=el.id;"
@@ -1642,7 +1676,7 @@ class BiDiBackend(AbstractBackend):
         escaped = json.dumps(query)
         return (
             f"(function(){{"
-            f"var q='{escaped}'.toLowerCase().trim();"
+            f"var q={escaped}.toLowerCase().trim();"
             f"var words=q.split(/\\s+/);"
             f"var els=Array.from(document.querySelectorAll('*'));"
             f"var results=[];"
@@ -2015,7 +2049,7 @@ class BiDiBackend(AbstractBackend):
         client = self._require_client()
         escaped = json.dumps(selector)
         js = (
-            f"(function(){{var el=document.querySelector('{escaped}');"
+            f"(function(){{var el=document.querySelector({escaped});"
             f"if(!el)return false;"
             f"var rect=el.getBoundingClientRect();"
             f"return rect.width>0&&rect.height>0;}})()"
@@ -2034,7 +2068,7 @@ class BiDiBackend(AbstractBackend):
         client = self._require_client()
         escaped = json.dumps(selector)
         js = (
-            f"(function(){{var el=document.querySelector('{escaped}');"
+            f"(function(){{var el=document.querySelector({escaped});"
             f"if(!el)return;var rect=el.getBoundingClientRect();"
             f"if(rect.top<0||rect.bottom>window.innerHeight||"
             f"rect.left<0||rect.right>window.innerWidth)"
@@ -2069,7 +2103,8 @@ class BiDiBackend(AbstractBackend):
         detail = click_count
         event_type = "click" if click_count < 2 else "dblclick"
         js = (
-            f"const el=document.querySelector('{escaped}');"
+            f"const el=document.querySelector({escaped});"
+            f"if(!el)throw new Error('Element not found');"
             f"const opts={{bubbles:true, cancelable:true,"
             f"button:{btn}, buttons:{buttons}, detail:{detail}}};"
             f"el.dispatchEvent(new MouseEvent('{event_type}', opts));"
@@ -2082,10 +2117,15 @@ class BiDiBackend(AbstractBackend):
 
         client = self._require_launched()
         escaped = json.dumps(selector)
-        await client.script.evaluate(self._context, f"document.querySelector('{escaped}').focus()")
+        await client.script.evaluate(
+            self._context,
+            f"var el=document.querySelector({escaped});"
+            f"if(!el)throw new Error('Element not found');"
+            f"el.focus()",
+        )
         for char in text:
             escaped_char = json.dumps(char)
-            js = f"document.querySelector('{escaped}').value += '{escaped_char}'"
+            js = f"document.querySelector({escaped}).value += {escaped_char}"
             await client.script.evaluate(self._context, js)
             if delay > 0:
                 await _asyncio.sleep(delay / 1000)
@@ -2104,7 +2144,7 @@ class BiDiBackend(AbstractBackend):
         await self._scroll_into_view_if_needed(selector)
         escaped = json.dumps(selector)
         escaped_val = json.dumps(value)
-        js = f"document.querySelector('{escaped}').value = '{escaped_val}'"
+        js = f"var el=document.querySelector({escaped});if(!el)throw new Error('Element not found');el.value = {escaped_val}"
         await client.script.evaluate(self._context, js)
 
     async def select_option(self, selector: str, value: str) -> None:
@@ -2112,7 +2152,7 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         escaped = json.dumps(selector)
         escaped_val = json.dumps(value)
-        js = f"document.querySelector('{escaped}').value = '{escaped_val}'"
+        js = f"var el=document.querySelector({escaped});if(!el)throw new Error('Element not found');el.value = {escaped_val}"
         await client.script.evaluate(self._context, js)
 
     async def hover(self, selector: str, auto_wait: bool = True) -> None:
@@ -2128,7 +2168,8 @@ class BiDiBackend(AbstractBackend):
         await self._scroll_into_view_if_needed(selector)
         escaped = json.dumps(selector)
         js = (
-            f"var el=document.querySelector('{escaped}');"
+            f"var el=document.querySelector({escaped});"
+            f"if(!el)throw new Error('Element not found');"
             f"el.dispatchEvent(new MouseEvent('mouseover',{{bubbles:true}}));"
             f"el.dispatchEvent(new MouseEvent('mousemove',{{bubbles:true}}))"
         )
@@ -2139,8 +2180,8 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         escaped_key = json.dumps(key)
         js = (
-            f"document.dispatchEvent(new KeyboardEvent('keydown',{{key:'{escaped_key}'}}));"
-            f"document.dispatchEvent(new KeyboardEvent('keyup',{{key:'{escaped_key}'}}))"
+            f"document.dispatchEvent(new KeyboardEvent('keydown',{{key:{escaped_key}}}));"
+            f"document.dispatchEvent(new KeyboardEvent('keyup',{{key:{escaped_key}}}))"
         )
         await client.script.evaluate(self._context, js)
 
@@ -2150,8 +2191,9 @@ class BiDiBackend(AbstractBackend):
         escaped_src = json.dumps(source)
         escaped_tgt = json.dumps(target)
         js = (
-            f"var s=document.querySelector('{escaped_src}');"
-            f"var t=document.querySelector('{escaped_tgt}');"
+            f"var s=document.querySelector({escaped_src});"
+            f"var t=document.querySelector({escaped_tgt});"
+            f"if(!s||!t)throw new Error('Element not found');"
             f"s.dispatchEvent(new DragEvent('dragstart',{{bubbles:true}}));"
             f"t.dispatchEvent(new DragEvent('drop',{{bubbles:true}}));"
             f"s.dispatchEvent(new DragEvent('dragend',{{bubbles:true}}))"
@@ -2173,7 +2215,7 @@ class BiDiBackend(AbstractBackend):
         escaped = json.dumps(selector)
         files_json = json.dumps(files)
         js = (
-            f"const input = document.querySelector('{escaped}');"
+            f"const input = document.querySelector({escaped});"
             f"const dt = new DataTransfer();"
             f"const files = {files_json};"
             f"for (const f of files) {{ dt.items.add(new File([''], f)); }}"
@@ -2201,7 +2243,7 @@ class BiDiBackend(AbstractBackend):
         escaped_iframe = json.dumps(iframe_selector)
         escaped_expr = json.dumps(expression)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return null;"
             f"return (function(){{{escaped_expr}}}).call(f.contentDocument);}})()"
         )
@@ -2230,9 +2272,9 @@ class BiDiBackend(AbstractBackend):
         escaped_iframe = json.dumps(iframe_selector)
         escaped_sel = json.dumps(selector)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return false;"
-            f"var el=f.contentDocument.querySelector('{escaped_sel}');"
+            f"var el=f.contentDocument.querySelector({escaped_sel});"
             f"if(!el)return false;"
             f"var rect=el.getBoundingClientRect();"
             f"return rect.width>0&&rect.height>0;}})()"
@@ -2262,9 +2304,9 @@ class BiDiBackend(AbstractBackend):
         escaped_iframe = json.dumps(iframe_selector)
         escaped_sel = json.dumps(selector)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return false;"
-            f"var el=f.contentDocument.querySelector('{escaped_sel}');"
+            f"var el=f.contentDocument.querySelector({escaped_sel});"
             f"if(!el)return false;"
             f"el.scrollIntoView({{block:'center',behavior:'instant'}});"
             f"el.dispatchEvent(new MouseEvent('click',{{bubbles:true}}));"
@@ -2293,11 +2335,11 @@ class BiDiBackend(AbstractBackend):
         escaped_sel = json.dumps(selector)
         escaped_val = json.dumps(value)
         js = (
-            f"(function(){{var f=document.querySelector('{escaped_iframe}');"
+            f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return false;"
-            f"var el=f.contentDocument.querySelector('{escaped_sel}');"
+            f"var el=f.contentDocument.querySelector({escaped_sel});"
             f"if(!el)return false;"
-            f"el.focus();el.value='{escaped_val}';"
+            f"el.focus();el.value={escaped_val};"
             f"el.dispatchEvent(new Event('input',{{bubbles:true}}));"
             f"el.dispatchEvent(new Event('change',{{bubbles:true}}));"
             f"return true;}})()"
@@ -2313,10 +2355,10 @@ class BiDiBackend(AbstractBackend):
     def _build_shadow_pierce_js(selectors: list[str]) -> str:
         """Build JS that pierces shadow boundaries via a selector chain."""
         escaped = [json.dumps(s) for s in selectors]
-        parts = [f"var el=document.querySelector('{escaped[0]}')"]
+        parts = [f"var el=document.querySelector({escaped[0]})"]
         for sel in escaped[1:]:
             parts.append(
-                f"if(!el||!el.shadowRoot)return null;el=el.shadowRoot.querySelector('{sel}')"
+                f"if(!el||!el.shadowRoot)return null;el=el.shadowRoot.querySelector({sel})"
             )
         parts.append("return el")
         body = ";".join(parts)
@@ -2419,7 +2461,7 @@ class BiDiBackend(AbstractBackend):
         js = (
             f"(function(){{var el=({pierce_js});"
             f"if(!el)return false;"
-            f"el.focus();el.value='{escaped_val}';"
+            f"el.focus();el.value={escaped_val};"
             f"el.dispatchEvent(new Event('input',{{bubbles:true,composed:true}}));"
             f"el.dispatchEvent(new Event('change',{{bubbles:true,composed:true}}));"
             f"return true;}})()"
@@ -2537,7 +2579,9 @@ class BiDiBackend(AbstractBackend):
                 {"requestId": request_id},
             )
             return str(result.get("postData")) if result.get("postData") is not None else None
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
             return None
 
     async def get_response_body(self, request_id: str) -> str | None:
@@ -2553,7 +2597,9 @@ class BiDiBackend(AbstractBackend):
         try:
             result = await client.network.response_body(request=request_id)
             return result.body if result.body is not None else None
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
             return None
 
     async def modify_request(
@@ -2670,9 +2716,11 @@ class BiDiBackend(AbstractBackend):
         """
         client = self._require_client()
         import asyncio as _asyncio
-        from pathlib import Path
 
-        content = await _asyncio.to_thread(Path(har_path).read_text, encoding="utf-8")
+        try:
+            content = await _asyncio.to_thread(validate_path(har_path).read_text, encoding="utf-8")
+        except OSError as e:
+            raise WavexisError(f"Failed to read HAR file: {e}") from e
         har_data = json.loads(content)
 
         entries = har_data.get("log", {}).get("entries", [])
@@ -2839,6 +2887,7 @@ class BiDiBackend(AbstractBackend):
             "capture_screenshots": capture_screenshots,
             "capture_network": capture_network,
             "capture_console": capture_console,
+            "handlers": [],
         }
 
         if capture_network:
@@ -2868,6 +2917,8 @@ class BiDiBackend(AbstractBackend):
 
             client.cdp.on("Network.requestWillBeSent", on_network_request)
             client.cdp.on("Network.responseReceived", on_network_response)
+            state["handlers"].append(("Network.requestWillBeSent", on_network_request))
+            state["handlers"].append(("Network.responseReceived", on_network_response))
 
         if capture_console:
             await client.cdp.send_command("Runtime.enable", {})
@@ -2882,6 +2933,7 @@ class BiDiBackend(AbstractBackend):
                 )
 
             client.cdp.on("Runtime.consoleAPICalled", on_console_api)
+            state["handlers"].append(("Runtime.consoleAPICalled", on_console_api))
 
         if capture_screenshots:
             result = await client.cdp.send_command("Page.captureScreenshot", {})
@@ -2942,21 +2994,24 @@ class BiDiBackend(AbstractBackend):
                     trace_events.append({"raw_size": len(raw)})
 
         client.cdp.on("Tracing.tracingComplete", _on_tracing_complete)
-        await client.cdp.send_command("Tracing.end", {})
+        try:
+            await client.cdp.send_command("Tracing.end", {})
 
-        if state["capture_screenshots"]:
-            screenshot_result = await client.cdp.send_command("Page.captureScreenshot", {})
-            if screenshot_result.get("data"):
-                state["screenshots"].append(
-                    {
-                        "timestamp": 0,
-                        "data": screenshot_result["data"],
-                    }
-                )
+            if state["capture_screenshots"]:
+                screenshot_result = await client.cdp.send_command("Page.captureScreenshot", {})
+                if screenshot_result.get("data"):
+                    state["screenshots"].append(
+                        {
+                            "timestamp": 0,
+                            "data": screenshot_result["data"],
+                        }
+                    )
 
-        import asyncio as _asyncio
+            import asyncio as _asyncio
 
-        await _asyncio.sleep(0.5)
+            await _asyncio.sleep(0.5)
+        finally:
+            client.cdp.off("Tracing.tracingComplete", _on_tracing_complete)
 
         result: dict[str, Any] = {
             "trace_events": trace_events,
@@ -2964,6 +3019,8 @@ class BiDiBackend(AbstractBackend):
             "network": state["network"],
             "console": state["console"],
         }
+        for event_name, handler in state.get("handlers", []):
+            client.cdp.off(event_name, handler)
         del traces[trace_id]
         return result
 
@@ -3834,7 +3891,7 @@ class BiDiBackend(AbstractBackend):
         escaped = json.dumps(selector)
         js = (
             f"(function(){{"
-            f"  var el=document.querySelector('{escaped}');"
+            f"  var el=document.querySelector({escaped});"
             f"  if(!el) return null;"
             f"  var inline=el.getAttribute('style')||'';"
             f"  var matched=[];"
@@ -3921,7 +3978,7 @@ class BiDiBackend(AbstractBackend):
         escaped = json.dumps(selector)
         js = (
             f"(function(){{"
-            f"  var el=document.querySelector('{escaped}');"
+            f"  var el=document.querySelector({escaped});"
             f"  if(!el) return null;"
             f"  var cs=getComputedStyle(el);"
             f"  var result={{}};"
@@ -4212,13 +4269,6 @@ class BiDiBackend(AbstractBackend):
             "CSS.setScopeText", {"styleSheetId": stylesheet_id, "scopeId": scope_id, "text": text}
         )
 
-    async def css_set_style_sheet_text(self, stylesheet_id: str, text: str) -> None:
-        """Set the text content of a stylesheet by ID via CDP bridge."""
-        client = self._require_launched()
-        await client.cdp.send_command(
-            "CSS.setStyleSheetText", {"styleSheetId": stylesheet_id, "text": text}
-        )
-
     async def css_set_style_text(self, edits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Set style texts for multiple edits via CDP bridge."""
         client = self._require_launched()
@@ -4362,7 +4412,7 @@ class BiDiBackend(AbstractBackend):
         escaped = json.dumps(selector)
         js = (
             f"(function(){{"
-            f"  var el=document.querySelector('{escaped}');"
+            f"  var el=document.querySelector({escaped});"
             f"  if(!el) return null;"
             f"  return el;"
             f"}})()"
@@ -4490,30 +4540,15 @@ class BiDiBackend(AbstractBackend):
         )
         return dict(result) if result else {}
 
-    async def debug_pause(self) -> None:
-        """Pause JavaScript execution via CDP bridge."""
-        client = self._require_launched()
-        await client.cdp.send_command("Debugger.pause", {})
-
     async def debug_pause_on_async_call(self, operation: str) -> None:
         """Pause on an async call operation via CDP bridge."""
         client = self._require_launched()
         await client.cdp.send_command("Debugger.pauseOnAsyncCall", {"operation": operation})
 
-    async def debug_remove_breakpoint(self, breakpoint_id: str) -> None:
-        """Remove a breakpoint by ID via CDP bridge."""
-        client = self._require_launched()
-        await client.cdp.send_command("Debugger.removeBreakpoint", {"breakpointId": breakpoint_id})
-
     async def debug_restart_frame(self, call_frame_id: str) -> None:
         """Restart a call frame by ID via CDP bridge."""
         client = self._require_launched()
         await client.cdp.send_command("Debugger.restartFrame", {"callFrameId": call_frame_id})
-
-    async def debug_resume(self) -> None:
-        """Resume JavaScript execution via CDP bridge."""
-        client = self._require_launched()
-        await client.cdp.send_command("Debugger.resume", {})
 
     async def debug_set_async_call_stack_depth(self, depth: int) -> None:
         """Set the async call stack depth via CDP bridge."""
@@ -4709,11 +4744,12 @@ class BiDiBackend(AbstractBackend):
         """
         client = self._require_launched()
         escaped = json.dumps(selector)
+        escaped_color = json.dumps(f"3px solid {color}")
         js = (
             f"(function(){{"
-            f"  var el=document.querySelector('{escaped}');"
+            f"  var el=document.querySelector({escaped});"
             f"  if(el){{"
-            f"    el.style.outline='3px solid {color}';"
+            f"    el.style.outline={escaped_color};"
             f"    el.dataset.wavexisHighlight='1';"
             f"  }}"
             f"}})()"
@@ -5467,7 +5503,7 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         escaped = json.dumps(cache_name)
         js = (
-            f"caches.open('{escaped}').then(function(cache){{"
+            f"caches.open({escaped}).then(function(cache){{"
             f"  return cache.keys().then(function(requests){{"
             f"    return JSON.stringify(requests.map(function(r){{"
             f"      return {{url:r.url, method:r.method}};"
@@ -5496,7 +5532,7 @@ class BiDiBackend(AbstractBackend):
         """
         client = self._require_launched()
         escaped = json.dumps(cache_name)
-        js = f"caches.delete('{escaped}')"
+        js = f"caches.delete({escaped})"
         await client.script.evaluate(self._context, js)
 
     async def cache_storage_delete_cache(self, cache_id: str) -> None:
@@ -5908,7 +5944,7 @@ class BiDiBackend(AbstractBackend):
             f"navigator.serviceWorker.getRegistrations()"
             f"  .then(function(regs){{"
             f"    regs.forEach(function(r){{"
-            f"      if(r.scope==='{escaped}') r.unregister();"
+            f"      if(r.scope==={escaped}) r.unregister();"
             f"    }});"
             f"  }})"
         )
@@ -5926,7 +5962,7 @@ class BiDiBackend(AbstractBackend):
             f"navigator.serviceWorker.getRegistrations()"
             f"  .then(function(regs){{"
             f"    regs.forEach(function(r){{"
-            f"      if(r.scope==='{escaped}') r.update();"
+            f"      if(r.scope==={escaped}) r.update();"
             f"    }});"
             f"  }})"
         )
@@ -6515,17 +6551,21 @@ class BiDiBackend(AbstractBackend):
         import os
 
         client = self._require_launched()
-        is_dir = await asyncio.to_thread(os.path.isdir, path)
+        valid_path = validate_path(path)
+        is_dir = await asyncio.to_thread(os.path.isdir, valid_path)
         if is_dir:
-            abs_path = await asyncio.to_thread(os.path.abspath, path)
+            abs_path = await asyncio.to_thread(os.path.abspath, valid_path)
             ext_id = hashlib.sha256(abs_path.encode()).hexdigest()[:32]
             await client.cdp.send_command(
                 "Extensions.loadUnpacked",
                 {"path": abs_path},
             )
         else:
-            ext_id = hashlib.sha256(path.encode()).hexdigest()[:32]
-            data = await asyncio.to_thread(lambda: Path(path).read_bytes())
+            ext_id = hashlib.sha256(str(valid_path).encode()).hexdigest()[:32]
+            try:
+                data = await asyncio.to_thread(lambda: valid_path.read_bytes())
+            except OSError as e:
+                raise WavexisError(f"Failed to read extension file: {e}") from e
             await client.cdp.send_command(
                 "Extensions.load",
                 {"data": data.hex(), "id": ext_id},
@@ -10295,9 +10335,10 @@ class BiDiBackend(AbstractBackend):
         self, path: str, enable_in_incognito: bool = False
     ) -> dict[str, Any]:
         client = self._require_launched()
+        valid_path = validate_path(path)
         return dict(
             await client.cdp.send_command(
-                "Extensions.loadUnpacked", {"path": path, "enableInIncognito": enable_in_incognito}
+                "Extensions.loadUnpacked", {"path": str(valid_path), "enableInIncognito": enable_in_incognito}
             )
         )
 
@@ -10578,6 +10619,7 @@ class BiDiTabHandle(BiDiBackend):
         """
         self._client = client
         self._context = context
+        self._current_url: str = ""
 
     async def close(self) -> None:
         """Close the browsing context without closing the browser."""

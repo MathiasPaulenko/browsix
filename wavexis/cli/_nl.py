@@ -44,6 +44,8 @@ def nl(
 
     elif action == "find":
         result = _run_async(_nl_find(url, query, all))
+        if result is None:
+            return
         if isinstance(result, list):
             for sel in result:
                 typer.echo(sel)

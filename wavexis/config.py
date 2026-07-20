@@ -355,7 +355,7 @@ class HarParams:
     url: str = ""
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     filter: str | None = None
-    timeout: int = 30000
+    timeout: int = 5000
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
 

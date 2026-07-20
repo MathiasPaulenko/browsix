@@ -116,7 +116,7 @@ class ElementNotFoundError(WavexisError):
         )
 
 
-class ActionError(WavexisError):
+class ActionError(WavexisError, ValueError):
     """Raised when an action fails during execution."""
 
 

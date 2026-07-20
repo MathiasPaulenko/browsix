@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavexis"
-version = "2.14.0"
+version = "2.15.0"
 description = "Browser automation CLI — wraps cdpwave and bidiwave, no Node.js, no Chromium download"
 readme = "README.md"
 license = { text = "MIT" }
@@ -116,6 +116,7 @@ markers = [
     "integration: tests against a real Chrome browser",
     "slow: tests that take more than 5 seconds",
     "chrome: tests that require Chrome specifically",
+    "e2e: end-to-end CLI tests against a real browser",
 ]
 
 [tool.coverage.run]

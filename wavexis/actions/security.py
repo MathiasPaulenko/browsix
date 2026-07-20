@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 class SecurityAction(BaseAction[str, Any]):
@@ -52,4 +53,4 @@ class SecurityAction(BaseAction[str, Any]):
             await backend.ignore_cert_errors(self._ignore)
             return None
         else:
-            raise ValueError(f"Unknown security action: {self._action}")
+            raise ActionError(f"Unknown security action: {self._action}")

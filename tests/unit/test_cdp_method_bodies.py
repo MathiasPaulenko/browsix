@@ -383,6 +383,14 @@ class TestCDPMethodBodies:
         result = await backend.screenshot_selector("h1")
         assert isinstance(result, bytes)
 
+    async def test_screenshot_selector_not_found(self) -> None:
+        backend, _, mock = _make_mock_backend()
+        mock.dom.query_selector = AsyncMock(return_value={"nodeId": 0})
+        from wavexis.exceptions import ElementNotFoundError
+
+        with pytest.raises(ElementNotFoundError):
+            await backend.screenshot_selector(".nonexistent")
+
     async def test_annotated_screenshot(self) -> None:
         backend, _, mock = _make_mock_backend()
         mock.runtime.evaluate = AsyncMock(return_value={"result": {"value": "{}"}})
@@ -1047,7 +1055,7 @@ class TestCDPMethodBodies:
 
     async def test_capture_har(self) -> None:
         backend, _, _ = _make_mock_backend()
-        result = await backend.capture_har(HarParams(url="https://example.com"))
+        result = await backend.capture_har(HarParams(url="https://example.com", timeout=100))
         assert isinstance(result, dict)
 
     async def test_subscribe_events(self) -> None:
@@ -1161,6 +1169,25 @@ class TestCDPMethodBodies:
             mock_client_cls.launch = AsyncMock(return_value=mock_client)
             mock_client_cls.connect = AsyncMock(return_value=mock_client)
             await backend.launch(BrowserOptions())
+
+    async def test_launch_closes_client_on_setup_error(self) -> None:
+        from wavexis.backend.cdp import CDPBackend
+
+        backend = CDPBackend()
+        mock_session = MagicMock()
+        mock_session.emulation.set_user_agent_override = AsyncMock(side_effect=RuntimeError("setup failed"))
+        mock_client = MagicMock()
+        mock_client.new_page = AsyncMock(return_value=mock_session)
+        mock_client.close = AsyncMock()
+        with patch("wavexis.backend.cdp.CDPClient") as mock_client_cls:
+            mock_client_cls.connect = AsyncMock(return_value=mock_client)
+            opts = BrowserOptions(browser_url="http://localhost:9222", user_agent="TestAgent")
+            with pytest.raises(RuntimeError):
+                await backend.launch(opts)
+
+        assert backend._client is None
+        assert backend._session is None
+        mock_client.close.assert_awaited_once()
 
     async def test_context_manager(self) -> None:
         backend, _, _ = _make_mock_backend()
@@ -1835,12 +1862,6 @@ class TestCDPMethodBodies:
         mock.send.assert_awaited_once()
         assert mock.send.call_args.args[0] == "CSS.setScopeText"
 
-    async def test_css_set_style_sheet_text(self) -> None:
-        backend, _, mock = _make_mock_backend()
-        await backend.css_set_style_sheet_text("ss-1", ".test { color: red; }")
-        mock.send.assert_awaited_once()
-        assert mock.send.call_args.args[0] == "CSS.setStyleSheetText"
-
     async def test_css_set_style_text(self) -> None:
         backend, _, mock = _make_mock_backend()
         mock.send.return_value = {"styles": [{"styleId": {"styleSheetId": "ss-1", "ordinal": 0}}]}
@@ -1984,8 +2005,8 @@ class TestCDPMethodBodies:
     async def test_debug_pause(self) -> None:
         backend, _, mock = _make_mock_backend()
         await backend.debug_pause()
-        mock.send.assert_awaited_once()
-        assert mock.send.call_args.args[0] == "Debugger.pause"
+        mock.debugger.enable.assert_awaited_once()
+        mock.debugger.pause.assert_awaited_once()
 
     async def test_debug_pause_on_async_call(self) -> None:
         backend, _, mock = _make_mock_backend()
@@ -2008,8 +2029,8 @@ class TestCDPMethodBodies:
     async def test_debug_resume(self) -> None:
         backend, _, mock = _make_mock_backend()
         await backend.debug_resume()
-        mock.send.assert_awaited_once()
-        assert mock.send.call_args.args[0] == "Debugger.resume"
+        mock.debugger.enable.assert_awaited_once()
+        mock.debugger.resume.assert_awaited_once()
 
     async def test_debug_set_async_call_stack_depth(self) -> None:
         backend, _, mock = _make_mock_backend()
@@ -5410,3 +5431,69 @@ class TestCDPMethodBodies:
         backend, _, mock = _make_mock_backend()
         await backend.file_system_get_directory("key", [])
         assert mock.send.call_args.args[0] == "FileSystem.getDirectory"
+
+    # ── Bug #91: Event listener cleanup regression tests ──
+
+    async def test_capture_har_removes_listeners(self) -> None:
+        """Verify capture_har removes all event listeners after completion."""
+        backend, _, mock = _make_mock_backend()
+        await backend.capture_har(HarParams(url="https://example.com", timeout=100))
+        # session.off should be called 3 times for the 3 listeners
+        assert mock.off.call_count == 3
+
+    async def test_capture_console_removes_listener(self) -> None:
+        """Verify capture_console removes its listener after completion."""
+        backend, _, mock = _make_mock_backend()
+        await backend.capture_console()
+        assert mock.off.call_count == 1
+        off_args = mock.off.call_args_list[0]
+        assert off_args.args[0] == "Runtime.consoleAPICalled"
+
+    async def test_capture_logs_removes_listener(self) -> None:
+        """Verify capture_logs removes its listener after completion."""
+        backend, _, mock = _make_mock_backend()
+        await backend.capture_logs()
+        assert mock.off.call_count == 1
+        off_args = mock.off.call_args_list[0]
+        assert off_args.args[0] == "Log.entryAdded"
+
+    async def test_screencast_removes_listener(self) -> None:
+        """Verify screencast removes its listener after completion."""
+        backend, _, mock = _make_mock_backend()
+        await backend.screencast(ScreencastParams(duration=0.1))
+        assert mock.off.call_count == 1
+        off_args = mock.off.call_args_list[0]
+        assert off_args.args[0] == "Page.screencastFrame"
+
+    async def test_perf_trace_removes_listener(self) -> None:
+        """Verify perf_trace removes its listener after completion."""
+        backend, _, mock = _make_mock_backend()
+        await backend.perf_trace(duration_ms=100)
+        assert mock.off.call_count == 1
+        off_args = mock.off.call_args_list[0]
+        assert off_args.args[0] == "Tracing.tracingComplete"
+
+    async def test_debug_pause_removes_listener(self) -> None:
+        """Verify debug_pause removes its listener after completion."""
+        backend, _, mock = _make_mock_backend()
+        await backend.debug_pause()
+        assert mock.off.call_count == 1
+        off_args = mock.off.call_args_list[0]
+        assert off_args.args[0] == "Debugger.paused"
+
+    async def test_stop_combined_trace_removes_listeners(self) -> None:
+        """Verify stop_combined_trace removes all registered listeners."""
+        backend, _, mock = _make_mock_backend()
+        # Start a combined trace with network + console capture
+        trace_id = await backend.start_combined_trace(
+            capture_screenshots=False,
+            capture_network=True,
+            capture_console=True,
+        )
+        # Should have 3 handlers stored (2 network + 1 console)
+        state = backend._combined_traces[trace_id]
+        assert len(state["handlers"]) == 3
+        await backend.stop_combined_trace(trace_id)
+        # All handlers + tracingComplete listener should be removed
+        # 3 from handlers + 1 for Tracing.tracingComplete = 4 off calls
+        assert mock.off.call_count == 4

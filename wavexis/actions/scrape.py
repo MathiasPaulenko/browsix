@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import ScrapeParams, WaitStrategy
+from wavexis.exceptions import WavexisError
+from wavexis.output import validate_path
 
 
 class ScrapeAction(BaseAction[ScrapeParams, list[dict[str, Any]]]):
@@ -32,9 +33,12 @@ class ScrapeAction(BaseAction[ScrapeParams, list[dict[str, Any]]]):
 
         if params.file:
             file_path = params.file
-            expression = await asyncio.to_thread(
-                lambda: Path(file_path).read_text(encoding="utf-8")
-            )
+            try:
+                expression = await asyncio.to_thread(
+                    lambda: validate_path(file_path).read_text(encoding="utf-8")
+                )
+            except OSError as e:
+                raise WavexisError(f"Failed to read scrape expression file: {e}") from e
 
         if not expression:
             expression = "document.title"
@@ -45,6 +49,8 @@ class ScrapeAction(BaseAction[ScrapeParams, list[dict[str, Any]]]):
 
         results: list[dict[str, Any]] = []
         for url in params.urls:
+            if not url:
+                continue
             await backend.navigate(url, wait)
             value = await backend.eval(expression, await_promise=True)
             results.append({"url": url, "result": value})

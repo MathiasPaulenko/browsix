@@ -14,10 +14,13 @@ from wavexis.cli._shared import (
     _browser_options,
     _close_backend,
     _get_backend,
+    _handle_error,
     _run_async,
     app,
 )
 from wavexis.config import WaitStrategy
+from wavexis.exceptions import WavexisError
+from wavexis.output import validate_path
 
 
 @app.command()
@@ -46,8 +49,16 @@ def session(
 
     def _session_path() -> Path:
         if name:
-            return sessions_dir / f"{name}.json"
-        return Path(output)
+            safe_name = Path(name).name
+            if not safe_name or safe_name != name or safe_name in (".", ".."):
+                typer.echo("Error: invalid session name", err=True)
+                raise typer.Exit(1)
+            return sessions_dir / f"{safe_name}.json"
+        try:
+            return validate_path(output)
+        except ValueError as e:
+            _handle_error(WavexisError(str(e)))
+            raise
 
     if action == "list":
         if not sessions_dir.exists():

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
-from pathlib import Path
 from typing import Any
 
 import typer
@@ -25,6 +25,18 @@ from wavexis.cli._shared import (
     app,
 )
 from wavexis.config import EvalParams, PDFParams, ScrapeParams, ScreenshotParams, WaitStrategy
+from wavexis.output import validate_path
+
+
+def _sanitize_filename(name: str) -> str:
+    """Convert an arbitrary URL to a safe filesystem filename.
+
+    Replaces characters that are illegal or problematic on common filesystems
+    with an underscore, then collapses repeated underscores and trims length.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
+    sanitized = re.sub(r"_+", "_", sanitized)
+    return sanitized.strip("._")[:80] or "untitled"
 
 
 @app.command()
@@ -60,7 +72,11 @@ def multi(
     Use --parallel to execute all actions concurrently on separate tabs.
     Use --cache-ttl to cache results and skip re-execution on repeated runs.
     """
-    config_path = Path(config)
+    try:
+        config_path = validate_path(config)
+    except ValueError as e:
+        _handle_error(WavexisError(str(e)))
+        return
 
     if dry_run:
         try:
@@ -105,11 +121,18 @@ def _multi_watch(config_path: Any, parallel: bool = False, cache_ttl: int = 0) -
     typer.echo(f"Watching {config_path} for changes (Ctrl+C to stop)…")
     try:
         while True:
-            mtime = config_path.stat().st_mtime
+            try:
+                mtime = config_path.stat().st_mtime
+            except OSError:
+                time.sleep(1)
+                continue
             if mtime != last_mtime:
                 last_mtime = mtime
                 time.sleep(0.5)
-                current_mtime = config_path.stat().st_mtime
+                try:
+                    current_mtime = config_path.stat().st_mtime
+                except OSError:
+                    continue
                 if current_mtime != mtime:
                     last_mtime = current_mtime
                     continue
@@ -136,7 +159,7 @@ async def _multi(config_path: Any, parallel: bool = False, cache_ttl: int = 0) -
     from wavexis.actions.cache import ActionCache
     from wavexis.multi import execute_actions, parse_yaml
 
-    actions = parse_yaml(config_path)
+    actions = await asyncio.to_thread(parse_yaml, config_path)
     total = len(actions)
     _echo(f"Executing {total} action(s)…")
     cache = ActionCache(default_ttl=cache_ttl) if cache_ttl > 0 else None
@@ -196,16 +219,24 @@ def batch(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show plan without launching browser"),
 ) -> None:
     """Run a single action against multiple URLs in parallel."""
-    urls_path = Path(urls_file)
+    try:
+        urls_path = validate_path(urls_file)
+    except ValueError as e:
+        _handle_error(WavexisError(str(e)))
+        return
     if not urls_path.exists():
         typer.echo(f"Error: URLs file not found: {urls_path}")
         raise typer.Exit(1)
 
-    urls = [
-        line.strip()
-        for line in urls_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    try:
+        urls = [
+            line.strip()
+            for line in urls_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except OSError as e:
+        typer.echo(f"Error: URLs file not found or unreadable: {e}", err=True)
+        raise typer.Exit(1) from e
     if not urls:
         typer.echo("Error: No URLs found in file")
         raise typer.Exit(1)
@@ -216,7 +247,11 @@ def batch(
             typer.echo(f"  {action}({u})")
         return
 
-    out_dir = Path(output_dir)
+    try:
+        out_dir = validate_path(output_dir)
+    except ValueError as e:
+        _handle_error(WavexisError(str(e)))
+        return
     out_dir.mkdir(parents=True, exist_ok=True)
 
     results = _run_async(_batch(urls, action, out_dir, expression, parallel, mode))
@@ -306,7 +341,7 @@ async def _batch_tabs(
                         _progress(completed, total, url)
 
         tasks = [_run_one(u) for u in urls]
-        return await asyncio.gather(*tasks)
+        return await asyncio.gather(*tasks, return_exceptions=True)
     finally:
         await _close_backend(backend)
 
@@ -349,7 +384,7 @@ async def _batch_processes(
                     _progress(completed, total, url)
 
     tasks = [_run_one(u) for u in urls]
-    return await asyncio.gather(*tasks)
+    return await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def _batch_single(
@@ -400,20 +435,26 @@ async def _batch_single_on(
         Result of the action.
 
     Raises:
-        ValueError: If the action type is unknown.
+        WavexisError: If the action type is unknown.
     """
     if action == "screenshot":
         sp = ScreenshotParams(url=url, full_page=True, wait=WaitStrategy(strategy="load"))
         result = await ScreenshotAction(sp).execute(backend)
-        safe_url = url.replace("://", "_").replace("/", "_")[:80]
-        (out_dir / f"{safe_url}.png").write_bytes(result)
+        safe_url = _sanitize_filename(url)
+        try:
+            (out_dir / f"{safe_url}.png").write_bytes(result)
+        except OSError as e:
+            raise WavexisError(f"Failed to write {safe_url}.png: {e}") from e
         return result
 
     if action == "pdf":
         pp = PDFParams(url=url, wait=WaitStrategy(strategy="load"))
         result = await PDFAction(pp).execute(backend)
-        safe_url = url.replace("://", "_").replace("/", "_")[:80]
-        (out_dir / f"{safe_url}.pdf").write_bytes(result)
+        safe_url = _sanitize_filename(url)
+        try:
+            (out_dir / f"{safe_url}.pdf").write_bytes(result)
+        except OSError as e:
+            raise WavexisError(f"Failed to write {safe_url}.pdf: {e}") from e
         return result
 
     if action == "scrape":
@@ -428,7 +469,7 @@ async def _batch_single_on(
         ep = EvalParams(url=url, expression=expression, wait=WaitStrategy(strategy="load"))
         return await EvalAction(ep).execute(backend)
 
-    raise ValueError(f"Unknown batch action: {action}")
+    raise WavexisError(f"Unknown batch action: {action}")
 
 
 @app.command()
@@ -473,12 +514,27 @@ def record(
         from wavexis.actions.record import record_session
 
         backend = _get_backend()
-        yaml_content = _run_async(record_session(backend, url, duration))
+
+        async def _record_and_close() -> str | None:
+            try:
+                return await record_session(backend, url, duration)
+            finally:
+                await _close_backend(backend)
+
+        yaml_content = _run_async(_record_and_close())
         if yaml_content is None:
             return
 
-        out_path = Path(output)
-        out_path.write_text(yaml_content, encoding="utf-8")
+        try:
+            out_path = validate_path(output)
+        except ValueError as e:
+            _handle_error(WavexisError(str(e)))
+            return
+        try:
+            out_path.write_text(yaml_content, encoding="utf-8")
+        except OSError as e:
+            _handle_error(WavexisError(f"Failed to write recorded config: {e}"))
+            return
         _echo(f"Recorded config saved to {output}")
         _echo(f"Run with: wavexis multi {output}")
         return
@@ -520,7 +576,16 @@ def record(
         typer.echo("No actions to record", err=True)
         raise typer.Exit(2)
 
-    record_to_yaml(action_list, Path(output))
+    try:
+        out_path = validate_path(output)
+    except ValueError as e:
+        _handle_error(WavexisError(str(e)))
+        return
+    try:
+        record_to_yaml(action_list, out_path)
+    except (OSError, WavexisError) as e:
+        _handle_error(WavexisError(f"Failed to write recorded config: {e}"))
+        return
     _echo(f"Recorded {len(action_list)} actions to {output}")
 
 
@@ -531,7 +596,11 @@ def replay(
     """Replay a recorded session from YAML."""
     from wavexis.record import replay_from_yaml
 
-    config_path = Path(config)
+    try:
+        config_path = validate_path(config)
+    except ValueError as e:
+        _handle_error(WavexisError(str(e)))
+        return
     backend = _get_backend()
 
     async def _replay() -> list[Any]:

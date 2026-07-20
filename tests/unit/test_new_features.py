@@ -144,6 +144,10 @@ class TestSessionData:
         assert restored.session_storage == data.session_storage
         assert restored.url == data.url
 
+    def test_from_json_rejects_non_object(self) -> None:
+        with pytest.raises(WavexisError):
+            SessionData.from_json("[1, 2, 3]")
+
 
 # ── Extract ──────────────────────────────────────────────────────
 

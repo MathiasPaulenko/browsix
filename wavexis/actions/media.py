@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -51,7 +52,7 @@ class MediaAction(BaseAction[MediaParams, Any]):
 
         if action == "messages":
             if not self.params.player_id:
-                raise ValueError("player_id is required for messages action")
+                raise ActionError("player_id is required for messages action")
             return await backend.media_get_messages(self.params.player_id)
 
-        raise ValueError(f"Unknown Media action: {action}")
+        raise ActionError(f"Unknown Media action: {action}")

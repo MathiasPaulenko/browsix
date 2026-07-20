@@ -6,6 +6,7 @@ from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
+from wavexis.exceptions import ActionError
 
 
 class BrowserAction(BaseAction[str, Any]):
@@ -45,4 +46,4 @@ class BrowserAction(BaseAction[str, Any]):
         if action == "set_window":
             raise NotImplementedError("set_window action not yet implemented")
 
-        raise ValueError(f"Unknown browser action: {action}")
+        raise ActionError(f"Unknown browser action: {action}")

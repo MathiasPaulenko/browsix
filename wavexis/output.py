@@ -9,7 +9,33 @@ import sys
 from pathlib import Path
 from typing import Any
 
-__all__ = ["Output"]
+import typer
+
+__all__ = ["Output", "validate_path"]
+
+
+def validate_path(path: str | Path) -> Path:
+    """Validate a user-supplied file or directory path.
+
+    Rejects parent-directory traversal and null bytes. Absolute paths are
+    allowed, but ``..`` segments are not.
+
+    Args:
+        path: The path to validate.
+
+    Returns:
+        The resolved Path object.
+
+    Raises:
+        ValueError: If the path attempts directory traversal or contains null bytes.
+    """
+    if isinstance(path, str) and "\x00" in path:
+        raise ValueError(f"Invalid path: {path}")
+    p = Path(path)
+    if ".." in p.parts or any("\x00" in part for part in p.parts):
+        raise ValueError(f"Invalid path: {path}")
+    return p
+
 
 try:
     import yaml as _yaml
@@ -44,10 +70,14 @@ class Output:
 
         Args:
             data: The bytes to write.
-            path: File path. If None, writes to stdout.buffer.
+            path: File path. If None or "-", writes to stdout.buffer.
         """
-        if path:
-            Path(path).write_bytes(data)
+        if path and path != "-":
+            try:
+                validate_path(path).write_bytes(data)
+            except OSError as e:
+                Output.error(f"Failed to write {path}: {e}")
+                raise typer.Exit(1) from e
         else:
             sys.stdout.buffer.write(data)
 
@@ -57,13 +87,10 @@ class Output:
 
         Args:
             data: The data to serialize as JSON.
-            path: File path. If None, prints to stdout.
+            path: File path. If None or "-", prints to stdout.
         """
         text = json.dumps(data, indent=2, ensure_ascii=False)
-        if path:
-            Path(path).write_text(text, encoding="utf-8")
-        else:
-            print(text)
+        Output.write_text(text, path)
 
     @staticmethod
     def write_text(text: str, path: str | None = None) -> None:
@@ -71,10 +98,14 @@ class Output:
 
         Args:
             text: The text to write.
-            path: File path. If None, prints to stdout.
+            path: File path. If None or "-", prints to stdout.
         """
-        if path:
-            Path(path).write_text(text, encoding="utf-8")
+        if path and path != "-":
+            try:
+                validate_path(path).write_text(text, encoding="utf-8")
+            except OSError as e:
+                Output.error(f"Failed to write {path}: {e}")
+                raise typer.Exit(1) from e
         else:
             print(text)
 
@@ -97,11 +128,15 @@ class Output:
                 if key not in fieldnames:
                     fieldnames.append(key)
 
-        if path:
-            with Path(path).open("w", encoding="utf-8", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(data)
+        if path and path != "-":
+            try:
+                with validate_path(path).open("w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(data)
+            except OSError as e:
+                Output.error(f"Failed to write {path}: {e}")
+                raise typer.Exit(1) from e
         else:
             buf = io.StringIO()
             writer = csv.DictWriter(buf, fieldnames=fieldnames)
@@ -120,8 +155,8 @@ class Output:
         if _yaml is None:
             raise ImportError("PyYAML is required for YAML output. Run: pip install pyyaml")
         text = _yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
-        if path:
-            Path(path).write_text(text, encoding="utf-8")
+        if path and path != "-":
+            Output.write_text(text, path)
         else:
             print(text, end="")
 

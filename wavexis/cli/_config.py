@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,12 +17,13 @@ from wavexis.cli._shared import (
     _close_backend,
     _echo,
     _get_backend,
+    _handle_error,
     _run_async,
     _write_json_output,
     app,
-    unregister_backend,
 )
 from wavexis.config import EvalParams, ScreenshotParams, WaitStrategy
+from wavexis.exceptions import WavexisError
 
 
 @app.command()
@@ -62,7 +64,11 @@ def auth(
     """Apply auth context (cookies, headers, basic auth) and navigate to a URL."""
     from wavexis.auth import apply_auth_context, load_auth_context
 
-    ctx = load_auth_context(context)
+    try:
+        ctx = load_auth_context(context)
+    except (json.JSONDecodeError, OSError) as e:
+        _handle_error(WavexisError(f"Failed to load auth context: {e}"))
+        return
 
     async def _run_auth() -> Any:
         """Execute an authenticated browser session.
@@ -96,9 +102,8 @@ def auth(
         return
 
     if isinstance(result, bytes):
-        out = output or "auth_result.png"
-        with open(out, "wb") as f:
-            f.write(result)
+        out = output if output and output != "-" else "auth_result.png"
+        Output.write_bytes(result, out)
         _echo(f"Screenshot saved to {out}")
     elif isinstance(result, str):
         typer.echo(result)
@@ -118,10 +123,14 @@ def repl(
     from wavexis.repl import repl_loop
 
     backend = _get_backend()
-    try:
-        _run_async(repl_loop(backend, url or None))
-    finally:
-        unregister_backend(backend)
+
+    async def _repl_and_close() -> Any:
+        try:
+            return await repl_loop(backend, url or None)
+        finally:
+            await _close_backend(backend)
+
+    _run_async(_repl_and_close())
 
 
 @app.command()
@@ -163,27 +172,33 @@ def config(
         return
 
     if action == "init":
-        config_dir.mkdir(parents=True, exist_ok=True)
-        if config_path.exists():
-            typer.echo(f"Config already exists at {config_path}")
-            return
-        defaults: dict[str, Any] = {
-            "backend": "cdp",
-            "headless": True,
-            "timeout": 30000,
-        }
-        config_path.write_text(
-            yaml.dump(defaults, default_flow_style=False, sort_keys=True),
-            encoding="utf-8",
-        )
-        typer.echo(f"Created config at {config_path}")
+        try:
+            config_dir.mkdir(parents=True, exist_ok=True)
+            if config_path.exists():
+                typer.echo(f"Config already exists at {config_path}")
+                return
+            defaults: dict[str, Any] = {
+                "backend": "cdp",
+                "headless": True,
+                "timeout": 30000,
+            }
+            config_path.write_text(
+                yaml.dump(defaults, default_flow_style=False, sort_keys=True),
+                encoding="utf-8",
+            )
+            typer.echo(f"Created config at {config_path}")
+        except OSError as e:
+            _handle_error(WavexisError(f"Failed to create config: {e}"))
         return
 
     if action == "show":
         if not config_path.exists():
             typer.echo("No config file found. Run: wavexis config init")
             return
-        typer.echo(config_path.read_text(encoding="utf-8"))
+        try:
+            typer.echo(config_path.read_text(encoding="utf-8"))
+        except OSError as e:
+            _handle_error(WavexisError(f"Failed to read config: {e}"))
         return
 
     if action == "set":
@@ -194,29 +209,32 @@ def config(
             typer.echo("Error: --value is required for 'set'")
             raise typer.Exit(EXIT_CONFIG_ERROR)
 
-        config_dir.mkdir(parents=True, exist_ok=True)
-        current: dict[str, Any] = {}
-        if config_path.exists():
-            loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                current = loaded
+        try:
+            config_dir.mkdir(parents=True, exist_ok=True)
+            current: dict[str, Any] = {}
+            if config_path.exists():
+                loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    current = loaded
 
-        if key in ("headless",):
-            current[key] = value.lower() in ("true", "1", "yes")
-        elif key in ("timeout",):
-            try:
-                current[key] = int(value)
-            except ValueError:
-                typer.echo(f"Error: timeout must be an integer, got '{value}'", err=True)
-                raise typer.Exit(EXIT_CONFIG_ERROR)
-        else:
-            current[key] = value
+            if key in ("headless",):
+                current[key] = value.lower() in ("true", "1", "yes")
+            elif key in ("timeout",):
+                try:
+                    current[key] = int(value)
+                except ValueError:
+                    typer.echo(f"Error: timeout must be an integer, got '{value}'", err=True)
+                    raise typer.Exit(EXIT_CONFIG_ERROR) from None
+            else:
+                current[key] = value
 
-        config_path.write_text(
-            yaml.dump(current, default_flow_style=False, sort_keys=True),
-            encoding="utf-8",
-        )
-        typer.echo(f"Set {key} = {current[key]} in {config_path}")
+            config_path.write_text(
+                yaml.dump(current, default_flow_style=False, sort_keys=True),
+                encoding="utf-8",
+            )
+            typer.echo(f"Set {key} = {current[key]} in {config_path}")
+        except OSError as e:
+            _handle_error(WavexisError(f"Failed to write config: {e}"))
         return
 
     typer.echo(f"Unknown action: {action}. Use: show, set, init, path")
@@ -275,7 +293,6 @@ def init(
             typer.echo(f"\nCancelled: {e}", err=True)
             raise typer.Exit(1) from e
 
-    out_path = Path(output)
-    out_path.write_text(yaml_content, encoding="utf-8")
+    Output.write_text(yaml_content, output)
     typer.echo(f"Config saved to {output}")
     typer.echo(f"Run with: wavexis multi {output}")

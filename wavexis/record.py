@@ -17,13 +17,16 @@ actions:
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from wavexis.backend.base import AbstractBackend
+from wavexis.exceptions import WavexisError
 from wavexis.multi import execute_actions, parse_yaml
+from wavexis.output import validate_path
 
 __all__ = ["Recorder", "record_to_yaml", "replay_from_yaml"]
 
@@ -104,7 +107,10 @@ def record_to_yaml(actions: list[dict[str, Any]], path: Path) -> None:
         path: Path to the output YAML file.
     """
     data = {"actions": actions}
-    path.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
+    try:
+        validate_path(path).write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
+    except OSError as e:
+        raise WavexisError(f"Failed to write recorded config: {e}") from e
 
 
 async def replay_from_yaml(path: Path, backend: AbstractBackend) -> list[Any]:
@@ -119,5 +125,5 @@ async def replay_from_yaml(path: Path, backend: AbstractBackend) -> list[Any]:
     Returns:
         List of results from each action.
     """
-    actions = parse_yaml(path)
+    actions = await asyncio.to_thread(parse_yaml, validate_path(path))
     return await execute_actions(actions, backend)

@@ -14,6 +14,8 @@ import hmac
 import json
 import logging
 import time
+import types
+import typing
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -48,8 +50,31 @@ __all__ = [
 ]
 
 
+def _resolve_dataclass_type(field_type: Any) -> type | None:
+    """Extract a dataclass type from a field annotation, handling Optional.
+
+    Args:
+        field_type: A resolved type annotation (from typing.get_type_hints).
+
+    Returns:
+        The dataclass type if found, otherwise None.
+    """
+    if isinstance(field_type, type) and dataclasses.is_dataclass(field_type):
+        return typing.cast(type, field_type)
+    if isinstance(field_type, types.UnionType):
+        for arg in typing.get_args(field_type):
+            if arg is type(None):
+                continue
+            if isinstance(arg, type) and dataclasses.is_dataclass(arg):
+                return typing.cast(type, arg)
+    return None
+
+
 def _safe_params(cls: type, data: dict[str, Any]) -> Any:
     """Construct a dataclass from a dict, ignoring unknown keys.
+
+    Recursively converts nested dicts to their dataclass types when the
+    field type annotation is a dataclass (e.g. WaitStrategy, BrowserOptions).
 
     Args:
         cls: A dataclass type to construct.
@@ -57,10 +82,40 @@ def _safe_params(cls: type, data: dict[str, Any]) -> Any:
 
     Returns:
         An instance of cls with only valid fields populated.
+
+    Raises:
+        ValueError: If ``data`` is not a dict.
     """
+    if not isinstance(data, dict):
+        raise ValueError("JSON body must be an object")
+    hints = typing.get_type_hints(cls)
     valid = {f.name for f in dataclasses.fields(cls)}
-    filtered = {k: v for k, v in data.items() if k in valid}
+    filtered: dict[str, Any] = {}
+    for k, v in data.items():
+        if k not in valid:
+            continue
+        if isinstance(v, dict):
+            resolved = _resolve_dataclass_type(hints.get(k))
+            if resolved is not None:
+                filtered[k] = _safe_params(resolved, v)
+                continue
+        filtered[k] = v
     return cls(**filtered)
+
+
+async def _get_json_body(request: Any) -> dict[str, Any]:
+    """Parse and validate a request body as a JSON object.
+
+    Returns:
+        The request body as a dict.
+
+    Raises:
+        ValueError: If the JSON body is not a dict.
+    """
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise ValueError("JSON body must be an object")
+    return data
 
 
 class TokenBucket:
@@ -161,7 +216,9 @@ async def _json_error_middleware(request: Any, handler: Any) -> Any:
     web = _import_aiohttp()
     try:
         return await handler(request)
-    except (json.JSONDecodeError, ValueError, TypeError):
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        if isinstance(exc, WavexisError):
+            raise
         return web.Response(
             status=400,
             text='{"error": "invalid JSON body"}',
@@ -229,14 +286,16 @@ def _validate_path(raw_path: str) -> Path:
         The resolved Path object.
 
     Raises:
-        WavexisError: If the path is outside the allowed base directory or
-            if no base directory is configured.
+        WavexisError: If the path is empty, outside the allowed base directory,
+            or if no base directory is configured.
     """
     if _ALLOWED_BASE_DIR is None:
         raise WavexisError(
             "File path access is disabled. Configure --base-dir when starting "
             "the server to allow file path references."
         )
+    if not raw_path or not isinstance(raw_path, str):
+        raise WavexisError("A non-empty file path is required.")
     resolved = Path(raw_path).resolve()
     try:
         resolved.relative_to(_ALLOWED_BASE_DIR)
@@ -421,12 +480,24 @@ async def _run_action(request: Any, action: Any) -> Any:
     Returns:
         The result of action.execute().
     """
+    web = _import_aiohttp()
     pool = _get_pool(request)
     await pool.acquire()
     try:
         backend = await pool.get_backend(request.app.get("backend_name"))
         await backend.launch(BrowserOptions())
         return await action.execute(backend)
+    except WavexisError as exc:
+        raise web.HTTPInternalServerError(
+            text=json.dumps({"error": str(exc)}),
+            content_type="application/json",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unhandled error in _run_action: %s", exc)
+        raise web.HTTPInternalServerError(
+            text=json.dumps({"error": "internal server error"}),
+            content_type="application/json",
+        ) from exc
     finally:
         if "backend" in locals():
             await pool.return_backend(backend)
@@ -496,7 +567,7 @@ def with_backend(
 async def handle_screenshot(request: Any) -> Any:
     """Handle POST /screenshot — return PNG bytes."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(ScreenshotParams, data)
     from wavexis.actions.screenshot import ScreenshotAction
 
@@ -508,7 +579,7 @@ async def handle_screenshot(request: Any) -> Any:
 async def handle_pdf(request: Any) -> Any:
     """Handle POST /pdf — return PDF bytes."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(PDFParams, data)
     from wavexis.actions.pdf import PDFAction
 
@@ -520,7 +591,7 @@ async def handle_pdf(request: Any) -> Any:
 async def handle_eval(request: Any) -> Any:
     """Handle POST /eval — return JSON result."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(EvalParams, data)
     from wavexis.actions.eval import EvalAction
 
@@ -532,7 +603,7 @@ async def handle_eval(request: Any) -> Any:
 async def handle_scrape(request: Any) -> Any:
     """Handle POST /scrape — return JSON or CSV."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(ScrapeParams, data)
     from wavexis.actions.scrape import ScrapeAction
 
@@ -554,7 +625,7 @@ async def handle_scrape(request: Any) -> Any:
 async def handle_dom_get(request: Any) -> Any:
     """Handle POST /dom/get — return HTML as JSON."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(DOMParams, data)
     from wavexis.actions.dom import DOMAction
 
@@ -566,7 +637,7 @@ async def handle_dom_get(request: Any) -> Any:
 async def handle_dom_query(request: Any) -> Any:
     """Handle POST /dom/query — return elements as JSON."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(DOMParams, data)
     from wavexis.actions.dom import DOMAction
 
@@ -579,8 +650,12 @@ async def handle_dom_query(request: Any) -> Any:
 async def handle_navigate(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /navigate — navigate and return status."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     url = data.get("url", "")
+    if not url:
+        return web.json_response(
+            {"error": "url is required"}, status=400,
+        )
     wait_for = data.get("wait_for")
     strategy = (
         WaitStrategy(strategy="selector", selector=wait_for)
@@ -594,7 +669,7 @@ async def handle_navigate(request: Any, backend: AbstractBackend) -> Any:
 async def handle_har(request: Any) -> Any:
     """Handle POST /har — return HAR data as JSON."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(HarParams, data)
     from wavexis.actions.har import HARAction
 
@@ -607,9 +682,10 @@ async def handle_har(request: Any) -> Any:
 async def handle_cookies_get(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /cookies/get — return cookies as JSON."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     url = data.get("url", "")
-    await backend.navigate(url, WaitStrategy(strategy="load"))
+    if url:
+        await backend.navigate(url, WaitStrategy(strategy="load"))
     cookies = await backend.get_cookies()
     return web.json_response({"cookies": cookies})
 
@@ -618,7 +694,7 @@ async def handle_cookies_get(request: Any, backend: AbstractBackend) -> Any:
 async def handle_cookies_set(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /cookies/set — set a cookie and return status."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     cookie_data = data.get("cookie", data)
     params = _safe_params(CookieParams, cookie_data)
     await backend.set_cookie(params)
@@ -628,7 +704,7 @@ async def handle_cookies_set(request: Any, backend: AbstractBackend) -> Any:
 async def handle_input_click(request: Any) -> Any:
     """Handle POST /input/click — click an element."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(InputParams, data)
     params.action = "click"
     from wavexis.actions.input import InputAction
@@ -641,7 +717,7 @@ async def handle_input_click(request: Any) -> Any:
 async def handle_input_type(request: Any) -> Any:
     """Handle POST /input/type — type text into an element."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     params = _safe_params(InputParams, data)
     params.action = "type"
     from wavexis.actions.input import InputAction
@@ -654,7 +730,7 @@ async def handle_input_type(request: Any) -> Any:
 async def handle_perf_metrics(request: Any) -> Any:
     """Handle POST /perf/metrics — return performance metrics."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     url = data.get("url", "")
     from wavexis.actions.performance import PerformanceAction, PerformanceParams
 
@@ -667,7 +743,7 @@ async def handle_perf_metrics(request: Any) -> Any:
 async def handle_perf_trace(request: Any) -> Any:
     """Handle POST /perf/trace — return performance trace."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     url = data.get("url", "")
     duration_ms = data.get("duration_ms", 3000)
     from wavexis.actions.performance import PerformanceAction, PerformanceParams
@@ -714,7 +790,7 @@ async def handle_cwv(request: Any) -> Any:
         CoreWebVitalsParams,
     )
 
-    data = await request.json()
+    data = await _get_json_body(request)
     url = data.get("url", "")
     observe_ms = int(data.get("observe_ms", 5000))
     budgets = data.get("budgets", {})
@@ -735,10 +811,13 @@ async def handle_auth(request: Any, backend: AbstractBackend) -> Any:
     web = _import_aiohttp()
     from wavexis.auth import apply_auth_context, load_auth_context
 
-    data = await request.json()
+    data = await _get_json_body(request)
     context_path = _validate_path(data.get("context", ""))
     url = data.get("url", "")
-    ctx = load_auth_context(str(context_path))
+    try:
+        ctx = load_auth_context(str(context_path))
+    except (json.JSONDecodeError, OSError) as e:
+        return web.json_response({"error": f"Failed to load auth context: {e}"}, status=400)
     await apply_auth_context(backend, ctx, url)
     return web.json_response({"status": "ok", "url": url})
 
@@ -747,11 +826,12 @@ async def handle_auth(request: Any, backend: AbstractBackend) -> Any:
 async def handle_user_agent(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /user-agent — set custom user agent."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     ua = data.get("user_agent", "")
     url = data.get("url", "")
     await backend.set_user_agent(ua)
-    await backend.navigate(url, WaitStrategy(strategy="load"))
+    if url:
+        await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "user_agent": ua})
 
 
@@ -759,11 +839,12 @@ async def handle_user_agent(request: Any, backend: AbstractBackend) -> Any:
 async def handle_headers(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /headers — set custom HTTP headers."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     headers = data.get("headers", {})
     url = data.get("url", "")
     await backend.set_headers(headers)
-    await backend.navigate(url, WaitStrategy(strategy="load"))
+    if url:
+        await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "headers": headers})
 
 
@@ -771,11 +852,12 @@ async def handle_headers(request: Any, backend: AbstractBackend) -> Any:
 async def handle_device(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /device — emulate a device preset."""
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     device = data.get("device", "")
     url = data.get("url", "")
     await backend.emulate_device(device)
-    await backend.navigate(url, WaitStrategy(strategy="load"))
+    if url:
+        await backend.navigate(url, WaitStrategy(strategy="load"))
     return web.json_response({"status": "ok", "device": device})
 
 
@@ -787,7 +869,7 @@ async def handle_modify_request(request: Any, backend: AbstractBackend) -> Any:
         "modifications": {"headers": [...], "method": "...", "post_data": "..."}}
     """
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     url = data.get("url", "")
     pattern_input = data.get("pattern", "*")
     modifications = data.get("modifications", {})
@@ -808,7 +890,7 @@ async def handle_modify_response(request: Any, backend: AbstractBackend) -> Any:
         "modifications": {"status": 200, "body": "...", "content_type": "application/json"}}
     """
     web = _import_aiohttp()
-    data = await request.json()
+    data = await _get_json_body(request)
     url = data.get("url", "")
     pattern = data.get("pattern", "*")
     modifications = data.get("modifications", {})
@@ -824,7 +906,7 @@ async def handle_multi(request: Any, backend: AbstractBackend) -> Any:
     web = _import_aiohttp()
     from wavexis.record import replay_from_yaml
 
-    data = await request.json()
+    data = await _get_json_body(request)
     yaml_path = _validate_path(data.get("config", ""))
     results = await replay_from_yaml(yaml_path, backend)
     return web.json_response(
@@ -1027,14 +1109,8 @@ async def _stream_perf_metrics(
                     "message": str(exc),
                 }
             )
-        except (ConnectionError, OSError) as exc:
-            await ws.send_json(
-                {
-                    "type": "error",
-                    "source": "perf_metrics",
-                    "message": str(exc),
-                }
-            )
+        except (ConnectionError, OSError):
+            break
         await asyncio.sleep(interval)
 
 
@@ -1081,11 +1157,10 @@ async def handle_websocket(request: Any) -> Any:
         _ws_connections += 1
 
     ws = web.WebSocketResponse()
-    await ws.prepare(request)
-
     tasks: list[asyncio.Task[None]] = []
     backend: AbstractBackend | None = None
     try:
+        await ws.prepare(request)
         try:
             msg = await ws.receive()
             if msg.type == web.WSMsgType.TEXT:
@@ -1094,6 +1169,17 @@ async def handle_websocket(request: Any) -> Any:
                 await ws.close()
                 return ws
         except (json.JSONDecodeError, KeyError, TypeError):
+            await ws.close()
+            return ws
+
+        if not isinstance(config, dict):
+            await ws.send_json(
+                {
+                    "type": "error",
+                    "message": "Invalid config: JSON body must be an object",
+                    "timestamp": time.time(),
+                }
+            )
             await ws.close()
             return ws
 
@@ -1114,73 +1200,82 @@ async def handle_websocket(request: Any) -> Any:
             await ws.close()
             return ws
 
-        backend = await _get_backend(request)
+        try:
+            backend = await _get_backend(request)
+        except Exception:
+            pool = _get_pool(request)
+            pool.release()
+            await ws.send_json(
+                {
+                    "type": "error",
+                    "message": "Failed to acquire backend",
+                    "timestamp": time.time(),
+                }
+            )
+            await ws.close()
+            return ws
         try:
             await backend.launch(BrowserOptions())
             await backend.navigate(url, WaitStrategy(strategy="load"))
-        except Exception:
-            await _release_backend(request, backend)
-            raise
 
-        await ws.send_json(
-            {
-                "type": "ready",
-                "url": url,
-                "events": events,
-                "timestamp": time.time(),
-            }
-        )
-
-        if "screenshot" in events:
-            tasks.append(
-                asyncio.create_task(
-                    _stream_screenshots(ws, backend, interval, fmt, quality),
-                )
-            )
-        if "console" in events:
-            tasks.append(
-                asyncio.create_task(
-                    _stream_console(ws, backend, max(interval, 0.5)),
-                )
-            )
-        if "navigation" in events:
-            tasks.append(
-                asyncio.create_task(
-                    _stream_navigation(ws, backend, max(interval, 0.5)),
-                )
-            )
-        if "dom_mutation" in events:
-            tasks.append(
-                asyncio.create_task(
-                    _stream_dom_mutations(ws, backend, max(interval, 0.5)),
-                )
-            )
-        if "perf_metrics" in events:
-            tasks.append(
-                asyncio.create_task(
-                    _stream_perf_metrics(ws, backend, max(interval, 1.0)),
-                )
+            await ws.send_json(
+                {
+                    "type": "ready",
+                    "url": url,
+                    "events": events,
+                    "timestamp": time.time(),
+                }
             )
 
-        subscribe_types = [
-            e for e in events if e in ("network_request", "network_response", "dialog")
-        ]
-        if subscribe_types:
-
-            async def _on_event(event: dict[str, Any]) -> None:
-                await ws.send_json(
-                    {
-                        "type": event.get("type", "event"),
-                        "data": event.get("data", {}),
-                        "timestamp": time.time(),
-                    }
+            if "screenshot" in events:
+                tasks.append(
+                    asyncio.create_task(
+                        _stream_screenshots(ws, backend, interval, fmt, quality),
+                    )
+                )
+            if "console" in events:
+                tasks.append(
+                    asyncio.create_task(
+                        _stream_console(ws, backend, max(interval, 0.5)),
+                    )
+                )
+            if "navigation" in events:
+                tasks.append(
+                    asyncio.create_task(
+                        _stream_navigation(ws, backend, max(interval, 0.5)),
+                    )
+                )
+            if "dom_mutation" in events:
+                tasks.append(
+                    asyncio.create_task(
+                        _stream_dom_mutations(ws, backend, max(interval, 0.5)),
+                    )
+                )
+            if "perf_metrics" in events:
+                tasks.append(
+                    asyncio.create_task(
+                        _stream_perf_metrics(ws, backend, max(interval, 1.0)),
+                    )
                 )
 
-            await backend.subscribe_events(subscribe_types, _on_event)
+            subscribe_types = [
+                e for e in events if e in ("network_request", "network_response", "dialog")
+            ]
+            if subscribe_types:
 
-        ws_bucket = TokenBucket(capacity=_ws_max_messages_per_minute, refill_period=60.0)
+                async def _on_event(event: dict[str, Any]) -> None:
+                    await ws.send_json(
+                        {
+                            "type": event.get("type", "event"),
+                            "data": event.get("data", {}),
+                            "timestamp": time.time(),
+                        }
+                    )
 
-        try:
+                await backend.subscribe_events(subscribe_types, _on_event)
+
+            ws_bucket = TokenBucket(capacity=_ws_max_messages_per_minute, refill_period=60.0)
+
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
                     allowed = await ws_bucket.acquire()
@@ -1196,6 +1291,15 @@ async def handle_websocket(request: Any) -> Any:
                     try:
                         cmd = json.loads(msg.data)
                     except json.JSONDecodeError:
+                        continue
+                    if not isinstance(cmd, dict):
+                        await ws.send_json(
+                            {
+                                "type": "error",
+                                "message": "Invalid command: JSON body must be an object",
+                                "timestamp": time.time(),
+                            }
+                        )
                         continue
                     action = cmd.get("action")
                     if action == "navigate":
@@ -1238,6 +1342,23 @@ async def handle_websocket(request: Any) -> Any:
                     web.WSMsgType.ERROR,
                 ):
                     break
+        except WavexisError as exc:
+            await ws.send_json(
+                {
+                    "type": "error",
+                    "message": str(exc),
+                    "timestamp": time.time(),
+                }
+            )
+        except Exception:
+            logger.exception("Unhandled error in WebSocket handler")
+            await ws.send_json(
+                {
+                    "type": "error",
+                    "message": "internal server error",
+                    "timestamp": time.time(),
+                }
+            )
         finally:
             for task in tasks:
                 task.cancel()

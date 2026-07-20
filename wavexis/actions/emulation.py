@@ -5,6 +5,7 @@ from __future__ import annotations
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import EmulationParams
+from wavexis.exceptions import ActionError
 
 
 class EmulationAction(BaseAction[EmulationParams, None]):
@@ -23,9 +24,11 @@ class EmulationAction(BaseAction[EmulationParams, None]):
         params = self.params
         if params.action == "device":
             if params.device is None:
-                raise ValueError("device is required for 'device' action")
+                raise ActionError("device is required for 'device' action")
             await backend.emulate_device(params.device)
         elif params.action == "viewport":
+            if params.width <= 0 or params.height <= 0:
+                raise ActionError("width and height must be positive for 'viewport' action")
             await backend.set_viewport(
                 params.width,
                 params.height,
@@ -38,8 +41,10 @@ class EmulationAction(BaseAction[EmulationParams, None]):
                 params.accuracy,
             )
         elif params.action == "timezone":
+            if not params.timezone:
+                raise ActionError("timezone is required for 'timezone' action")
             await backend.set_timezone(params.timezone)
         elif params.action == "dark_mode":
             await backend.set_dark_mode(params.dark_mode)
         else:
-            raise ValueError(f"Unknown emulation action: {params.action}")
+            raise ActionError(f"Unknown emulation action: {params.action}")

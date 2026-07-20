@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 from typing import Any
 
@@ -153,8 +152,5 @@ async def record_session(
                 events = raw
         except (json.JSONDecodeError, TypeError, WavexisError):
             pass
-
-    with contextlib.suppress(WavexisError):
-        await backend.close()
 
     return events_to_yaml(events, url)

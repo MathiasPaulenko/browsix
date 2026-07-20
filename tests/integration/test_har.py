@@ -17,7 +17,7 @@ class TestHARIntegration:
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            params = HarParams(url="https://example.com", wait=2000)
+            params = HarParams(url="https://example.com", timeout=2000)
             action = HARAction(params)
             result = await action.execute(backend)
             assert "log" in result
@@ -40,7 +40,7 @@ class TestHARIntegration:
             await backend.launch(BrowserOptions())
             params = HarParams(
                 url="https://example.com",
-                wait=2000,
+                timeout=2000,
                 filter="example.com",
             )
             action = HARAction(params)

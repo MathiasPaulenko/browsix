@@ -98,6 +98,22 @@ jobs:
       - run: pip install -e ".[dev,bidi]"
       - run: pytest tests/integration/ -m integration -v --timeout=60 -k bidi
 
+  e2e-tests:
+    name: E2E CLI tests (real browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+      - run: pip install -e ".[dev,cdp]"
+      - run: pytest tests/e2e/ -m e2e -v --timeout=120
+        env:
+          CHROME_PATH: /opt/chrome/chrome
+
   docker-build:
     name: Docker build
     runs-on: ubuntu-latest

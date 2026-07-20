@@ -19,9 +19,26 @@ from wavexis.cli._shared import (
     app,
 )
 from wavexis.config import CookieParams, ThrottleParams, WaitStrategy
+from wavexis.output import validate_path
 
 network_app = typer.Typer(help="Network commands (block, throttle, cache, intercept, mock)")
 app.add_typer(network_app, name="network")
+
+
+def _load_json_argument(value: str) -> Any:
+    """Parse a JSON string or load JSON from a @file path.
+
+    Uses validate_path to reject parent-directory traversal and null bytes.
+    """
+    if value.startswith("@"):
+        file_path = validate_path(value[1:])
+        try:
+            data = json.loads(file_path.read_text(encoding="utf-8"))
+        except OSError as e:
+            raise ValueError(f"File not found or unreadable: {file_path}") from e
+    else:
+        data = json.loads(value)
+    return data
 
 
 @app.command()
@@ -86,15 +103,11 @@ def headers(
 ) -> None:
     """Set extra HTTP headers for all requests."""
     try:
-        if headers_json.startswith("@"):
-            from pathlib import Path
-
-            data = json.loads(Path(headers_json[1:]).read_text(encoding="utf-8"))
-        else:
-            data = json.loads(headers_json)
-    except json.JSONDecodeError as e:
+        data = _load_json_argument(headers_json)
+    except (json.JSONDecodeError, ValueError) as e:
         typer.echo(f"Error: invalid JSON headers: {e}", err=True)
         raise typer.Exit(1) from e
+
 
     _run_async(_headers(data))
     typer.echo("Headers set")
@@ -391,13 +404,8 @@ def network_extra_headers(
 ) -> None:
     """Set extra HTTP headers for all requests."""
     try:
-        if headers_json.startswith("@"):
-            from pathlib import Path
-
-            headers = json.loads(Path(headers_json[1:]).read_text(encoding="utf-8"))
-        else:
-            headers = json.loads(headers_json)
-    except json.JSONDecodeError as e:
+        headers = _load_json_argument(headers_json)
+    except (json.JSONDecodeError, ValueError) as e:
         typer.echo(f"Error: invalid JSON headers: {e}", err=True)
         raise typer.Exit(1) from e
     _run_async(_network_direct(lambda b: b.network_set_extra_request_headers(headers)))

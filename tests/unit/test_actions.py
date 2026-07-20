@@ -24,6 +24,7 @@ from wavexis.config import (
     PDFParams,
     ScreenshotParams,
 )
+from wavexis.exceptions import WavexisError
 
 
 class FakeBackend:
@@ -156,6 +157,24 @@ class TestEvalAction:
         result = await action.execute(backend)
         assert result == "eval-result"
         backend.eval.assert_called_once_with("document.title", await_promise=False)
+
+    @pytest.mark.unit
+    async def test_execute_missing_expression(self, backend: FakeBackend):
+        """Missing expression and file should raise WavexisError."""
+        params = EvalParams(url="https://example.com")
+        action = EvalAction(params)
+        with pytest.raises(WavexisError):
+            await action.execute(backend)
+
+    @pytest.mark.unit
+    async def test_execute_unreadable_file(self, backend: FakeBackend, tmp_path):
+        """An unreadable expression file should raise WavexisError."""
+        params = EvalParams(
+            url="https://example.com", file=str(tmp_path / "missing.js")
+        )
+        action = EvalAction(params)
+        with pytest.raises(WavexisError):
+            await action.execute(backend)
 
 
 class TestNavigateActions:
@@ -424,6 +443,20 @@ class TestScrapeAction:
         assert len(results) == 1
         backend.eval.assert_called_with("document.title", await_promise=True)
 
+    @pytest.mark.unit
+    async def test_scrape_unreadable_file(self, backend: FakeBackend, tmp_path):
+        """An unreadable scrape expression file should raise WavexisError."""
+        from wavexis.actions.scrape import ScrapeAction
+        from wavexis.config import ScrapeParams
+
+        params = ScrapeParams(
+            urls=["https://example.com"],
+            file=str(tmp_path / "missing.js"),
+        )
+        action = ScrapeAction(params)
+        with pytest.raises(WavexisError):
+            await action.execute(backend)
+
 
 class TestHARAction:
     """Tests for HARAction."""
@@ -434,7 +467,7 @@ class TestHARAction:
         from wavexis.actions.har import HARAction
         from wavexis.config import HarParams
 
-        params = HarParams(url="https://example.com", wait=100)
+        params = HarParams(url="https://example.com", timeout=100)
         action = HARAction(params)
         result = await action.execute(backend)
         assert "log" in result

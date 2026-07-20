@@ -257,6 +257,8 @@ def trace(
             typer.echo("Error: --trace-id required for stop", err=True)
             raise typer.Exit(1)
         result = _run_async(_trace_stop(trace_id))
+        if result is None:
+            return
         if output:
             from wavexis.output import Output
 

@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import SystemInfoParams
+from wavexis.exceptions import ActionError
 
 
 class SystemInfoAction(BaseAction[SystemInfoParams, Any]):
@@ -34,7 +35,7 @@ class SystemInfoAction(BaseAction[SystemInfoParams, Any]):
 
         if action == "get-feature-state":
             if not self.params.feature_name:
-                raise ValueError("feature_name is required for get-feature-state action")
+                raise ActionError("feature_name is required for get-feature-state action")
             return await backend.system_info_get_feature_state(self.params.feature_name)
 
-        raise ValueError(f"Unknown SystemInfo action: {action}")
+        raise ActionError(f"Unknown SystemInfo action: {action}")

@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import DOMParams
+from wavexis.exceptions import ActionError
 
 
 class DOMAction(BaseAction[DOMParams, Any]):
@@ -29,6 +30,10 @@ class DOMAction(BaseAction[DOMParams, Any]):
         params = self.params
         if params.url:
             await backend.navigate(params.url, params.wait)
+
+        _selector_required = {"get", "query", "attr", "remove_attr", "remove", "focus"}
+        if params.action in _selector_required and not params.selector:
+            raise ActionError(f"selector is required for '{params.action}' DOM action")
 
         if params.action == "get":
             return await backend.dom_get(params.selector, outer=params.outer)
@@ -65,4 +70,4 @@ class DOMAction(BaseAction[DOMParams, Any]):
             )
             return None
 
-        raise ValueError(f"Unknown DOM action: {params.action}")
+        raise ActionError(f"Unknown DOM action: {params.action}")

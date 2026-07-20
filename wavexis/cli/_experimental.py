@@ -21,6 +21,7 @@ from wavexis.actions.system_info import SystemInfoAction
 from wavexis.actions.webaudio import WebAudioAction, WebAudioParams
 from wavexis.actions.webauthn import WebAuthnAction, WebAuthnParams
 from wavexis.cli._shared import (
+    WavexisError,
     _browser_options,
     _close_backend,
     _echo,
@@ -30,6 +31,7 @@ from wavexis.cli._shared import (
     get_manager,
 )
 from wavexis.config import AnimationParams, StorageParams, SystemInfoParams, WaitStrategy
+from wavexis.output import Output
 
 
 @app.command()
@@ -136,8 +138,7 @@ def storage(
         if output == "-":
             typer.echo(result)
         else:
-            with open(output, "w", encoding="utf-8") as f:
-                f.write(result)
+            Output.write_text(result, output)
             _echo(f"Saved to {output}")
     else:
         _write_json_output(result, output, "storage result")
@@ -678,8 +679,7 @@ def _write_json_output(
     if output == "-":
         typer.echo(json.dumps(result, indent=2, default=str))
     else:
-        with open(output, "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2, default=str)
+        Output.write_json(result, output)
         _echo(f"Saved {label} to {output}")
 
 
@@ -733,7 +733,7 @@ def tethering(
             elif action == "unbind":
                 await backend.tethering_unbind(port)
             else:
-                raise ValueError(f"Unknown tethering action: {action}")
+                raise WavexisError(f"Unknown tethering action: {action}")
         finally:
             await _close_backend(backend)
 
@@ -779,16 +779,16 @@ def tracing(
                 return await backend.tracing_get_categories()
             if action == "record-clock-sync":
                 if not sync_id:
-                    raise ValueError("sync_id is required for record-clock-sync")
+                    raise WavexisError("sync_id is required for record-clock-sync")
                 await backend.tracing_record_clock_sync_marker(sync_id)
                 return None
             if action == "request-memory-dump":
                 return await backend.tracing_request_memory_dump()
             if action == "get-track-event":
                 if not track_event:
-                    raise ValueError("track_event is required for get-track-event")
+                    raise WavexisError("track_event is required for get-track-event")
                 return await backend.tracing_get_track_event_descriptor(track_event)
-            raise ValueError(f"Unknown tracing action: {action}")
+            raise WavexisError(f"Unknown tracing action: {action}")
         finally:
             await _close_backend(backend)
 
@@ -814,7 +814,7 @@ def web_mcp(
             elif action == "disable":
                 await backend.web_mcp_disable()
             else:
-                raise ValueError(f"Unknown web_mcp action: {action}")
+                raise WavexisError(f"Unknown web_mcp action: {action}")
         finally:
             await _close_backend(backend)
 

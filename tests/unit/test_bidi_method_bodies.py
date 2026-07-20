@@ -220,6 +220,14 @@ class TestBiDiMethodBodies:
         result = await backend.dom_get("h1")
         assert result == "<html>"
 
+    async def test_dom_get_not_found(self) -> None:
+        backend, mock = _make_mock_backend()
+        mock.script.evaluate = AsyncMock(return_value=MagicMock(value=None))
+        from wavexis.exceptions import ElementNotFoundError
+
+        with pytest.raises(ElementNotFoundError):
+            await backend.dom_get(".nonexistent")
+
     async def test_dom_query(self) -> None:
         backend, mock = _make_mock_backend()
         mock.script.evaluate = AsyncMock(return_value=MagicMock(value={"tagName": "div"}))
@@ -835,7 +843,7 @@ class TestBiDiMethodBodies:
         mock._connection.send_command = AsyncMock(return_value={})
         from wavexis.config import HarParams
 
-        result = await backend.capture_har(HarParams(url="https://example.com"))
+        result = await backend.capture_har(HarParams(url="https://example.com", timeout=100))
         assert isinstance(result, dict)
 
     async def test_subscribe_events(self) -> None:
@@ -934,6 +942,30 @@ class TestBiDiMethodBodies:
             )
             await backend.launch(opts)
 
+    async def test_launch_closes_client_on_setup_error(self) -> None:
+        backend = _make_mock_backend()[0]
+        backend._client = None
+        backend._context = None
+        mock_client = MagicMock(
+            session=MagicMock(new=AsyncMock()),
+            browsing=MagicMock(
+                create_context=AsyncMock(side_effect=RuntimeError("setup failed")),
+            ),
+            script=MagicMock(evaluate=AsyncMock()),
+            cdp=MagicMock(send_command=AsyncMock()),
+            emulation=MagicMock(set_user_agent=AsyncMock()),
+            close=AsyncMock(),
+        )
+        with patch("wavexis.backend.bidi.BiDiClient") as mock_client_cls:
+            mock_client_cls.connect = AsyncMock(return_value=mock_client)
+            opts = BrowserOptions(browser_url="http://localhost:9222")
+            with pytest.raises(RuntimeError):
+                await backend.launch(opts)
+
+        assert backend._client is None
+        assert backend._context is None
+        mock_client.close.assert_awaited_once()
+
     async def test_launch_already_launched(self) -> None:
         backend, _ = _make_mock_backend()
         await backend.launch(BrowserOptions())
@@ -956,3 +988,11 @@ class TestBiDiMethodBodies:
         mock.browsing.create_context = AsyncMock(return_value="ctx-2")
         handle = await backend.new_tab_handle("https://example.com")
         assert handle is not None
+
+    async def test_tab_handle_has_current_url(self) -> None:
+        """Regression test for Bug #88: BiDiTabHandle must initialize _current_url."""
+        backend, mock = _make_mock_backend()
+        mock.browsing.create_context = AsyncMock(return_value="ctx-2")
+        handle = await backend.new_tab_handle("https://example.com")
+        assert hasattr(handle, "_current_url")
+        assert handle._current_url == ""

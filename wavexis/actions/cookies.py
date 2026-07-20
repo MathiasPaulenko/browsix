@@ -7,6 +7,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import CookieActionParams
+from wavexis.exceptions import ActionError
 
 
 class CookieAction(BaseAction[CookieActionParams, Any]):
@@ -42,7 +43,7 @@ class CookieAction(BaseAction[CookieActionParams, Any]):
 
         if action == "delete":
             if not self.params.name:
-                raise ValueError("name is required for delete action")
+                raise ActionError("name is required for delete action")
             await backend.delete_cookie(self.params.name, self.params.domain)
             return None
 
@@ -50,4 +51,4 @@ class CookieAction(BaseAction[CookieActionParams, Any]):
             await backend.clear_cookies()
             return None
 
-        raise ValueError(f"Unknown cookie action: {action}")
+        raise ActionError(f"Unknown cookie action: {action}")

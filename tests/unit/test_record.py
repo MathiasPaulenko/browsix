@@ -1,12 +1,14 @@
 """Unit tests for record/replay system."""
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
 
 from wavexis.backend.base import AbstractBackend
+from wavexis.exceptions import WavexisError
 from wavexis.record import Recorder, record_to_yaml, replay_from_yaml
 
 
@@ -63,6 +65,19 @@ class TestRecordToYaml:
         record_to_yaml([], path)
         data = yaml.safe_load(path.read_text())
         assert data["actions"] == []
+
+    def test_write_error(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """Test that record_to_yaml raises WavexisError on write failure."""
+        from pathlib import Path
+
+        def _raise(*args: Any, **kwargs: Any) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(Path, "write_text", _raise)
+
+        path = tmp_path / "session.yml"
+        with pytest.raises(WavexisError, match="Failed to write recorded config"):
+            record_to_yaml([{"navigate": {"url": "https://example.com"}}], path)
 
 
 @pytest.mark.unit

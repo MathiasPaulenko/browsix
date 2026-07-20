@@ -6,12 +6,13 @@ import asyncio
 import base64
 import io
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, ScreenshotParams, WaitStrategy
+from wavexis.exceptions import ActionError
+from wavexis.output import validate_path
 
 
 @dataclass
@@ -51,6 +52,13 @@ class VisualDiffAction(BaseAction[VisualDiffParams, dict[str, Any]]):
         Returns:
             Dict with diff_count, diff_percentage, total_pixels, and diff_base64.
         """
+        if not self.params.baseline_path:
+            raise ActionError("baseline_path is required for visual diff")
+
+        baseline_path = validate_path(self.params.baseline_path)
+        if not await asyncio.to_thread(baseline_path.exists):
+            raise FileNotFoundError(f"Baseline image not found: {self.params.baseline_path}")
+
         if self.params.url:
             await backend.navigate(self.params.url, self.params.wait)
 
@@ -59,7 +67,7 @@ class VisualDiffAction(BaseAction[VisualDiffParams, dict[str, Any]]):
         else:
             current_bytes = await backend.screenshot(ScreenshotParams(url="", format="png"))
 
-        baseline_bytes = await asyncio.to_thread(Path(self.params.baseline_path).read_bytes)
+        baseline_bytes = await asyncio.to_thread(baseline_path.read_bytes)
 
         return self._compare(baseline_bytes, current_bytes)
 
@@ -88,9 +96,13 @@ class VisualDiffAction(BaseAction[VisualDiffParams, dict[str, Any]]):
 
         diff = ImageChops.difference(baseline_img, current_img)
 
-        diff_array = list(diff.getdata())  # noqa: SIM118
-        total_pixels = len(diff_array)
-        diff_count = sum(1 for r, g, b in diff_array if max(r, g, b) > self.params.threshold)
+        diff_bytes = diff.tobytes()
+        total_pixels = len(diff_bytes) // 3
+        diff_count = sum(
+            1
+            for i in range(0, len(diff_bytes), 3)
+            if max(diff_bytes[i], diff_bytes[i + 1], diff_bytes[i + 2]) > self.params.threshold
+        )
 
         diff_percentage = (diff_count / total_pixels * 100) if total_pixels else 0.0
 

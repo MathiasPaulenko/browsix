@@ -216,9 +216,9 @@ class TestCombinedTraceAction:
         backend = MockBackend()
         params = CombinedTraceParams(action="invalid")
         action = CombinedTraceAction(params)
-        result = await action.execute(backend)
 
-        assert "error" in result
+        with pytest.raises(ValueError, match="Unknown combined_trace action"):
+            await action.execute(backend)
 
 
 @pytest.mark.unit

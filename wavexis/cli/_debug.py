@@ -18,7 +18,7 @@ from wavexis.cli._shared import (
     app,
 )
 from wavexis.config import WaitStrategy
-from wavexis.exceptions import ElementNotFoundError
+from wavexis.exceptions import ElementNotFoundError, WavexisError
 
 css_app = typer.Typer(help="CSS inspection commands (styles, stylesheets, rules, computed)")
 app.add_typer(css_app, name="css")
@@ -226,6 +226,8 @@ def css_add_rule(
 ) -> None:
     """Add a new CSS rule to a stylesheet."""
     result = _run_async(_css_direct(url, lambda b: b.css_add_rule(stylesheet_id, rule_text)))
+    if result is None:
+        return
     _echo(f"Rule added with ID: {result}")
 
 
@@ -236,6 +238,8 @@ def css_create_stylesheet(
 ) -> None:
     """Create a new stylesheet in the given frame."""
     result = _run_async(_css_direct(url, lambda b: b.css_create_style_sheet(frame_id)))
+    if result is None:
+        return
     _echo(f"Stylesheet created with ID: {result}")
 
 
@@ -376,7 +380,6 @@ def css_force_starting_style(
     starting_style_id: str = typer.Argument(..., help="Starting style ID (JSON)"),
 ) -> None:
     """Force a starting style for a node."""
-    import json
 
     style_id = _safe_json_loads(starting_style_id, "starting_style_id")
     _run_async(_css_direct(url, lambda b: b.css_force_starting_style(node_id, style_id)))
@@ -483,7 +486,6 @@ def css_longhand_properties(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Get longhand properties for a shorthand property."""
-    import json
 
     sid = _safe_json_loads(shorthand_id, "shorthand_id")
     result = _run_async(_css_direct(url, lambda b: b.css_get_longhand_properties(sid)))
@@ -538,7 +540,6 @@ def css_resolve_values(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Resolve CSS values."""
-    import json
 
     vals = _safe_json_loads(values, "values")
     result = _run_async(_css_direct(url, lambda b: b.css_resolve_values(vals)))
@@ -555,7 +556,6 @@ def css_set_container_query(
     text: str = typer.Argument(..., help="Condition text"),
 ) -> None:
     """Set the condition text of a container query."""
-    import json
 
     cqid = _safe_json_loads(container_query_id, "container_query_id")
     _run_async(
@@ -591,7 +591,6 @@ def css_set_keyframe_key(
     key_text: str = typer.Argument(..., help="Key text"),
 ) -> None:
     """Set the key text of a keyframe rule."""
-    import json
 
     kfid = _safe_json_loads(keyframe_id, "keyframe_id")
     _run_async(_css_direct(url, lambda b: b.css_set_keyframe_key(stylesheet_id, kfid, key_text)))
@@ -616,7 +615,6 @@ def css_set_navigation_text(
     text: str = typer.Argument(..., help="Navigation text"),
 ) -> None:
     """Set the text of a navigation rule."""
-    import json
 
     nav_id = _safe_json_loads(navigation_id, "navigation_id")
     _run_async(_css_direct(url, lambda b: b.css_set_navigation_text(stylesheet_id, nav_id, text)))
@@ -631,7 +629,6 @@ def css_set_property_rule_name(
     name: str = typer.Argument(..., help="Property name"),
 ) -> None:
     """Set the property name of a property rule."""
-    import json
 
     prid = _safe_json_loads(property_rule_id, "property_rule_id")
     _run_async(
@@ -648,7 +645,6 @@ def css_set_rule_style(
     style_text: str = typer.Argument(..., help="Style text"),
 ) -> None:
     """Set the style text of a CSS rule."""
-    import json
 
     rid = _safe_json_loads(rule_id, "rule_id")
     _run_async(_css_direct(url, lambda b: b.css_set_rule_style(stylesheet_id, rid, style_text)))
@@ -663,7 +659,6 @@ def css_set_scope_text(
     text: str = typer.Argument(..., help="Scope text"),
 ) -> None:
     """Set the text of a scope rule."""
-    import json
 
     sid = _safe_json_loads(scope_id, "scope_id")
     _run_async(_css_direct(url, lambda b: b.css_set_scope_text(stylesheet_id, sid, text)))
@@ -688,7 +683,6 @@ def css_set_style_text(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Set style texts for multiple edits."""
-    import json
 
     ed = _safe_json_loads(edits, "edits")
     result = _run_async(_css_direct(url, lambda b: b.css_set_style_text(ed)))
@@ -704,7 +698,6 @@ def css_set_style_texts(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Set style texts for multiple edits (batch)."""
-    import json
 
     ed = _safe_json_loads(edits, "edits")
     result = _run_async(_css_direct(url, lambda b: b.css_set_style_texts(ed)))
@@ -732,7 +725,6 @@ def css_set_supports_text(
     text: str = typer.Argument(..., help="Supports text"),
 ) -> None:
     """Set the text of a supports rule."""
-    import json
 
     sup_id = _safe_json_loads(supports_id, "supports_id")
     _run_async(_css_direct(url, lambda b: b.css_set_supports_text(stylesheet_id, sup_id, text)))
@@ -1182,7 +1174,6 @@ def debug_blackbox_contexts(
     unique_ids: str = typer.Argument(..., help="Unique IDs (JSON array)"),
 ) -> None:
     """Set blackboxed execution contexts by unique IDs."""
-    import json
 
     ids = _safe_json_loads(unique_ids, "unique_ids")
     _run_async(_debug_direct(url, lambda b: b.debug_set_blackbox_execution_contexts(ids)))
@@ -1195,7 +1186,6 @@ def debug_blackbox_patterns(
     patterns: str = typer.Argument(..., help="Patterns (JSON array)"),
 ) -> None:
     """Set blackbox patterns for script URLs."""
-    import json
 
     pats = _safe_json_loads(patterns, "patterns")
     _run_async(_debug_direct(url, lambda b: b.debug_set_blackbox_patterns(pats)))
@@ -1209,7 +1199,6 @@ def debug_blackboxed_ranges(
     positions: str = typer.Argument(..., help="Positions (JSON array)"),
 ) -> None:
     """Set blackboxed ranges for a script."""
-    import json
 
     pos = _safe_json_loads(positions, "positions")
     _run_async(_debug_direct(url, lambda b: b.debug_set_blackboxed_ranges(script_id, pos)))
@@ -1224,7 +1213,6 @@ def debug_breakpoint_raw(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Set a breakpoint at a raw location in a script."""
-    import json
 
     loc = _safe_json_loads(location, "location")
     cond = condition if condition else None
@@ -1291,7 +1279,6 @@ def debug_set_return_value(
     new_value: str = typer.Argument(..., help="New return value (JSON)"),
 ) -> None:
     """Set the return value of the current call frame."""
-    import json
 
     val = _safe_json_loads(new_value, "new_value")
     _run_async(_debug_direct(url, lambda b: b.debug_set_return_value(val)))
@@ -1307,7 +1294,6 @@ def debug_set_variable_value(
     new_value: str = typer.Argument(..., help="New value (JSON)"),
 ) -> None:
     """Set a variable value in a scope of a call frame."""
-    import json
 
     val = _safe_json_loads(new_value, "new_value")
     _run_async(
@@ -1506,7 +1492,7 @@ async def _dom_debugger_direct(url: str, action: str, **kwargs: Any) -> Any:
         if action == "set_xhr_breakpoint":
             await backend.dom_debugger_set_xhr_breakpoint(kwargs["url_substring"])
             return None
-        raise ValueError(f"Unknown DOMDebugger action: {action}")
+        raise WavexisError(f"Unknown DOMDebugger action: {action}")
     finally:
         await _close_backend(backend)
 
@@ -1600,7 +1586,6 @@ def overlay_highlight_quad(
     ),
 ) -> None:
     """Highlight a quad region on the page."""
-    import json
 
     coords = _safe_json_loads(quad, "quad")
     _run_async(_overlay_direct(url, lambda b: b.overlay_highlight_quad(coords)))
@@ -1736,7 +1721,6 @@ def overlay_highlight_source_order(
     config: str = typer.Option(..., "--config", help="Source order config as JSON"),
 ) -> None:
     """Highlight the source order of a node."""
-    import json
 
     cfg = _safe_json_loads(config, "config")
     _run_async(_overlay_direct(url, lambda b: b.overlay_highlight_source_order(cfg)))
@@ -1789,7 +1773,6 @@ def overlay_grid_overlays(
     configs: str = typer.Option(..., "--configs", help="Grid overlay configs as JSON array"),
 ) -> None:
     """Show grid overlays for the given configurations."""
-    import json
 
     cfg_list = _safe_json_loads(configs, "configs")
     _run_async(_overlay_direct(url, lambda b: b.overlay_set_show_grid_overlays(cfg_list)))
@@ -1802,7 +1785,6 @@ def overlay_hinge(
     config: str = typer.Option("", "--config", help="Hinge config as JSON (empty to clear)"),
 ) -> None:
     """Show or hide the hinge overlay."""
-    import json
 
     cfg = _safe_json_loads(config, "config") if config else None
     _run_async(_overlay_direct(url, lambda b: b.overlay_set_show_hinge(cfg)))
@@ -1827,7 +1809,6 @@ def overlay_isolated_elements(
     ),
 ) -> None:
     """Show isolated elements with the given highlight configurations."""
-    import json
 
     cfg_list = _safe_json_loads(configs, "configs")
     _run_async(_overlay_direct(url, lambda b: b.overlay_set_show_isolated_elements(cfg_list)))
@@ -2021,7 +2002,7 @@ async def _dom_action(
         if action == "scroll_into_view_if_needed" and selector:
             await backend.dom_scroll_into_view_if_needed(selector)
             return None
-        raise ValueError(f"Unknown DOM action: {action}")
+        raise WavexisError(f"Unknown DOM action: {action}")
     finally:
         await _close_backend(backend)
 
@@ -2474,7 +2455,6 @@ def sensor_set_override_cmd(
     ),
 ) -> None:
     """Set a sensor override."""
-    import json
 
     metadata_dict = _safe_json_loads(metadata, "metadata") if metadata else None
     _run_async(
@@ -3058,7 +3038,6 @@ def dom_highlight_node(
     highlight_config: str = typer.Argument(..., help="Highlight config JSON"),
 ) -> None:
     """Highlight a node by ID with the given highlight config."""
-    import json
 
     config = _safe_json_loads(highlight_config, "highlight_config")
     _run_async(_dom_node_direct(url, "highlight_node", node_id=node_id, highlight_config=config))
@@ -3075,7 +3054,6 @@ def dom_highlight_rect(
     highlight_config: str = typer.Argument(..., help="Highlight config JSON"),
 ) -> None:
     """Highlight a rect with the given highlight config."""
-    import json
 
     config = _safe_json_loads(highlight_config, "highlight_config")
     _run_async(
@@ -3399,7 +3377,7 @@ async def _dom_node_direct(url: str, action: str, **kwargs: Any) -> Any:
         if action == "undo":
             await backend.dom_undo()
             return None
-        raise ValueError(f"Unknown DOM node action: {action}")
+        raise WavexisError(f"Unknown DOM node action: {action}")
     finally:
         await _close_backend(backend)
 
@@ -3413,7 +3391,6 @@ def emulation_add_screen(
     screen_json: str = typer.Argument(..., help="Screen configuration as JSON string"),
 ) -> None:
     """Add a virtual screen with the given configuration."""
-    import json
 
     screen = _safe_json_loads(screen_json, "screen")
     _run_async(_emulation_direct(url, "add_screen", screen=screen))
@@ -3580,7 +3557,6 @@ def emulation_default_bg_color(
     ),
 ) -> None:
     """Override the default background color."""
-    import json
 
     color = _safe_json_loads(color_json, "color")
     _run_async(_emulation_direct(url, "set_default_background_color_override", color=color))
@@ -3613,7 +3589,6 @@ def emulation_display_features(
     features_json: str = typer.Argument(..., help="Display features as JSON array"),
 ) -> None:
     """Override display features."""
-    import json
 
     features = _safe_json_loads(features_json, "features")
     _run_async(_emulation_direct(url, "set_display_features_override", features=features))
@@ -3648,7 +3623,6 @@ def emulation_media_feature(
     ),
 ) -> None:
     """Set emulated media features."""
-    import json
 
     features = _safe_json_loads(features_json, "features")
     _run_async(_emulation_direct(url, "set_emulated_media_feature", features=features))
@@ -3721,7 +3695,6 @@ def emulation_navigator_overrides(
     navigator_json: str = typer.Argument(..., help="Navigator properties as JSON"),
 ) -> None:
     """Override navigator properties."""
-    import json
 
     navigator = _safe_json_loads(navigator_json, "navigator")
     _run_async(_emulation_direct(url, "set_navigator_overrides", navigator=navigator))
@@ -3785,7 +3758,6 @@ def emulation_safe_area_insets(
     insets_json: str = typer.Argument(..., help="Safe area insets as JSON"),
 ) -> None:
     """Override the safe area insets."""
-    import json
 
     insets = _safe_json_loads(insets_json, "insets")
     _run_async(_emulation_direct(url, "set_safe_area_insets_override", insets=insets))
@@ -3824,7 +3796,6 @@ def emulation_sensor_override_readings(
     readings_json: str = typer.Argument(..., help="Sensor readings as JSON array"),
 ) -> None:
     """Override sensor readings."""
-    import json
 
     readings = _safe_json_loads(readings_json, "readings")
     _run_async(
@@ -3912,7 +3883,6 @@ def emulation_update_screen(
     screen_json: str = typer.Argument(..., help="Screen configuration as JSON"),
 ) -> None:
     """Update a virtual screen by ID."""
-    import json
 
     screen = _safe_json_loads(screen_json, "screen")
     _run_async(_emulation_direct(url, "update_screen", screen_id=screen_id, screen=screen))
@@ -4057,7 +4027,7 @@ async def _emulation_direct(url: str, action: str, **kwargs: Any) -> Any:
         if action == "update_screen":
             await backend.update_screen(kwargs["screen_id"], kwargs["screen"])
             return None
-        raise ValueError(f"Unknown emulation action: {action}")
+        raise WavexisError(f"Unknown emulation action: {action}")
     finally:
         await _close_backend(backend)
 
@@ -4137,7 +4107,6 @@ def digital_credentials_set_virtual_wallet_cmd(
     behavior: str = typer.Argument(..., help="Behavior (JSON)"),
 ) -> None:
     """Set the virtual wallet behavior for digital credentials."""
-    import json
 
     beh = _safe_json_loads(behavior, "behavior")
     _run_async(_debug_direct(url, lambda b: b.digital_credentials_set_virtual_wallet_behavior(beh)))
@@ -4200,7 +4169,6 @@ def dom_storage_clear_cmd(
     ),
 ) -> None:
     """Clear all entries in a DOM storage."""
-    import json
 
     sid = _safe_json_loads(storage_id, "storage_id")
     _run_async(_debug_direct(url, lambda b: b.dom_storage_clear(sid)))
@@ -4213,7 +4181,6 @@ def dom_storage_clear_items_cmd(
     storage_id: str = typer.Argument(..., help="Storage ID (JSON)"),
 ) -> None:
     """Clear all items in a DOM storage."""
-    import json
 
     sid = _safe_json_loads(storage_id, "storage_id")
     _run_async(_debug_direct(url, lambda b: b.dom_storage_clear_items(sid)))
@@ -4245,7 +4212,6 @@ def dom_storage_items_cmd(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Get all items in a DOM storage."""
-    import json
 
     sid = _safe_json_loads(storage_id, "storage_id")
     result = _run_async(_debug_direct(url, lambda b: b.dom_storage_get_items(sid)))
@@ -4261,7 +4227,6 @@ def dom_storage_remove_item_cmd(
     key: str = typer.Option(..., "--key", help="Item key"),
 ) -> None:
     """Remove an item from a DOM storage."""
-    import json
 
     sid = _safe_json_loads(storage_id, "storage_id")
     _run_async(_debug_direct(url, lambda b: b.dom_storage_remove_item(sid, key)))
@@ -4276,7 +4241,6 @@ def dom_storage_set_item_cmd(
     value: str = typer.Option(..., "--value", help="Item value"),
 ) -> None:
     """Set an item in a DOM storage."""
-    import json
 
     sid = _safe_json_loads(storage_id, "storage_id")
     _run_async(_debug_direct(url, lambda b: b.dom_storage_set_item(sid, key, value)))
@@ -4379,7 +4343,6 @@ def extensions_remove_storage_items_cmd(
     keys: str = typer.Argument(..., help="Keys (JSON array)"),
 ) -> None:
     """Remove storage items from an extension."""
-    import json
 
     key_list = _safe_json_loads(keys, "keys")
     _run_async(
@@ -4398,7 +4361,6 @@ def extensions_set_storage_items_cmd(
     values: str = typer.Argument(..., help="Values (JSON array)"),
 ) -> None:
     """Set storage items for an extension."""
-    import json
 
     val_list = _safe_json_loads(values, "values")
     _run_async(
@@ -4516,7 +4478,6 @@ def fetch_continue_request_with_auth_cmd(
     auth_response: str = typer.Argument(..., help="Auth challenge response (JSON)"),
 ) -> None:
     """Continue a paused request with authentication."""
-    import json
 
     resp = _safe_json_loads(auth_response, "auth_response")
     _run_async(_debug_direct(url, lambda b: b.fetch_continue_request_with_auth(request_id, resp)))
@@ -4541,7 +4502,6 @@ def fetch_continue_with_auth_cmd(
     auth_response: str = typer.Argument(..., help="Auth challenge response (JSON)"),
 ) -> None:
     """Continue a paused request with auth challenge response."""
-    import json
 
     resp = _safe_json_loads(auth_response, "auth_response")
     _run_async(_debug_direct(url, lambda b: b.fetch_continue_with_auth(request_id, resp)))
@@ -4726,7 +4686,6 @@ def preload_set_policy_cmd(
     policy: str = typer.Argument(..., help='Preload policy JSON (e.g. \'{"key":"value"}\')'),
 ) -> None:
     """Set the preload policy."""
-    import json
 
     policy_dict = _safe_json_loads(policy, "policy")
     _run_async(_debug_direct(url, lambda b: b.preload_set_preload_policy(policy_dict)))
@@ -4850,7 +4809,6 @@ def pwa_change_app_user_settings_cmd(
     user_settings: str = typer.Argument(..., help='User settings JSON (e.g. \'{"key":"value"}\')'),
 ) -> None:
     """Change PWA user settings."""
-    import json
 
     settings_dict = _safe_json_loads(user_settings, "user_settings")
     _run_async(_debug_direct(url, lambda b: b.pwa_change_app_user_settings(app_id, settings_dict)))
@@ -5133,7 +5091,6 @@ def indexed_db_delete_object_store_entries_cmd(
     key_range: str = typer.Argument(..., help="Key range (JSON)"),
 ) -> None:
     """Delete entries in an IndexedDB object store."""
-    import json
 
     kr = _safe_json_loads(key_range, "key_range")
     _run_async(
@@ -5198,7 +5155,6 @@ def indexed_db_request_data_cmd(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Request data from an IndexedDB object store."""
-    import json
 
     kr = _safe_json_loads(key_range, "key_range") if key_range else None
     result = _run_async(
@@ -5292,7 +5248,6 @@ def layer_tree_load_snapshot_cmd(
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
     """Load a layer tree snapshot."""
-    import json
 
     snaps = _safe_json_loads(snapshots, "snapshots")
     result = _run_async(_debug_direct(url, lambda b: b.layer_tree_load_snapshot(snaps)))
@@ -5401,7 +5356,6 @@ def log_start_violations_report_cmd(
     config: str = typer.Argument(..., help="Violations config (JSON array)"),
 ) -> None:
     """Start reporting violations."""
-    import json
 
     cfg = _safe_json_loads(config, "config")
     _run_async(_debug_direct(url, lambda b: b.log_start_violations_report(cfg)))

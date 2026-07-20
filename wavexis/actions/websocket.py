@@ -44,7 +44,8 @@ class WebSocketInterceptAction(BaseAction[WebSocketParams, dict[str, Any]]):
         Returns:
             Dict with sent/received frames and connection info.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
 
         js = f"""
             (() => {{
@@ -94,7 +95,7 @@ class WebSocketInterceptAction(BaseAction[WebSocketParams, dict[str, Any]]):
                 window.WebSocket.CLOSED = origWS.CLOSED;
 
                 return new Promise((resolve) => {{
-                    setTimeout(() => resolve(frames), {self.params.duration_ms});
+                    setTimeout(() => resolve(frames), {json.dumps(self.params.duration_ms)});
                 }});
             }})()
         """

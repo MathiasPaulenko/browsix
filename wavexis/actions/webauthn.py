@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -79,13 +80,13 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "remove-authenticator":
             if not self.params.authenticator_id:
-                raise ValueError("authenticator_id is required for remove-authenticator")
+                raise ActionError("authenticator_id is required for remove-authenticator")
             await backend.webauthn_remove_authenticator(self.params.authenticator_id)
             return None
 
         if action == "add-credential":
             if not self.params.authenticator_id or not self.params.credential:
-                raise ValueError("authenticator_id and credential are required for add-credential")
+                raise ActionError("authenticator_id and credential are required for add-credential")
             await backend.webauthn_add_credential(
                 self.params.authenticator_id, self.params.credential
             )
@@ -93,7 +94,7 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "get-credentials":
             if not self.params.authenticator_id:
-                raise ValueError("authenticator_id is required for get-credentials")
+                raise ActionError("authenticator_id is required for get-credentials")
             return await backend.webauthn_get_credentials(self.params.authenticator_id)
 
         if action == "enable":
@@ -106,7 +107,7 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "get-credential":
             if not self.params.authenticator_id or not self.params.credential_id:
-                raise ValueError(
+                raise ActionError(
                     "authenticator_id and credential_id are required for get-credential"
                 )
             return await backend.webauthn_get_credential(
@@ -115,7 +116,7 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "remove-credential":
             if not self.params.authenticator_id or not self.params.credential_id:
-                raise ValueError(
+                raise ActionError(
                     "authenticator_id and credential_id are required for remove-credential"
                 )
             await backend.webauthn_remove_credential(
@@ -125,13 +126,13 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "clear-credentials":
             if not self.params.authenticator_id:
-                raise ValueError("authenticator_id is required for clear-credentials")
+                raise ActionError("authenticator_id is required for clear-credentials")
             await backend.webauthn_clear_credentials(self.params.authenticator_id)
             return None
 
         if action == "set-user-verified":
             if not self.params.authenticator_id:
-                raise ValueError("authenticator_id is required for set-user-verified")
+                raise ActionError("authenticator_id is required for set-user-verified")
             await backend.webauthn_set_user_verified(
                 self.params.authenticator_id, self.params.is_user_verified
             )
@@ -139,7 +140,7 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "set-automatic-presence-simulation":
             if not self.params.authenticator_id:
-                raise ValueError(
+                raise ActionError(
                     "authenticator_id is required for set-automatic-presence-simulation"
                 )
             await backend.webauthn_set_automatic_presence_simulation(
@@ -149,7 +150,7 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "set-credential-properties":
             if not self.params.authenticator_id or not self.params.credential_id:
-                raise ValueError(
+                raise ActionError(
                     "authenticator_id and credential_id are required for set-credential-properties"
                 )
             await backend.webauthn_set_credential_properties(
@@ -162,7 +163,7 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
 
         if action == "set-response-override-bits":
             if not self.params.authenticator_id:
-                raise ValueError("authenticator_id is required for set-response-override-bits")
+                raise ActionError("authenticator_id is required for set-response-override-bits")
             await backend.webauthn_set_response_override_bits(
                 self.params.authenticator_id,
                 self.params.is_bogus_signature,
@@ -171,4 +172,4 @@ class WebAuthnAction(BaseAction[WebAuthnParams, Any]):
             )
             return None
 
-        raise ValueError(f"Unknown WebAuthn action: {action}")
+        raise ActionError(f"Unknown WebAuthn action: {action}")

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import contextlib
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import WavexisError
 
 THRESHOLDS: dict[str, dict[str, float]] = {
     "lcp_ms": {"good": 2500, "poor": 4000},
@@ -76,7 +77,8 @@ class CoreWebVitalsAction(BaseAction[CoreWebVitalsParams, dict[str, Any]]):
         Returns:
             Dict with metrics, ratings, score, and budget check results.
         """
-        await backend.navigate(self.params.url, self.params.wait)
+        if self.params.url:
+            await backend.navigate(self.params.url, self.params.wait)
         return await self._collect_cwv(backend)
 
     async def _collect_cwv(self, backend: AbstractBackend) -> dict[str, Any]:
@@ -113,16 +115,20 @@ class CoreWebVitalsAction(BaseAction[CoreWebVitalsParams, dict[str, Any]]):
                             tbt += e.duration;
                         }}
                     }}).observe({{type: 'longtask', buffered: true}});
-                    setTimeout(() => resolve({{lcp, cls, inp, tbt}}), {self.params.observe_ms});
+                    const _ms = {json.dumps(self.params.observe_ms)};
+                    setTimeout(() => resolve({{lcp, cls, inp, tbt}}), _ms);
                 }});
             }})()
         """
 
         cwv: dict[str, Any] = {}
-        with contextlib.suppress(Exception):
+        try:
             cwv_result = await backend.eval(cwv_js, await_promise=True)
             if isinstance(cwv_result, dict):
                 cwv = cwv_result
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
 
         timing_js = """
             (() => {
@@ -139,10 +145,13 @@ class CoreWebVitalsAction(BaseAction[CoreWebVitalsParams, dict[str, Any]]):
             })()
         """
         timing: dict[str, Any] = {}
-        with contextlib.suppress(Exception):
+        try:
             timing_result = await backend.eval(timing_js, await_promise=False)
             if isinstance(timing_result, dict):
                 timing = timing_result
+        except Exception as exc:
+            if isinstance(exc, WavexisError):
+                raise
 
         lcp = cwv.get("lcp", 0)
         cls = cwv.get("cls", 0)

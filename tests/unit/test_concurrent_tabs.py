@@ -113,6 +113,27 @@ class TestBatchTabsMode:
             assert call_count == 2
 
     @pytest.mark.asyncio
+    async def test_batch_processes_returns_exceptions_without_aborting(self) -> None:
+        """One failing URL should be returned as an exception, not abort the batch."""
+        from wavexis.cli._workflow import _batch_processes
+
+        urls = ["https://ok.com", "https://bad.com"]
+
+        async def mixed_single(url, action, out_dir, expression):
+            if "bad" in url:
+                raise ValueError("intentional")
+            return f"result:{url}"
+
+        with patch("wavexis.cli._workflow._batch_single", side_effect=mixed_single):
+            results = await _batch_processes(
+                urls, "screenshot", MagicMock(), "document.title", 2
+            )
+
+        assert len(results) == 2
+        assert results[0] == "result:https://ok.com"
+        assert isinstance(results[1], ValueError)
+
+    @pytest.mark.asyncio
     async def test_batch_tabs_semaphore_limits_concurrency(self) -> None:
         """batch --mode tabs with semaphore should limit concurrent tabs."""
         from wavexis.cli._workflow import _batch_tabs
@@ -141,6 +162,32 @@ class TestBatchTabsMode:
             await _batch_tabs(urls, "screenshot", MagicMock(), "document.title", 3)
 
             assert max_concurrent <= 3
+
+    @pytest.mark.asyncio
+    async def test_batch_tabs_returns_exceptions_without_aborting(self) -> None:
+        """One failing URL should be returned as an exception, not abort the batch."""
+        from wavexis.cli._workflow import _batch_tabs
+
+        urls = ["https://ok.com", "https://bad.com"]
+        fake_backend = FakeBackend()
+
+        async def mixed_single(url, action, out_dir, expression, backend):
+            if "bad" in url:
+                raise ValueError("intentional")
+            return b"ok"
+
+        with (
+            patch("wavexis.cli._workflow._get_backend", return_value=fake_backend),
+            patch("wavexis.cli._workflow._browser_options", return_value=MagicMock()),
+            patch("wavexis.cli._workflow._batch_single_on", side_effect=mixed_single),
+        ):
+            results = await _batch_tabs(
+                urls, "screenshot", MagicMock(), "document.title", 2
+            )
+
+        assert len(results) == 2
+        assert results[0] == b"ok"
+        assert isinstance(results[1], ValueError)
 
 
 class TestMultiParallel:

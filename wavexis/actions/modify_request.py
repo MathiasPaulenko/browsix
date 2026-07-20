@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -46,6 +47,8 @@ class ModifyRequestAction(BaseAction[ModifyRequestParams, dict[str, Any]]):
         Returns:
             Dict with status indicating interception was set up.
         """
+        if not self.params.pattern:
+            raise ActionError("pattern is required for modify_request action")
         await backend.modify_request(self.params.pattern, self.params.modifications)
         if self.params.url:
             await backend.navigate(self.params.url, self.params.wait)

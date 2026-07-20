@@ -24,7 +24,8 @@ class PDFAction(BaseAction[PDFParams, bytes]):
             PDF bytes.
         """
         params = self.params
-        await backend.navigate(params.url, params.wait)
+        if params.url:
+            await backend.navigate(params.url, params.wait)
 
         if params.js:
             await backend.eval(params.js, await_promise=True)

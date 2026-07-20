@@ -14,6 +14,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "integration: tests against a real Chrome browser")
     config.addinivalue_line("markers", "slow: tests that take more than 5 seconds")
     config.addinivalue_line("markers", "chrome: tests that require Chrome specifically")
+    config.addinivalue_line("markers", "e2e: end-to-end CLI tests against a real browser")
 
 
 class MockBackend:

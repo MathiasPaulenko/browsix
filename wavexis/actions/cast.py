@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -53,7 +54,7 @@ class CastAction(BaseAction[CastParams, Any]):
 
         if action == "start-tab":
             if not self.params.sink_name:
-                raise ValueError("sink_name is required for start-tab action")
+                raise ActionError("sink_name is required for start-tab action")
             await backend.cast_start_tab(self.params.sink_name)
             return None
 
@@ -71,26 +72,26 @@ class CastAction(BaseAction[CastParams, Any]):
 
         if action == "set-sink":
             if not self.params.sink_name:
-                raise ValueError("sink_name is required for set-sink action")
+                raise ActionError("sink_name is required for set-sink action")
             await backend.cast_set_sink_to_use(self.params.sink_name)
             return None
 
         if action == "start-desktop-mirroring":
             if not self.params.sink_name:
-                raise ValueError("sink_name is required for start-desktop-mirroring action")
+                raise ActionError("sink_name is required for start-desktop-mirroring action")
             await backend.cast_start_desktop_mirroring(self.params.sink_name)
             return None
 
         if action == "start-tab-mirroring":
             if not self.params.sink_name:
-                raise ValueError("sink_name is required for start-tab-mirroring action")
+                raise ActionError("sink_name is required for start-tab-mirroring action")
             await backend.cast_start_tab_mirroring(self.params.sink_name)
             return None
 
         if action == "stop-casting":
             if not self.params.sink_name:
-                raise ValueError("sink_name is required for stop-casting action")
+                raise ActionError("sink_name is required for stop-casting action")
             await backend.cast_stop_casting(self.params.sink_name)
             return None
 
-        raise ValueError(f"Unknown Cast action: {action}")
+        raise ActionError(f"Unknown Cast action: {action}")

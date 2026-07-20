@@ -8,6 +8,7 @@ from typing import Any
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -68,7 +69,9 @@ class CombinedTraceAction(BaseAction[CombinedTraceParams, dict[str, Any]]):
             await asyncio.sleep(self.params.duration_ms / 1000)
             return await backend.stop_combined_trace(trace_id)
 
-        if self.params.action == "stop" and self.params.trace_id:
+        if self.params.action == "stop":
+            if not self.params.trace_id:
+                raise ActionError("trace_id is required for stop action")
             return await backend.stop_combined_trace(self.params.trace_id)
 
-        return {"error": f"Unknown action: {self.params.action}"}
+        raise ActionError(f"Unknown combined_trace action: {self.params.action}")
