@@ -89,6 +89,74 @@ class CDPBackend(AbstractBackend):
             raise SessionNotInitializedError("Session not initialized. Call launch() first.")
         return self._session
 
+    @staticmethod
+    async def _send_cdp(session: "CDPSession", method: str, params: dict[str, Any] | None = None) -> Any:
+        """Send a CDP command and translate "method not found" / "not allowed"
+        errors into a friendly :class:`WavexisError`.
+
+        Chrome removes CDP domains between versions (e.g. ``Tethering``,
+        ``WebMcp``, ``HeadlessExperimental``, ``Extensions``,
+        ``BluetoothEmulation``, ``SmartCardEmulation``,
+        ``Browser.getPreference``, ``Security.getVisibleSecurityState``).
+        Without this wrapper the user sees a raw
+        ``CommandError: [-32601] '<Domain.method>' wasn't found`` traceback;
+        with it they get a one-line message that explains the cause.
+
+        Args:
+            session: The active CDPSession.
+            method: The CDP method name (e.g. ``"Tethering.bind"``).
+            params: Optional command parameters.
+
+        Returns:
+            The CDP response result dict.
+
+        Raises:
+            WavexisError: If the CDP response indicates the method or
+                domain is not supported by the current browser.
+        """
+        from cdpwave.exceptions import CommandError, CommandTimeoutError
+
+        try:
+            return await session.send(method, params or {})
+        except CommandError as e:
+            msg = str(e)
+            # -32601: "Method 'X' wasn't found" — domain/method removed.
+            # -32000: "Not allowed" / "only supported on the browser target".
+            if e.code == -32601 or "wasn't found" in msg or "not found" in msg:
+                raise WavexisError(
+                    f"CDP method '{method}' is not supported by the current "
+                    f"Chrome/Edge version. This domain was removed or never "
+                    f"exposed by this browser. (CDP error: {msg})"
+                ) from e
+            raise
+        except CommandTimeoutError as e:
+            # Some removed CDP domains (e.g. HeadlessExperimental) don't
+            # return -32601 — Chrome simply never responds, causing a
+            # timeout. Treat that as "not supported" too.
+            raise WavexisError(
+                f"CDP method '{method}' did not respond within the timeout. "
+                f"This domain was likely removed by the current Chrome/Edge "
+                f"version and the browser silently drops the command. "
+                f"(CDP error: {e})"
+            ) from e
+
+    def _require_client(self) -> CDPClient:
+        """Return the browser-level CDPClient or raise if not initialized.
+
+        Use this for commands that must be sent to the browser target
+        (e.g. ``Target.getBrowserContexts``, ``SystemInfo.getInfo``)
+        rather than to a page session.
+
+        Returns:
+            The active CDPClient instance.
+
+        Raises:
+            SessionNotInitializedError: If launch() has not been called.
+        """
+        if self._client is None:
+            raise SessionNotInitializedError("Backend not launched. Call launch() first.")
+        return self._client
+
     async def launch(self, options: BrowserOptions) -> None:
         """Launch Chrome and create a new page session.
 
@@ -132,7 +200,32 @@ class CDPBackend(AbstractBackend):
 
         client = self._client
         try:
-            self._session = await client.new_page()
+            # Bug #28: when connecting to an already-running browser via
+            # ``--browser-url`` or ``--remote-url``, ``client.new_page()``
+            # creates a brand-new tab. The user expects commands like
+            # ``navigate`` to operate on the tab they already have open.
+            # We instead attach to the first existing page target (or
+            # fall back to creating a new one if the browser has none).
+            if options.browser_url or options.remote_url:
+                try:
+                    pages = await client.get_pages()
+                except Exception:
+                    pages = []
+                if pages:
+                    # Prefer a non-devtools, non-blank page if available.
+                    non_blank = [
+                        p for p in pages
+                        if p.url and not p.url.startswith("devtools://")
+                        and p.url != "about:blank"
+                    ]
+                    target = non_blank[0] if non_blank else pages[0]
+                    # TargetInfo uses ``target_id``, not ``id``.
+                    target_id = getattr(target, "target_id", None) or getattr(target, "id", None)
+                    self._session = await client.connect_to_page(target_id)
+                else:
+                    self._session = await client.new_page()
+            else:
+                self._session = await client.new_page()
 
             if options.user_agent:
                 await self._session.emulation.set_user_agent_override(user_agent=options.user_agent)
@@ -494,12 +587,19 @@ class CDPBackend(AbstractBackend):
         return dict(await session.page.get_resource_content(frame_id, url))
 
     async def page_set_download_behavior(self, behavior: str, download_path: str = "") -> None:
-        """Set page download behavior (allow/deny and path)."""
+        """Set page download behavior (allow/deny and path).
+
+        Bug #25: previously this built a ``{"downloadPath": ...}`` dict and
+        unpacked it into ``session.page.set_download_behavior(**params)``,
+        but cdpwave's wrapper expects the snake_case ``download_path``
+        keyword argument. The camelCase key caused
+        ``TypeError: ... got an unexpected keyword argument 'downloadPath'``.
+        """
         session = self._require_session()
-        params: dict[str, Any] = {"behavior": behavior}
-        if download_path:
-            params["downloadPath"] = download_path
-        await session.page.set_download_behavior(**params)
+        await session.page.set_download_behavior(
+            behavior=behavior,
+            download_path=download_path or None,
+        )
 
     async def page_capture_snapshot(self, format: str = "mhtml") -> str:
         """Capture a snapshot of the page as MHTML or text."""
@@ -1621,56 +1721,14 @@ class CDPBackend(AbstractBackend):
 
     @staticmethod
     def _find_by_text_js(query: str) -> str:
-        """Build JS that finds elements by natural language text query."""
-        escaped = json.dumps(query)
-        return (
-            f"(function(){{"
-            f"var q={escaped}.toLowerCase().trim();"
-            f"var words=q.split(/\\s+/);"
-            f"var els=Array.from(document.querySelectorAll('*'));"
-            f"var results=[];"
-            f"for(var i=0;i<els.length;i++){{"
-            f"var el=els[i];"
-            f"var rect=el.getBoundingClientRect();"
-            f"if(rect.width===0||rect.height===0)continue;"
-            f"var texts=["
-            f"(el.textContent||'').trim(),"
-            f"el.getAttribute('aria-label')||'',"
-            f"el.getAttribute('placeholder')||'',"
-            f"el.getAttribute('title')||'',"
-            f"el.getAttribute('alt')||'',"
-            f"el.getAttribute('value')||''"
-            f"].map(function(t){{return t.toLowerCase()}});"
-            f"var bestScore=0;"
-            f"for(var j=0;j<texts.length;j++){{"
-            f"var t=texts[j];if(!t)continue;"
-            f"if(t===q){{bestScore=100;break;}}"
-            f"if(t.indexOf(q)>=0){{bestScore=Math.max(bestScore,80);}}"
-            f"if(q.indexOf(t)>=0&&t.length>3){{bestScore=Math.max(bestScore,60);}}"
-            f"var matched=0;"
-            f"for(var k=0;k<words.length;k++){{"
-            f"if(t.indexOf(words[k])>=0)matched++;"
-            f"}}"
-            f"if(matched>0)bestScore=Math.max(bestScore,"
-            f"Math.round(matched/words.length*50));"
-            f"}}"
-            f"if(bestScore>0){{"
-            f"var tag=el.tagName.toLowerCase();"
-            f"var sel=tag;"
-            f"if(el.id)sel='#'+CSS.escape(el.id);"
-            f"else if(el.getAttribute('data-testid'))"
-            f"sel='[data-testid=\"'+el.getAttribute('data-testid')+'\"]';"
-            f"else if(el.getAttribute('aria-label'))"
-            f"sel=tag+'[aria-label=\"'+el.getAttribute('aria-label')+'\"]';"
-            f"else if(el.classList.length>0)"
-            f"sel=tag+'.'+Array.from(el.classList).join('.');"
-            f"results.push({{score:bestScore,sel:sel}});"
-            f"}}"
-            f"}}"
-            f"results.sort(function(a,b){{return b.score-a.score}});"
-            f"return JSON.stringify(results.map(function(r){{return r.sel}}));"
-            f"}})()"
-        )
+        """Build JS that finds elements by natural language text query.
+
+        Delegates to the shared :func:`build_find_by_text_js` helper so the
+        CDP and BiDi backends use identical matching logic.
+        """
+        from wavexis.backend.mixins.dom import build_find_by_text_js
+
+        return build_find_by_text_js(query)
 
     async def find_by_text(self, query: str, all: bool = False) -> list[str] | str:
         """Find elements by natural language text query.
@@ -1936,8 +1994,12 @@ class CDPBackend(AbstractBackend):
         Returns:
             The browser context ID string.
         """
-        session = self._require_session()
-        result = await session.target.create_browser_context()
+        client = self._require_client()
+        # Target.createBrowserContext is only supported on the browser target,
+        # not on a page session (bug #11/#12: previously this called
+        # session.target.create_browser_context() which raised
+        # "[-32000] Not allowed").
+        result = await client.send("Target.createBrowserContext", {})
         return str(result.get("browserContextId", ""))
 
     async def list_contexts(self) -> list[dict[str, Any]]:
@@ -1946,8 +2008,9 @@ class CDPBackend(AbstractBackend):
         Returns:
             List of context info dicts.
         """
-        session = self._require_session()
-        result = await session.target.get_browser_contexts()
+        client = self._require_client()
+        # Target.getBrowserContexts is only supported on the browser target.
+        result = await client.send("Target.getBrowserContexts", {})
         contexts = result.get("browserContextIds", [])
         return [{"contextId": ctx} for ctx in contexts]
 
@@ -1957,8 +2020,10 @@ class CDPBackend(AbstractBackend):
         Args:
             context_id: The browser context ID to close.
         """
-        session = self._require_session()
-        await session.target.dispose_browser_context(context_id)
+        client = self._require_client()
+        await client.send(
+            "Target.disposeBrowserContext", {"browserContextId": context_id}
+        )
 
     async def new_user_context(self) -> str:
         """Create a new user context.
@@ -2347,14 +2412,30 @@ class CDPBackend(AbstractBackend):
 
         Returns:
             The evaluation result value.
+
+        Bug #26: previously the JS wrapper was
+        ``(function(){<expr>}).call(f.contentDocument)`` which treats
+        ``<expr>`` as a *statement* body, so e.g. ``document.title``
+        evaluated to ``undefined`` and the CLI printed nothing. An earlier
+        fix JSON-encoded the expression, which turned it into a string
+        literal and made ``return ("document.title")`` return the literal
+        string instead of the title. We now inject the expression as raw
+        code (it is the user's responsibility to pass a valid JS
+        expression) and serialize the result as JSON on the JS side so
+        strings/objects survive the CDP ``RemoteObject`` round-trip.
         """
         session = self._require_session()
         escaped_iframe = json.dumps(iframe_selector)
-        escaped_expr = json.dumps(expression)
+        # NOTE: ``expression`` is injected as raw JavaScript source, NOT
+        # as a JSON string. JSON-encoding it would turn
+        # ``document.title`` into the literal string "document.title".
         js = (
             f"(function(){{var f=document.querySelector({escaped_iframe});"
             f"if(!f||!f.contentDocument)return null;"
-            f"return (function(){{{escaped_expr}}}).call(f.contentDocument);}})()"
+            f"try{{var v=(function(){{return ({expression});}}).call(f.contentDocument);"
+            f"if(v===undefined||v===null)return null;"
+            f"return (typeof v==='object')?JSON.stringify(v):String(v);}}"
+            f"catch(e){{return 'ERROR: '+e.message;}}}})()"
         )
         result = await session.runtime.evaluate(js, await_promise=await_promise)
         return result.get("result", {}).get("value")
@@ -3234,6 +3315,12 @@ class CDPBackend(AbstractBackend):
                     await session.network.enable()
                 elif evt_type == "console":
                     await session.runtime.enable()
+                elif evt_type in ("dialog", "navigation"):
+                    # Bug #27: Page events (Page.javascriptDialogOpening,
+                    # Page.frameNavigated) are only delivered after
+                    # Page.enable() is called. Without this, the
+                    # subscription silently captured nothing.
+                    await session.page.enable()
 
         self._subscriptions[sub_id] = handlers
         return sub_id
@@ -3331,6 +3418,14 @@ class CDPBackend(AbstractBackend):
 
         Returns:
             Downloaded file bytes, or empty bytes if no file appears.
+
+        Bug #13: previously the first file in the download directory was
+        returned immediately. Chrome writes a ``.crdownload`` temp file
+        while the download is in progress, which can be 0 bytes for a
+        moment; the old code would pick that up and return 0 bytes. We
+        now skip ``.crdownload`` files when looking for the final file,
+        and wait for the in-progress temp file to be renamed to the
+        final name (which signals completion) before reading.
         """
         session = self._require_session()
         import tempfile
@@ -3345,10 +3440,18 @@ class CDPBackend(AbstractBackend):
             deadline = time.monotonic() + timeout
             found: Path | None = None
             while time.monotonic() < deadline:
-                def _list_files() -> list[Path]:
-                    return [p for p in download_path.iterdir() if p.is_file()]
+                def _list_completed_files() -> list[Path]:
+                    # Skip Chrome's in-progress temp files (.crdownload)
+                    # and any 0-byte files that haven't been written yet.
+                    return [
+                        p
+                        for p in download_path.iterdir()
+                        if p.is_file()
+                        and not p.name.endswith(".crdownload")
+                        and p.stat().st_size > 0
+                    ]
 
-                candidates = await asyncio.to_thread(_list_files)
+                candidates = await asyncio.to_thread(_list_completed_files)
                 if candidates:
                     found = candidates[0]
                     break
@@ -5301,10 +5404,53 @@ class CDPBackend(AbstractBackend):
         await session.send("Security.enable", {})
 
     async def security_get_visible_security_state(self) -> dict[str, Any]:
-        """Get the visible security state of the current page."""
+        """Get the visible security state of the current page.
+
+        Bug #16: ``Security.getVisibleSecurityState`` was removed from CDP
+        (Chrome 137+, 2025). The supported replacement is to subscribe to
+        ``Security.securityStateChanged`` events, but for a one-shot query
+        we derive the visible security state from the current navigation
+        entry and the page URL: HTTPS pages are reported as ``secure``,
+        HTTP pages as ``insecure``, and certificate/SSL errors are surfaced
+        via ``Security.certificateError`` events (handled separately).
+        """
         session = self._require_session()
-        result = await session.send("Security.getVisibleSecurityState", {})
-        return dict(result) if result else {}
+        # Enable Security so any future state-change events fire, and so
+        # the call mirrors the old behavior as closely as possible.
+        with contextlib.suppress(Exception):
+            await session.send("Security.enable", {})
+        # Pull the current URL from the navigation history.
+        url = self._current_url
+        if not url:
+            try:
+                history = await session.send("Page.getNavigationHistory", {})
+                entries = history.get("entries", [])
+                idx = history.get("currentIndex", 0)
+                if entries and 0 <= idx < len(entries):
+                    url = entries[idx].get("url", "")
+            except Exception:
+                url = ""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url) if url else None
+        scheme = parsed.scheme if parsed else ""
+        if scheme == "https":
+            security_state = "secure"
+            scheme_cryptographic = True
+        elif scheme == "http":
+            security_state = "insecure"
+            scheme_cryptographic = False
+        elif scheme in ("file", "data", "about", "blob"):
+            security_state = "neutral"
+            scheme_cryptographic = False
+        else:
+            security_state = "unknown"
+            scheme_cryptographic = False
+        return {
+            "securityState": security_state,
+            "schemeIsCryptographic": scheme_cryptographic,
+            "url": url,
+        }
 
     async def security_handle_certificate_error(self, event_id: int, action: str) -> None:
         """Handle a certificate error event."""
@@ -5511,15 +5657,26 @@ class CDPBackend(AbstractBackend):
 
         Returns:
             The stored value as a string, or empty string if not found.
+
+        Bug #14: previously this used ``DOMStorage.getDOMStorageItems`` with
+        a ``storageId`` built from the page's security origin. On Chrome 150
+        that call intermittently raised
+        ``[-32000] Frame not found for the given storage id`` because the
+        DOMStorage domain resolves the storage via the frame tree and the
+        frame lookup can fail depending on timing. Reading via
+        ``Runtime.evaluate`` against ``window.localStorage`` /
+        ``window.sessionStorage`` is more reliable and avoids the frame
+        resolution path entirely.
         """
         session = self._require_session()
-        await session.send("DOMStorage.enable", {})
-        storage_id = await self._get_storage_id(storage_type)
-        result = await session.send("DOMStorage.getDOMStorageItems", {"storageId": storage_id})
-        for entry in result.get("entries", []):
-            if len(entry) >= 2 and entry[0] == key:
-                return str(entry[1])
-        return ""
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{return {storage_obj}.getItem({json.dumps(key)})||''}}"
+            f"catch(e){{return ''}}}})()"
+        )
+        result = await session.runtime.evaluate(js, await_promise=False)
+        value = result.get("result", {}).get("value")
+        return str(value) if value is not None else ""
 
     async def storage_set(self, key: str, value: str, storage_type: str = "local") -> None:
         """Set a value in DOM storage (local or session).
@@ -5530,12 +5687,15 @@ class CDPBackend(AbstractBackend):
             storage_type: "local" or "session".
         """
         session = self._require_session()
-        await session.send("DOMStorage.enable", {})
-        storage_id = await self._get_storage_id(storage_type)
-        await session.send(
-            "DOMStorage.setDOMStorageItem",
-            {"storageId": storage_id, "key": key, "value": value},
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{{storage_obj}.setItem({json.dumps(key)},"
+            f"{json.dumps(value)});return 'ok'}}catch(e){{return e.message}}}})()"
         )
+        result = await session.runtime.evaluate(js, await_promise=False)
+        msg = result.get("result", {}).get("value")
+        if msg and msg != "ok":
+            raise WavexisError(f"storage_set failed: {msg}")
 
     async def storage_clear(self, storage_type: str = "local") -> None:
         """Clear all entries in DOM storage.
@@ -5544,12 +5704,15 @@ class CDPBackend(AbstractBackend):
             storage_type: "local" or "session".
         """
         session = self._require_session()
-        origin = self._get_origin()
-        storage_types = "local_storage" if storage_type == "local" else "session_storage"
-        await session.storage.clear_data_for_origin(
-            origin=origin,
-            storage_types=storage_types,
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{{storage_obj}.clear();return 'ok'}}"
+            f"catch(e){{return e.message}}}})()"
         )
+        result = await session.runtime.evaluate(js, await_promise=False)
+        msg = result.get("result", {}).get("value")
+        if msg and msg != "ok":
+            raise WavexisError(f"storage_clear failed: {msg}")
 
     async def storage_list(self, storage_type: str = "local") -> dict[str, str]:
         """List all key-value pairs in DOM storage.
@@ -5561,14 +5724,24 @@ class CDPBackend(AbstractBackend):
             Dict mapping keys to values.
         """
         session = self._require_session()
-        await session.send("DOMStorage.enable", {})
-        storage_id = await self._get_storage_id(storage_type)
-        result = await session.send("DOMStorage.getDOMStorageItems", {"storageId": storage_id})
-        items: dict[str, str] = {}
-        for entry in result.get("entries", []):
-            if len(entry) >= 2:
-                items[str(entry[0])] = str(entry[1])
-        return items
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{"
+            f"var out={{}};"
+            f"for(var i=0;i<{storage_obj}.length;i++){{"
+            f"var k={storage_obj}.key(i);out[k]={storage_obj}.getItem(k);}}"
+            f"return JSON.stringify(out);}}"
+            f"catch(e){{return '{{}}'}}}})()"
+        )
+        result = await session.runtime.evaluate(js, await_promise=False)
+        raw = result.get("result", {}).get("value") or "{}"
+        try:
+            loaded = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        if not isinstance(loaded, dict):
+            return {}
+        return {str(k): str(v) for k, v in loaded.items()}
 
     async def cache_storage_list(self) -> list[str]:
         """List all Cache Storage cache names.
@@ -6521,10 +6694,15 @@ class CDPBackend(AbstractBackend):
     # ── Bluetooth (experimental) ───────────────────────────
 
     async def bluetooth_emulate(self, name: str, address: str = "00:00:00:00:00:01") -> None:
-        """Emulate a Bluetooth Low Energy device via CDP BluetoothEmulation domain."""
+        """Emulate a Bluetooth Low Energy device via CDP BluetoothEmulation domain.
+
+        Bug #23: uses _send_cdp to translate method-not-found/timeout errors
+        into a friendly WavexisError.
+        """
         session = self._require_session()
-        await session.send("BluetoothEmulation.enable", {})
-        await session.send(
+        await self._send_cdp(session, "BluetoothEmulation.enable", {})
+        await self._send_cdp(
+            session,
             "BluetoothEmulation.simulatePreconnected",
             {"name": name, "address": address},
         )
@@ -6532,7 +6710,7 @@ class CDPBackend(AbstractBackend):
     async def bluetooth_stop(self) -> None:
         """Stop Bluetooth emulation via CDP BluetoothEmulation domain."""
         session = self._require_session()
-        await session.send("BluetoothEmulation.disable", {})
+        await self._send_cdp(session, "BluetoothEmulation.disable", {})
 
     # ── WebExtensions ──────────────────────────────────────
 
@@ -6589,7 +6767,7 @@ class CDPBackend(AbstractBackend):
             List of extension dicts (id, name, version, enabled).
         """
         session = self._require_session()
-        result = await session.send("Extensions.getInfo", {})
+        result = await self._send_cdp(session, "Extensions.getInfo", {})
         extensions = result.get("extensions", [])
         return [
             {
@@ -6613,9 +6791,8 @@ class CDPBackend(AbstractBackend):
             The preference value.
         """
         session = self._require_session()
-        result = await session.send(
-            "Browser.getPreference",
-            {"name": key},
+        result = await self._send_cdp(
+            session, "Browser.getPreference", {"name": key}
         )
         return result.get("value")
 
@@ -6627,9 +6804,8 @@ class CDPBackend(AbstractBackend):
             value: The value to set.
         """
         session = self._require_session()
-        await session.send(
-            "Browser.setPreference",
-            {"name": key, "value": value},
+        await self._send_cdp(
+            session, "Browser.setPreference", {"name": key, "value": value}
         )
 
     # ── Tethering ─────────────────────────────────────────
@@ -6641,7 +6817,7 @@ class CDPBackend(AbstractBackend):
             port: The port number to bind.
         """
         session = self._require_session()
-        await session.send("Tethering.bind", {"port": port})
+        await self._send_cdp(session, "Tethering.bind", {"port": port})
 
     async def tethering_unbind(self, port: int) -> None:
         """Unbind a port from tethering.
@@ -6650,19 +6826,19 @@ class CDPBackend(AbstractBackend):
             port: The port number to unbind.
         """
         session = self._require_session()
-        await session.send("Tethering.unbind", {"port": port})
+        await self._send_cdp(session, "Tethering.unbind", {"port": port})
 
     # ── WebMcp ────────────────────────────────────────────
 
     async def web_mcp_enable(self) -> None:
         """Enable the WebMcp domain."""
         session = self._require_session()
-        await session.send("WebMcp.enable", {})
+        await self._send_cdp(session, "WebMcp.enable", {})
 
     async def web_mcp_disable(self) -> None:
         """Disable the WebMcp domain."""
         session = self._require_session()
-        await session.send("WebMcp.disable", {})
+        await self._send_cdp(session, "WebMcp.disable", {})
 
     # ── DeviceAccess ────────────────────────────────────────
 
@@ -6722,11 +6898,15 @@ class CDPBackend(AbstractBackend):
         include_blended_background_colors: bool = False,
         include_text_color_opacity: bool = False,
     ) -> dict[str, Any]:
-        """Capture a DOM snapshot of the current page."""
+        """Capture a DOM snapshot of the current page.
+
+        Bug #7: ``DOMSnapshot.captureSnapshot`` requires ``computedStyles``
+        to be present as an array (even empty). Previously we omitted the
+        key when ``computed_styles`` was None, which caused
+        ``[-32602] Invalid parameters``. We now default to an empty list.
+        """
         session = self._require_session()
-        params: dict[str, Any] = {}
-        if computed_styles is not None:
-            params["computedStyles"] = computed_styles
+        params: dict[str, Any] = {"computedStyles": computed_styles or []}
         if include_paint_order:
             params["includePaintOrder"] = True
         if include_dom_rects:
@@ -6756,11 +6936,15 @@ class CDPBackend(AbstractBackend):
         include_blended_background_colors: bool = False,
         include_text_color_opacity: bool = False,
     ) -> dict[str, Any]:
-        """Get a DOM snapshot of the current page."""
+        """Get a DOM snapshot of the current page.
+
+        Bug #8: ``DOMSnapshot.getSnapshot`` requires ``computedStyles``
+        as an array (even empty). Previously we omitted the key when
+        ``computed_styles`` was None, causing
+        ``[-32602] Invalid parameters``. We now default to an empty list.
+        """
         session = self._require_session()
-        params: dict[str, Any] = {}
-        if computed_styles is not None:
-            params["computedStyles"] = computed_styles
+        params: dict[str, Any] = {"computedStyles": computed_styles or []}
         if include_paint_order:
             params["includePaintOrder"] = True
         if include_dom_rects:
@@ -7069,18 +7253,18 @@ class CDPBackend(AbstractBackend):
             params["noDisplayUpdates"] = True
         if screenshot is not None:
             params["screenshot"] = screenshot
-        result = await session.send("HeadlessExperimental.beginFrame", params)
+        result = await self._send_cdp(session, "HeadlessExperimental.beginFrame", params)
         return dict(result) if result else {}
 
     async def headless_experimental_disable(self) -> None:
         """Disable the HeadlessExperimental domain."""
         session = self._require_session()
-        await session.send("HeadlessExperimental.disable", {})
+        await self._send_cdp(session, "HeadlessExperimental.disable", {})
 
     async def headless_experimental_enable(self) -> None:
         """Enable the HeadlessExperimental domain."""
         session = self._require_session()
-        await session.send("HeadlessExperimental.enable", {})
+        await self._send_cdp(session, "HeadlessExperimental.enable", {})
 
     # ── Inspector ───────────────────────────────────────────
 
@@ -7986,14 +8170,17 @@ class CDPBackend(AbstractBackend):
     # ── SmartCardEmulation ────────────────────────────────
 
     async def smart_card_enable(self) -> None:
-        """Enable the SmartCardEmulation domain."""
+        """Enable the SmartCardEmulation domain.
+
+        Bug #24: uses _send_cdp to translate method-not-found/timeout errors.
+        """
         session = self._require_session()
-        await session.send("SmartCardEmulation.enable", {})
+        await self._send_cdp(session, "SmartCardEmulation.enable", {})
 
     async def smart_card_disable(self) -> None:
         """Disable the SmartCardEmulation domain."""
         session = self._require_session()
-        await session.send("SmartCardEmulation.disable", {})
+        await self._send_cdp(session, "SmartCardEmulation.disable", {})
 
     async def smart_card_report_error(self, request_id: str, error: str) -> None:
         """Report an error for a pending smart card request.
@@ -8167,14 +8354,21 @@ class CDPBackend(AbstractBackend):
     # ── System Info ───────────────────────────────────────
 
     async def system_info_get_info(self) -> dict[str, Any]:
-        """Get system info (OS, GPU, model, etc.) via CDP."""
-        session = self._require_session()
-        return dict(await session.send("SystemInfo.getInfo", {}))
+        """Get system info (OS, GPU, model, etc.) via CDP.
+
+        Bug #18: ``SystemInfo.getInfo`` is only supported on the browser
+        target, not on a page session. Previously this called
+        ``session.send(...)`` which raised
+        ``[-32000] SystemInfo.getInfo is only supported on the browser target``.
+        We now send the command via the browser-level CDPClient.
+        """
+        client = self._require_client()
+        return dict(await client.send("SystemInfo.getInfo", {}))
 
     async def system_info_get_process_info(self) -> list[dict[str, Any]]:
         """Get process info for the browser via CDP."""
-        session = self._require_session()
-        result = await session.send("SystemInfo.getProcessInfo", {})
+        client = self._require_client()
+        result = await client.send("SystemInfo.getProcessInfo", {})
         return [dict(p) for p in result.get("processInfo", [])] if result else []
 
     async def system_info_get_feature_state(self, feature_name: str) -> dict[str, Any]:
@@ -8740,7 +8934,7 @@ class CDPBackend(AbstractBackend):
     async def bluetooth_emulation_disable(self) -> None:
         """Disable the Bluetooth emulation domain."""
         session = self._require_session()
-        await session.send("BluetoothEmulation.disable")
+        await self._send_cdp(session, "BluetoothEmulation.disable", {})
 
     async def bluetooth_emulation_enable(self, state: str, le_supported: bool) -> None:
         """Enable the Bluetooth emulation domain.
@@ -8750,7 +8944,8 @@ class CDPBackend(AbstractBackend):
             le_supported: Whether LE is supported.
         """
         session = self._require_session()
-        await session.send(
+        await self._send_cdp(
+            session,
             "BluetoothEmulation.enable",
             {"state": state, "leSupported": le_supported},
         )
@@ -9582,12 +9777,12 @@ class CDPBackend(AbstractBackend):
     async def smart_card_emulation_disable(self) -> None:
         """Disable the SmartCardEmulation domain."""
         session = self._require_session()
-        await session.send("SmartCardEmulation.disable", {})
+        await self._send_cdp(session, "SmartCardEmulation.disable", {})
 
     async def smart_card_emulation_enable(self) -> None:
         """Enable the SmartCardEmulation domain."""
         session = self._require_session()
-        await session.send("SmartCardEmulation.enable", {})
+        await self._send_cdp(session, "SmartCardEmulation.enable", {})
 
     async def smart_card_emulation_report_begin_transaction_result(
         self, request_id: str, handle: int
@@ -10148,7 +10343,10 @@ class CDPBackend(AbstractBackend):
         no_display_updates: bool | None = None,
         screenshot: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Send a BeginFrame to the target."""
+        """Send a BeginFrame to the target.
+
+        Bug #21: uses _send_cdp to translate method-not-found errors.
+        """
         session = self._require_session()
         params: dict[str, Any] = {}
         if frame_time_ticks is not None:
@@ -10159,12 +10357,12 @@ class CDPBackend(AbstractBackend):
             params["noDisplayUpdates"] = no_display_updates
         if screenshot is not None:
             params["screenshot"] = screenshot
-        return dict(await session.send("HeadlessExperimental.beginFrame", params))
+        return dict(await self._send_cdp(session, "HeadlessExperimental.beginFrame", params))
 
     async def headless_experimental_disable(self) -> None:
         """Disable the HeadlessExperimental domain."""
         session = self._require_session()
-        await session.send("HeadlessExperimental.disable", {})
+        await self._send_cdp(session, "HeadlessExperimental.disable", {})
 
     async def headless_experimental_enable(self) -> None:
         """Enable the HeadlessExperimental domain."""
@@ -10181,14 +10379,31 @@ class CDPBackend(AbstractBackend):
         )
 
     async def system_info_get_info(self) -> dict[str, Any]:
-        """Returns information about the system."""
-        session = self._require_session()
-        return dict(await session.send("SystemInfo.getInfo", {}))
+        """Returns information about the system.
+
+        Bug #18: ``SystemInfo.getInfo`` is only supported on the browser
+        target. ``TabHandle`` inherits from ``CDPBackend`` but does not
+        have a browser-level client, so we delegate to the parent
+        backend's client when available; otherwise we raise a clear error.
+        """
+        client = self._client
+        if client is None:
+            raise WavexisError(
+                "SystemInfo.getInfo is only supported on the browser target, "
+                "but this TabHandle has no browser-level client. "
+                "Call this command from the main wavexis backend, not from a tab."
+            )
+        return dict(await client.send("SystemInfo.getInfo", {}))
 
     async def system_info_get_process_info(self) -> dict[str, Any]:
         """Returns information about all running processes."""
-        session = self._require_session()
-        return dict(await session.send("SystemInfo.getProcessInfo", {}))
+        client = self._client
+        if client is None:
+            raise WavexisError(
+                "SystemInfo.getProcessInfo is only supported on the browser "
+                "target, but this TabHandle has no browser-level client."
+            )
+        return dict(await client.send("SystemInfo.getProcessInfo", {}))
 
     # ── DeviceOrientation ─────────────────────────────────
 
@@ -10283,26 +10498,25 @@ class CDPBackend(AbstractBackend):
 
     async def dom_snapshot_capture_snapshot(
         self,
-        computed_styles: list[str],
+        computed_styles: list[str] | None = None,
         include_paint_order: bool = False,
         include_dom_rects: bool = False,
         include_blended_background_colors: bool = False,
         include_text_color_opacities: bool = False,
     ) -> dict[str, Any]:
-        """Capture a document snapshot."""
+        """Capture a document snapshot.
+
+        Bug #7: ``computedStyles`` must be an array (even empty).
+        """
         session = self._require_session()
-        return dict(
-            await session.send(
-                "DOMSnapshot.captureSnapshot",
-                {
-                    "computedStyles": computed_styles,
-                    "includePaintOrder": include_paint_order,
-                    "includeDOMRects": include_dom_rects,
-                    "includeBlendedBackgroundColors": include_blended_background_colors,
-                    "includeTextColorOpacities": include_text_color_opacities,
-                },
-            )
-        )
+        params: dict[str, Any] = {
+            "computedStyles": computed_styles or [],
+            "includePaintOrder": include_paint_order,
+            "includeDOMRects": include_dom_rects,
+            "includeBlendedBackgroundColors": include_blended_background_colors,
+            "includeTextColorOpacities": include_text_color_opacities,
+        }
+        return dict(await session.send("DOMSnapshot.captureSnapshot", params))
 
     async def dom_snapshot_disable(self) -> None:
         """Disable the DOM snapshot agent."""
@@ -10316,14 +10530,23 @@ class CDPBackend(AbstractBackend):
 
     async def dom_snapshot_get_snapshot(
         self,
-        computed_style_whitelist: list[str],
+        computed_styles: list[str] | None = None,
+        computed_style_whitelist: list[str] | None = None,
         include_event_listeners: bool | None = None,
         include_paint_order: bool | None = None,
         include_user_agent_shadow_tree: bool | None = None,
     ) -> dict[str, Any]:
-        """Get a DOM snapshot."""
+        """Get a DOM snapshot.
+
+        Bug #8: ``DOMSnapshot.getSnapshot`` is the older variant that
+        expects ``computedStyleWhitelist`` (not ``computedStyles``). We
+        accept both kwargs for compatibility but default to an empty
+        whitelist so the call doesn't fail with ``Invalid parameters``.
+        """
         session = self._require_session()
-        params: dict[str, Any] = {"computedStyleWhitelist": computed_style_whitelist}
+        # Prefer computed_styles if provided; fall back to whitelist.
+        styles = computed_styles if computed_styles is not None else computed_style_whitelist
+        params: dict[str, Any] = {"computedStyleWhitelist": styles or []}
         if include_event_listeners is not None:
             params["includeEventListeners"] = include_event_listeners
         if include_paint_order is not None:

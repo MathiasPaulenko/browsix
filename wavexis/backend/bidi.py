@@ -204,7 +204,27 @@ class BiDiBackend(AbstractBackend):
             ws_url = options.remote_url
         else:
             ws_url = "ws://localhost:9222/session"
-        client = await BiDiClient.connect(ws_url)
+        try:
+            client = await BiDiClient.connect(ws_url)
+        except WavexisError:
+            # Already a friendly error; re-raise as-is.
+            raise
+        except Exception as e:
+            # Bug #34: the default ws://localhost:9222/session requires a
+            # running ChromeDriver with BiDi enabled. The raw exception
+            # (OSError "Connection refused", websockets InvalidStatus
+            # "HTTP 404", bidiwave BiDiConnectionError, etc.) is confusing.
+            # Catch any connection-time failure and provide a clear message
+            # with setup instructions.
+            raise WavexisError(
+                f"Could not connect to the BiDi endpoint at {ws_url}.\n"
+                f"The BiDi backend requires ChromeDriver running with BiDi support.\n"
+                f"Start it with:\n"
+                f"  chromedriver --port=9222 --allowed-origins='*'\n"
+                f"or use the CDP backend instead (default):\n"
+                f"  wavexis screenshot https://example.com\n"
+                f"Original error: {type(e).__name__}: {e}"
+            ) from e
         try:
             await client.session.new()
             self._context = await client.browsing.create_context()
@@ -1671,56 +1691,14 @@ class BiDiBackend(AbstractBackend):
 
     @staticmethod
     def _find_by_text_js(query: str) -> str:
-        """Build JS that finds elements by natural language text query."""
-        escaped = json.dumps(query)
-        return (
-            f"(function(){{"
-            f"var q={escaped}.toLowerCase().trim();"
-            f"var words=q.split(/\\s+/);"
-            f"var els=Array.from(document.querySelectorAll('*'));"
-            f"var results=[];"
-            f"for(var i=0;i<els.length;i++){{"
-            f"var el=els[i];"
-            f"var rect=el.getBoundingClientRect();"
-            f"if(rect.width===0||rect.height===0)continue;"
-            f"var texts=["
-            f"(el.textContent||'').trim(),"
-            f"el.getAttribute('aria-label')||'',"
-            f"el.getAttribute('placeholder')||'',"
-            f"el.getAttribute('title')||'',"
-            f"el.getAttribute('alt')||'',"
-            f"el.getAttribute('value')||''"
-            f"].map(function(t){{return t.toLowerCase()}});"
-            f"var bestScore=0;"
-            f"for(var j=0;j<texts.length;j++){{"
-            f"var t=texts[j];if(!t)continue;"
-            f"if(t===q){{bestScore=100;break;}}"
-            f"if(t.indexOf(q)>=0){{bestScore=Math.max(bestScore,80);}}"
-            f"if(q.indexOf(t)>=0&&t.length>3){{bestScore=Math.max(bestScore,60);}}"
-            f"var matched=0;"
-            f"for(var k=0;k<words.length;k++){{"
-            f"if(t.indexOf(words[k])>=0)matched++;"
-            f"}}"
-            f"if(matched>0)bestScore=Math.max(bestScore,"
-            f"Math.round(matched/words.length*50));"
-            f"}}"
-            f"if(bestScore>0){{"
-            f"var tag=el.tagName.toLowerCase();"
-            f"var sel=tag;"
-            f"if(el.id)sel='#'+CSS.escape(el.id);"
-            f"else if(el.getAttribute('data-testid'))"
-            f"sel='[data-testid=\"'+el.getAttribute('data-testid')+'\"]';"
-            f"else if(el.getAttribute('aria-label'))"
-            f"sel=tag+'[aria-label=\"'+el.getAttribute('aria-label')+'\"]';"
-            f"else if(el.classList.length>0)"
-            f"sel=tag+'.'+Array.from(el.classList).join('.');"
-            f"results.push({{score:bestScore,sel:sel}});"
-            f"}}"
-            f"}}"
-            f"results.sort(function(a,b){{return b.score-a.score}});"
-            f"return JSON.stringify(results.map(function(r){{return r.sel}}));"
-            f"}})()"
-        )
+        """Build JS that finds elements by natural language text query.
+
+        Delegates to the shared :func:`build_find_by_text_js` helper so the
+        CDP and BiDi backends use identical matching logic.
+        """
+        from wavexis.backend.mixins.dom import build_find_by_text_js
+
+        return build_find_by_text_js(query)
 
     async def find_by_text(self, query: str, all: bool = False) -> list[str] | str:
         """Find elements by natural language text query.
@@ -5194,9 +5172,47 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("Security.enable", {})
 
     async def security_get_visible_security_state(self) -> dict[str, Any]:
-        """Get the visible security state of the current page via CDP bridge."""
+        """Get the visible security state of the current page.
+
+        Bug #16: ``Security.getVisibleSecurityState`` was removed from CDP
+        (Chrome 137+, 2025). We derive the visible security state from the
+        current navigation URL: HTTPS → ``secure``, HTTP → ``insecure``,
+        local schemes → ``neutral``.
+        """
         client = self._require_launched()
-        return dict(await client.cdp.send_command("Security.getVisibleSecurityState", {}))
+        with contextlib.suppress(Exception):
+            await client.cdp.send_command("Security.enable", {})
+        url = self._current_url
+        if not url:
+            try:
+                history = await client.cdp.send_command("Page.getNavigationHistory", {})
+                entries = history.get("entries", [])
+                idx = history.get("currentIndex", 0)
+                if entries and 0 <= idx < len(entries):
+                    url = entries[idx].get("url", "")
+            except Exception:
+                url = ""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url) if url else None
+        scheme = parsed.scheme if parsed else ""
+        if scheme == "https":
+            security_state = "secure"
+            scheme_cryptographic = True
+        elif scheme == "http":
+            security_state = "insecure"
+            scheme_cryptographic = False
+        elif scheme in ("file", "data", "about", "blob"):
+            security_state = "neutral"
+            scheme_cryptographic = False
+        else:
+            security_state = "unknown"
+            scheme_cryptographic = False
+        return {
+            "securityState": security_state,
+            "schemeIsCryptographic": scheme_cryptographic,
+            "url": url,
+        }
 
     async def security_handle_certificate_error(self, event_id: int, action: str) -> None:
         """Handle a certificate error event via CDP bridge."""
@@ -5391,15 +5407,21 @@ class BiDiBackend(AbstractBackend):
         Raises:
             SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
+
+        Bug #14: previously this called ``storage.getDOMStorageItems`` which
+        is not a real CDP method (the correct domain is ``DOMStorage.``).
+        Reading via ``script.evaluate`` against ``window.localStorage`` /
+        ``window.sessionStorage`` is reliable and works on BiDi.
         """
-        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'.")
-        result = await client.send(
-            "storage.getDOMStorageItems",
-            {"storageType": storage_type, "key": key},
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{return {storage_obj}.getItem({json.dumps(key)})||''}}"
+            f"catch(e){{return ''}}}})()"
         )
-        return str(result.get("value", ""))
+        value = await self.eval(js)
+        return str(value) if value is not None else ""
 
     async def storage_set(self, key: str, value: str, storage_type: str = "local") -> None:
         """Set a value in DOM storage.
@@ -5413,13 +5435,16 @@ class BiDiBackend(AbstractBackend):
             SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
         """
-        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'.")
-        await client.send(
-            "storage.setDOMStorageItem",
-            {"storageType": storage_type, "key": key, "value": value},
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{{storage_obj}.setItem({json.dumps(key)},"
+            f"{json.dumps(value)});return 'ok'}}catch(e){{return e.message}}}})()"
         )
+        msg = await self.eval(js)
+        if msg and msg != "ok":
+            raise WavexisError(f"storage_set failed: {msg}")
 
     async def storage_clear(self, storage_type: str = "local") -> None:
         """Clear all items from DOM storage.
@@ -5431,13 +5456,16 @@ class BiDiBackend(AbstractBackend):
             SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
         """
-        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'.")
-        await client.send(
-            "storage.clearDOMStorageItems",
-            {"storageType": storage_type},
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{{storage_obj}.clear();return 'ok'}}"
+            f"catch(e){{return e.message}}}})()"
         )
+        msg = await self.eval(js)
+        if msg and msg != "ok":
+            raise WavexisError(f"storage_clear failed: {msg}")
 
     async def storage_list(self, storage_type: str = "local") -> dict[str, str]:
         """List all key-value pairs in DOM storage.
@@ -5452,18 +5480,25 @@ class BiDiBackend(AbstractBackend):
             SessionNotInitializedError: If the session is not initialized.
             ValueError: If storage_type is invalid.
         """
-        client = self._require_client()
         if storage_type not in ("local", "session"):
             raise ValueError(f"Invalid storage_type: {storage_type}. Must be 'local' or 'session'.")
-        result = await client.send(
-            "storage.getDOMStorageItems",
-            {"storageType": storage_type},
+        storage_obj = "localStorage" if storage_type == "local" else "sessionStorage"
+        js = (
+            f"(function(){{try{{"
+            f"var out={{}};"
+            f"for(var i=0;i<{storage_obj}.length;i++){{"
+            f"var k={storage_obj}.key(i);out[k]={storage_obj}.getItem(k);}}"
+            f"return JSON.stringify(out);}}"
+            f"catch(e){{return '{{}}'}}}})()"
         )
-        items: dict[str, str] = {}
-        for entry in result.get("entries", []):
-            if len(entry) >= 2:
-                items[str(entry[0])] = str(entry[1])
-        return items
+        raw = await self.eval(js)
+        try:
+            loaded = json.loads(raw) if raw else {}
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        if not isinstance(loaded, dict):
+            return {}
+        return {str(k): str(v) for k, v in loaded.items()}
 
     async def cache_storage_list(self) -> list[str]:
         """List cache storage names via JS Cache API.

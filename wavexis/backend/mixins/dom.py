@@ -2,8 +2,123 @@
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import Any
+
+
+def build_find_by_text_js(query: str) -> str:
+    """Build a JS snippet that finds elements by natural language query.
+
+    The matcher combines literal text/attribute matching with a small set of
+    semantic keyword rules (e.g. "heading" → h1-h6, "button" → button,
+    "link" → a) so that queries like "the heading" or "the login button"
+    resolve to the right element even when the literal text doesn't contain
+    those words. Stop words ("the", "a", "an", ...) are filtered out before
+    matching.
+
+    Args:
+        query: Natural language query (e.g. "the login button").
+
+    Returns:
+        A JavaScript IIFE string that returns a JSON array of CSS selectors,
+        best match first.
+    """
+    escaped = json.dumps(query)
+    return (
+        f"(function(){{"
+        f"var q={escaped}.toLowerCase().trim();"
+        # Stop words that carry no semantic weight.
+        f"var stop={{'the':1,'a':1,'an':1,'this':1,'that':1,'of':1,'on':1,"
+        f"'in':1,'at':1,'to':1,'for':1,'with':1,'my':1,'your':1}};"
+        # Semantic keyword → CSS selector mapping. Each entry is a list
+        # of CSS selectors to consider; if the query contains the keyword,
+        # matching elements of those selectors get a score boost.
+        f"var semantic={{"
+        f"'heading':['h1','h2','h3','h4','h5','h6'],"
+        f"'title':['h1','title'],"
+        f"'button':['button','input[type=button]','input[type=submit]',"
+        f"'input[type=reset]','[role=button]'],"
+        f"'link':['a','[role=link]'],"
+        f"'input':['input','textarea','select'],"
+        f"'field':['input','textarea','select'],"
+        f"'form':['form'],"
+        f"'image':['img','[role=img]'],"
+        f"'logo':['img','svg'],"
+        f"'nav':['nav','[role=navigation]'],"
+        f"'menu':['nav','menu','[role=menu]','[role=menubar]'],"
+        f"'footer':['footer','[role=contentinfo]'],"
+        f"'header':['header','[role=banner]'],"
+        f"'checkbox':['input[type=checkbox]','[role=checkbox]'],"
+        f"'radio':['input[type=radio]','[role=radio]'],"
+        f"'dropdown':['select','[role=combobox]','[role=listbox]'],"
+        f"'search':['input[type=search]','[role=search]','search'],"
+        f"'icon':['svg','img','[class*=icon]'],"
+        f"'card':['[class*=card]','article'],"
+        f"'modal':['[role=dialog]','[class*=modal]','[class*=dialog]']"
+        f"}};"
+        f"var words=q.split(/\\s+/).filter(function(w){{return w&&!stop[w]}});"
+        f"var els=Array.from(document.querySelectorAll('*'));"
+        f"var results=[];"
+        f"for(var i=0;i<els.length;i++){{"
+        f"var el=els[i];"
+        f"var rect=el.getBoundingClientRect();"
+        f"if(rect.width===0||rect.height===0)continue;"
+        f"var texts=["
+        f"(el.textContent||'').trim(),"
+        f"el.getAttribute('aria-label')||'',"
+        f"el.getAttribute('placeholder')||'',"
+        f"el.getAttribute('title')||'',"
+        f"el.getAttribute('alt')||'',"
+        f"el.getAttribute('value')||''"
+        f"].map(function(t){{return t.toLowerCase()}});"
+        f"var bestScore=0;"
+        f"for(var j=0;j<texts.length;j++){{"
+        f"var t=texts[j];if(!t)continue;"
+        f"if(t===q){{bestScore=100;break;}}"
+        f"if(t.indexOf(q)>=0){{bestScore=Math.max(bestScore,80);}}"
+        f"if(q.indexOf(t)>=0&&t.length>3){{bestScore=Math.max(bestScore,60);}}"
+        f"var matched=0;"
+        f"for(var k=0;k<words.length;k++){{"
+        f"if(t.indexOf(words[k])>=0)matched++;"
+        f"}}"
+        f"if(matched>0)bestScore=Math.max(bestScore,"
+        f"Math.round(matched/Math.max(words.length,1)*50));"
+        f"}}"
+        # Semantic keyword boost: if the query contains a known keyword
+        # and the element matches one of the associated selectors, add
+        # a score so e.g. "the heading" finds <h1> even without text
+        # overlap.
+        f"var tag=el.tagName.toLowerCase();"
+        f"var typeAttr=(el.getAttribute('type')||'').toLowerCase();"
+        f"var role=(el.getAttribute('role')||'').toLowerCase();"
+        f"for(var kw in semantic){{"
+        f"if(q.indexOf(kw)<0)continue;"
+        f"var sels=semantic[kw];"
+        f"for(var s=0;s<sels.length;s++){{"
+        f"var s0=sels[s];"
+        f"if(s0===tag||s0==='[role='+role+']'||"
+        f"s0==='input[type='+typeAttr+']'){{"
+        f"bestScore=Math.max(bestScore,55);break;"
+        f"}}"
+        f"}}"
+        f"}}"
+        f"if(bestScore>0){{"
+        f"var sel=tag;"
+        f"if(el.id)sel='#'+CSS.escape(el.id);"
+        f"else if(el.getAttribute('data-testid'))"
+        f"sel='[data-testid=\"'+el.getAttribute('data-testid')+'\"]';"
+        f"else if(el.getAttribute('aria-label'))"
+        f"sel=tag+'[aria-label=\"'+el.getAttribute('aria-label')+'\"]';"
+        f"else if(el.classList.length>0)"
+        f"sel=tag+'.'+Array.from(el.classList).join('.');"
+        f"results.push({{score:bestScore,sel:sel}});"
+        f"}}"
+        f"}}"
+        f"results.sort(function(a,b){{return b.score-a.score}});"
+        f"return JSON.stringify(results.map(function(r){{return r.sel}}));"
+        f"}})()"
+    )
 
 
 class DOMBackend(ABC):
