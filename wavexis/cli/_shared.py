@@ -225,6 +225,21 @@ def _progress(current: int, total: int, label: str = "") -> None:
     typer.echo(f"[{current}/{total}]{suffix}")
 
 
+def _progress_stderr(current: int, total: int, label: str = "") -> None:
+    """Print a progress indicator to stderr unless quiet mode is active.
+
+    Args:
+        current: Current item index (1-based).
+        total: Total number of items.
+        label: Optional label to prepend (e.g. URL or action name).
+    """
+    ctx = _get_ctx()
+    if ctx.quiet:
+        return
+    suffix = f" — {label}" if label else ""
+    typer.echo(f"[{current}/{total}]{suffix}", err=True)
+
+
 _ERROR_EXIT_CODES: dict[type[Exception], int] = {
     BackendNotAvailableError: EXIT_BACKEND_ERROR,
     SessionNotInitializedError: EXIT_BROWSER_ERROR,

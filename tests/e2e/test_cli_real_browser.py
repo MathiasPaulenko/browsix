@@ -152,11 +152,16 @@ class TestCLIPDF:
 
 
 class TestCLIDom:
-    """Test ``wavexis dom`` against a real Chrome."""
+    """Test ``wavexis dom`` / ``wavexis eval`` against a real Chrome."""
 
     def test_dom_get(self, cli) -> None:
-        """``wavexis dom --action get`` returns HTML content."""
-        result = cli.run(["dom", EXAMPLE_URL, "--action", "get"])
+        """``wavexis eval`` returns the page HTML."""
+        result = cli.run([
+            "eval",
+            EXAMPLE_URL,
+            "-e",
+            "document.documentElement.outerHTML",
+        ])
         result.assert_success()
         # Should contain HTML tags from example.com
         assert "<html" in result.stdout.lower() or "example" in result.stdout.lower(), (
@@ -164,8 +169,13 @@ class TestCLIDom:
         )
 
     def test_dom_query(self, cli) -> None:
-        """``wavexis dom --action query -s 'h1'`` returns element info."""
-        result = cli.run(["dom", EXAMPLE_URL, "--action", "query", "-s", "h1"])
+        """``wavexis eval`` returns a selected element's outer HTML."""
+        result = cli.run([
+            "eval",
+            EXAMPLE_URL,
+            "-e",
+            "document.querySelector('h1').outerHTML",
+        ])
         result.assert_success()
 
 
@@ -187,16 +197,18 @@ class TestCLICookies:
 
 
 class TestCLIConsole:
-    """Test ``wavexis console`` against a real Chrome."""
+    """Test ``wavexis logs`` against a real Chrome."""
 
     def test_console_capture(self, cli, tmp_path: Path) -> None:
-        """``wavexis console <url>`` captures console output."""
+        """``wavexis logs <url>`` captures console/log output."""
         out = tmp_path / "console.json"
-        result = cli.run(["console", EXAMPLE_URL, "-o", str(out)])
+        result = cli.run(["logs", EXAMPLE_URL, "-o", str(out)])
         result.assert_success()
         result.assert_file_exists(out)
         data = json.loads(out.read_text(encoding="utf-8"))
-        assert isinstance(data, list)
+        assert isinstance(data, dict)
+        assert "logs" in data
+        assert isinstance(data["logs"], list)
 
 
 class TestCLIScrape:

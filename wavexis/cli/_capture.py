@@ -21,10 +21,9 @@ from wavexis.cli._shared import (
     WavexisError,
     _browser_options,
     _close_backend,
-    _echo,
     _get_backend,
     _handle_error,
-    _progress,
+    _progress_stderr,
     _run_async,
     _write_json_output,
     app,
@@ -432,7 +431,7 @@ async def _scrape(
     """
     backend = _get_backend()
     total = len(urls)
-    _echo(f"Scraping {total} URL(s)…")
+    typer.echo(f"Scraping {total} URL(s)…", err=True)
     try:
         await backend.launch(_browser_options())
 
@@ -461,7 +460,7 @@ async def _scrape(
                             await tab.close()
                         async with lock:
                             completed += 1
-                            _progress(completed, total, url)
+                            _progress_stderr(completed, total, url)
 
             tasks = [_scrape_one(u) for u in urls]
             gathered = await asyncio.gather(*tasks, return_exceptions=True)
@@ -470,14 +469,14 @@ async def _scrape(
                 if isinstance(batch, BaseException) and not isinstance(batch, Exception):
                     raise batch
                 if isinstance(batch, Exception):
-                    _echo(f"Error scraping {url}: {batch}")
+                    typer.echo(f"Error scraping {url}: {batch}", err=True)
                     continue
                 results.extend(batch)
             return results
 
         results_seq: list[dict[str, Any]] = []
         for i, url in enumerate(urls):
-            _progress(i + 1, total, url)
+            _progress_stderr(i + 1, total, url)
             params = ScrapeParams(
                 urls=[url],
                 expression=expression,
