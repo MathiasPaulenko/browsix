@@ -946,7 +946,7 @@ class TestCLIExecutionSessionFull:
         with patch("wavexis.cli._session._get_backend", return_value=backend):
             result = runner.invoke(
                 app,
-                ["session", "load", "https://example.com", "-o", str(session_file)],
+                ["session", "load", str(session_file), "--url", "https://example.com"],
             )
         assert result.exit_code == 0
 
@@ -955,7 +955,7 @@ class TestCLIExecutionSessionFull:
         session_file = tmp_path / "session.json"
         session_file.write_text('{"cookies":[],"local_storage":{},"session_storage":{},"url":""}')
         with patch("wavexis.cli._session._get_backend", return_value=backend):
-            result = runner.invoke(app, ["session", "load", "", "-o", str(session_file)])
+            result = runner.invoke(app, ["session", "load", str(session_file)])
         assert result.exit_code == 0
 
     def test_session_load_not_found(self) -> None:
@@ -972,7 +972,7 @@ class TestCLIExecutionSessionFull:
             patch("wavexis.actions.session.Path.read_text", side_effect=PermissionError("denied")),
         ):
             result = runner.invoke(
-                app, ["session", "load", "https://example.com", "-o", str(session_file)]
+                app, ["session", "load", str(session_file)]
             )
         assert result.exit_code == 1
         assert "failed to read session" in result.output.lower()
@@ -984,7 +984,7 @@ class TestCLIExecutionSessionFull:
         session_file.write_text("not valid json")
         with patch("wavexis.cli._session._get_backend", return_value=backend):
             result = runner.invoke(
-                app, ["session", "load", "https://example.com", "-o", str(session_file)]
+                app, ["session", "load", str(session_file)]
             )
         assert result.exit_code == 1
         assert "invalid session json" in result.output.lower()

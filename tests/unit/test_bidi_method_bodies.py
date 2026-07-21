@@ -597,23 +597,32 @@ class TestBiDiMethodBodies:
 
     async def test_storage_get(self) -> None:
         backend, mock = _make_mock_backend()
-        mock.send = AsyncMock(return_value={"value": "data"})
+        # storage_get now uses script.evaluate (window.localStorage.getItem)
+        # instead of the removed DOMStorage.getDOMStorageItems method.
+        mock.script.evaluate = AsyncMock(return_value=MagicMock(value="data"))
         result = await backend.storage_get("key")
         assert result == "data"
 
     async def test_storage_set(self) -> None:
-        backend, _ = _make_mock_backend()
+        backend, mock = _make_mock_backend()
+        # storage_set now uses script.evaluate and expects "ok" on success.
+        mock.script.evaluate = AsyncMock(return_value=MagicMock(value="ok"))
         await backend.storage_set("key", "value")
 
     async def test_storage_clear(self) -> None:
-        backend, _ = _make_mock_backend()
+        backend, mock = _make_mock_backend()
+        mock.script.evaluate = AsyncMock(return_value=MagicMock(value="ok"))
         await backend.storage_clear()
 
     async def test_storage_list(self) -> None:
         backend, mock = _make_mock_backend()
-        mock.send = AsyncMock(return_value={"entries": [["k", "v"]]})
+        # storage_list now returns a JSON string from script.evaluate.
+        mock.script.evaluate = AsyncMock(
+            return_value=MagicMock(value='{"k": "v"}')
+        )
         result = await backend.storage_list()
         assert isinstance(result, dict)
+        assert result == {"k": "v"}
 
     async def test_cache_storage_list(self) -> None:
         backend, mock = _make_mock_backend()

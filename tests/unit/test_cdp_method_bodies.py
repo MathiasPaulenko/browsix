@@ -880,23 +880,38 @@ class TestCDPMethodBodies:
 
     async def test_storage_get(self) -> None:
         backend, _, mock = _make_mock_backend()
-        mock.send = AsyncMock(return_value={"value": "data"})
+        # storage_get now uses runtime.evaluate (window.localStorage.getItem)
+        # instead of the removed DOMStorage.getDOMStorageItems method.
+        mock.runtime.evaluate = AsyncMock(
+            return_value={"result": {"value": "data"}}
+        )
         result = await backend.storage_get("key")
-        assert isinstance(result, str)
+        assert result == "data"
 
     async def test_storage_set(self) -> None:
-        backend, _, _ = _make_mock_backend()
+        backend, _, mock = _make_mock_backend()
+        # storage_set now uses runtime.evaluate and expects "ok" on success.
+        mock.runtime.evaluate = AsyncMock(
+            return_value={"result": {"value": "ok"}}
+        )
         await backend.storage_set("key", "value")
 
     async def test_storage_clear(self) -> None:
-        backend, _, _ = _make_mock_backend()
+        backend, _, mock = _make_mock_backend()
+        mock.runtime.evaluate = AsyncMock(
+            return_value={"result": {"value": "ok"}}
+        )
         await backend.storage_clear()
 
     async def test_storage_list(self) -> None:
         backend, _, mock = _make_mock_backend()
-        mock.send = AsyncMock(return_value={"entries": [["k", "v"]]})
+        # storage_list now returns a JSON string from runtime.evaluate.
+        mock.runtime.evaluate = AsyncMock(
+            return_value={"result": {"value": '{"k": "v"}'}}
+        )
         result = await backend.storage_list()
         assert isinstance(result, dict)
+        assert result == {"k": "v"}
 
     async def test_cache_storage_list(self) -> None:
         backend, _, mock = _make_mock_backend()
@@ -2451,12 +2466,22 @@ class TestCDPMethodBodies:
         assert mock.send.call_args.args[0] == "Security.enable"
 
     async def test_security_get_visible_security_state(self) -> None:
+        # Bug #16: Security.getVisibleSecurityState was removed from CDP.
+        # The backend now derives the state from the current URL and
+        # optionally calls Security.enable + Page.getNavigationHistory.
         backend, _, mock = _make_mock_backend()
-        mock.send.return_value = {"securityState": "secure"}
+        backend._current_url = "https://example.com"
+        # Security.enable is called first (best-effort), then no
+        # Page.getNavigationHistory is needed because _current_url is set.
+        mock.send.return_value = {}
         result = await backend.security_get_visible_security_state()
-        mock.send.assert_awaited_once()
-        assert mock.send.call_args.args[0] == "Security.getVisibleSecurityState"
         assert isinstance(result, dict)
+        assert result["securityState"] == "secure"
+        assert result["schemeIsCryptographic"] is True
+        assert result["url"] == "https://example.com"
+        # Security.enable must have been called.
+        sent_methods = [c.args[0] for c in mock.send.call_args_list]
+        assert "Security.enable" in sent_methods
 
     async def test_security_handle_certificate_error(self) -> None:
         backend, _, mock = _make_mock_backend()
@@ -5320,14 +5345,24 @@ class TestCDPMethodBodies:
         assert mock.send.call_args.args[0] == "SystemInfo.getFeatureState"
 
     async def test_system_info_get_info(self) -> None:
+        # Bug #18: SystemInfo.getInfo is only supported on the browser
+        # target. The backend now sends the command via the browser-level
+        # CDPClient (backend._client.send), not the page session.
         backend, _, mock = _make_mock_backend()
+        mock_client = MagicMock()
+        mock_client.send = AsyncMock(return_value={"gpu": {}, "modelName": "test"})
+        backend._client = mock_client
         await backend.system_info_get_info()
-        assert mock.send.call_args.args[0] == "SystemInfo.getInfo"
+        assert mock_client.send.call_args.args[0] == "SystemInfo.getInfo"
 
     async def test_system_info_get_process_info(self) -> None:
+        # Bug #18: Same as get_info — uses the browser-level client.
         backend, _, mock = _make_mock_backend()
+        mock_client = MagicMock()
+        mock_client.send = AsyncMock(return_value={"processInfo": []})
+        backend._client = mock_client
         await backend.system_info_get_process_info()
-        assert mock.send.call_args.args[0] == "SystemInfo.getProcessInfo"
+        assert mock_client.send.call_args.args[0] == "SystemInfo.getProcessInfo"
 
     # ── DeviceOrientation ─────────────────────────────────
 

@@ -228,7 +228,10 @@ class TestInteractiveInit:
 
     def test_multi_step_template_interactive(self) -> None:
         """Test interactive wizard with multi-step template (selector + text)."""
-        inputs = iter(["5", "https://app.com", "#login-btn", "hello world"])
+        # Bug #5: multi-step template now asks for separate click and type
+        # selectors, so the wizard consumes 5 inputs: template choice, URL,
+        # click selector, type selector, and text.
+        inputs = iter(["5", "https://app.com", "#login-btn", "#username", "hello world"])
         outputs: list[str] = []
 
         result = interactive_init(
@@ -243,14 +246,15 @@ class TestInteractiveInit:
         click_actions = [a for a in actions if "click" in a]
         assert len(click_actions) >= 1
         assert click_actions[0]["click"]["selector"] == "#login-btn"
-        # Should contain a type with the text
+        # Should contain a type with the text on the input selector
         type_actions = [a for a in actions if "type" in a]
         assert len(type_actions) >= 1
         assert type_actions[0]["type"]["text"] == "hello world"
+        assert type_actions[0]["type"]["selector"] == "#username"
 
     def test_multi_step_template_default_selector_text(self) -> None:
         """Test multi-step template uses defaults when inputs are empty."""
-        inputs = iter(["5", "https://app.com", "", ""])
+        inputs = iter(["5", "https://app.com", "", "", ""])
         outputs: list[str] = []
 
         result = interactive_init(
