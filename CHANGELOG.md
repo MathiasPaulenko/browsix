@@ -2,6 +2,48 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.16.2 — 2026-07-21
+
+### Bug Fixes
+
+This release fixes 34 CLI bugs reported in `ref/cli-bugs.md`, all verified against Chrome 150.
+
+#### Backend (CDP + BiDi)
+
+- **Removed CDP domains no longer crash** — Chrome 150 removed several CDP domains (`Browser.getPreference`, `Extensions.getInfo`, `Tethering.*`, `WebMcp.*`, `HeadlessExperimental.*`, `BluetoothEmulation.*`, `SmartCardEmulation.*`). A new `_send_cdp()` helper translates `-32601 "method wasn't found"` and `CommandTimeoutError` into user-friendly `WavexisError` messages.
+- **`security get-visible-security-state`** now derives the state from the URL scheme (HTTPS→secure, HTTP→insecure, file/data/about→neutral) since `Security.getVisibleSecurityState` was removed. Fixed in both CDP and BiDi backends.
+- **`system-info get-info`** now sends via the browser-level CDPClient instead of the page session (`SystemInfo.getInfo` only works on the browser target).
+- **`dom-snapshot capture`/`get`** now always send `computedStyles`/`computedStyleWhitelist` as an array (even empty). Previously the key was omitted when the parameter was `None`, causing `[-32602] Invalid parameters`.
+- **`page-download allow`** now passes `download_path` (snake_case) to the cdpwave API instead of building a dict with `downloadPath`.
+- **`iframe eval`** now injects the JS expression as raw code instead of JSON-encoding it (which turned `document.title` into the literal string `"document.title"`).
+- **`navigate --browser-url`** now connects to the first existing page via `client.connect_to_page(target_id)` instead of always creating a new tab. Fixes `TargetInfo` attribute access (`target_id` instead of `id`).
+- **`--backend bidi`** now catches any connection-time exception (OSError, websockets `InvalidStatus`, `BiDiConnectionError`) and raises a clear `WavexisError` with ChromeDriver setup instructions.
+
+#### CLI
+
+- **`--timeout`** shows `[default: 30000]` in `--help` instead of the contradictory `[default: 0]`.
+- **`config get --key`** is now a documented action (was listed in help but rejected).
+- **`extract`** adds `--schema-file` for reading the JSON schema from a file (avoids shell-escaping JSON on PowerShell).
+- **`session load`** follows the documented syntax `session load <file> [--url URL]` instead of the old `session load <url> -o <file>`.
+- **`init -t multi-step`** asks for separate click and type selectors (previously reused one selector, producing workflows that failed on non-focusable elements). Adds `--input-selector` flag.
+- **`multi`** rejects unknown action types (e.g. `close`) with a clear error.
+- **`lighthouse`** no longer leaves a `ResourceWarning` traceback on exit (uses `loop.shutdown_asyncgens()` instead of the module-level `asyncio.shutdown_asyncgens()`, unavailable on Python 3.14).
+- **`nl click`/`nl fill`/`nl type`** resolve natural-language queries via `build_find_by_text_js()` instead of treating the query as a CSS selector.
+- **`contexts list` and `browser list_contexts`** use the browser-level client so they return `[]` instead of "Not allowed".
+- **`download`** now auto-clicks the first `<a download>` element (or a `--selector`) after navigating, so it actually intercepts the file instead of returning 0 bytes.
+- **`cookies set --url`** no longer requires `--domain` (derived from URL).
+- **`iframe eval`** always prints the result to stdout (not only with `-o`).
+- **`events subscribe`** enables the `Page` domain so navigation/dialog events are delivered, adds `--output` for JSONL capture, and reports the final event count.
+- **`user-agent`** adds optional `--url` that navigates and verifies the override via `navigator.userAgent`.
+- **`perf`** callback delegates to `perf metrics` when given `--url` without a subcommand.
+- **`trace`** detects a URL as the first argument and treats it as `trace start <url>`.
+- **`page-snapshot`** defaults to `ref/output/snapshot.mhtml` instead of polluting the working directory.
+
+### Testing
+
+- **2300 unit tests passing** — Updated tests for storage (Runtime.evaluate path), security (URL-scheme derivation), system-info (browser-level client), `session load` (new syntax), and `init -t multi-step` (separate selectors).
+- **All 34 bugs verified against Chrome 150** with a local HTTP server and `--browser-url` remote debugging.
+
 ## v2.16.1 — 2026-07-21
 
 ### Bug Fixes
