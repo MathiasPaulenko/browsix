@@ -163,6 +163,11 @@ class CDPBackend(AbstractBackend):
     async def navigate(self, url: str, wait: WaitStrategy | None = None) -> None:
         """Navigate to a URL and optionally wait for a condition.
 
+        If the backend has not been launched yet, it will be launched with
+        default options. This is a convenience fallback used by actions and
+        integration tests that request a backend fixture without calling
+        ``launch()`` explicitly.
+
         Args:
             url: The URL to navigate to.
             wait: Wait strategy to apply after navigation.
@@ -171,6 +176,8 @@ class CDPBackend(AbstractBackend):
             SessionNotInitializedError: If launch() has not been called.
             WaitTimeoutError: If the wait strategy times out.
         """
+        if self._session is None:
+            await self.launch(BrowserOptions())
         session = self._require_session()
 
         timeout_ms: int = wait.timeout if wait is not None else 30000
@@ -189,9 +196,14 @@ class CDPBackend(AbstractBackend):
         elif wait.strategy == "selector":
             if wait.selector is None:
                 raise ValueError("selector wait strategy requires a selector")
-            try:
-                await session.wait_for_selector(wait.selector, timeout=timeout_sec)
-            except TimeoutError:
+            deadline = time.monotonic() + timeout_sec
+            js = f"document.querySelector({json.dumps(wait.selector)}) !== null"
+            while time.monotonic() < deadline:
+                result = await session.runtime.evaluate(js, await_promise=False)
+                if result.get("result", {}).get("value", False):
+                    break
+                await asyncio.sleep(0.1)
+            else:
                 raise WaitTimeoutError("selector", timeout_ms) from None
         elif wait.strategy == "domcontentloaded":
             try:
@@ -237,8 +249,11 @@ class CDPBackend(AbstractBackend):
                 height=preset["height"],
                 device_scale_factor=preset["device_scale_factor"],
                 mobile=preset["mobile"],
-                user_agent=preset["user_agent"],
             )
+            if preset.get("user_agent"):
+                await session.emulation.set_user_agent_override(
+                    user_agent=str(preset["user_agent"]),
+                )
             if preset.get("touch"):
                 await session.emulation.set_touch_emulation_enabled(True)
 
@@ -1163,11 +1178,8 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         node_id = await self._find_node(selector)
         result = await session.dom.get_attribute(node_id, name)
-        attrs = result.get("attributes", [])
-        for i in range(0, len(attrs) - 1, 2):
-            if attrs[i] == name:
-                return str(attrs[i + 1])
-        return ""
+        value = result.get("value")
+        return str(value) if value is not None else ""
 
     async def dom_remove_attr(self, selector: str, name: str) -> None:
         """Remove an attribute from an element matching a CSS selector."""
@@ -2031,8 +2043,11 @@ class CDPBackend(AbstractBackend):
             height=int(preset["height"]),
             device_scale_factor=float(preset["device_scale_factor"]),
             mobile=bool(preset["mobile"]),
-            user_agent=str(preset["user_agent"]),
         )
+        if preset.get("user_agent"):
+            await session.emulation.set_user_agent_override(
+                user_agent=str(preset["user_agent"]),
+            )
         if preset.get("touch"):
             await session.emulation.set_touch_emulation_enabled(True)
 
@@ -6199,7 +6214,8 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         await session.web_authn.enable()
         result = await session.web_authn.add_virtual_authenticator(
-            options={"protocol": protocol, "transport": transport},
+            protocol=protocol,
+            transport=transport,
         )
         return str(result.get("authenticatorId", ""))
 
@@ -6379,13 +6395,17 @@ class CDPBackend(AbstractBackend):
             List of WebAudio context dicts.
         """
         session = self._require_session()
-        await session.send("WebAudio.enable", {})
+        events: list[dict[str, Any]] = []
+
+        def on_context_created(event: dict[str, Any]) -> None:
+            events.append(event)
+
+        session.on("WebAudio.contextCreated", on_context_created)
         try:
-            events = await session.collect_events(
-                "WebAudio.contextCreated", timeout=1.0
-            )
-        except TimeoutError:
-            events = []
+            await session.send("WebAudio.enable", {})
+            await asyncio.sleep(1.0)
+        finally:
+            session.off("WebAudio.contextCreated", on_context_created)
         return [dict(ev.get("context", ev)) for ev in events]
 
     async def webaudio_get_context(self, context_id: str) -> dict[str, Any]:
