@@ -259,7 +259,9 @@ def batch(
         return
 
     typer.echo(f"Completed {len(results)} / {len(urls)} actions")
-    for i, (url, result) in enumerate(zip(urls, results, strict=False)):
+    for i, (url, result) in enumerate(zip(urls, results, strict=True)):
+        if isinstance(result, BaseException) and not isinstance(result, Exception):
+            raise result
         if isinstance(result, Exception):
             typer.echo(f"  {i + 1}. {url}: ERROR — {result}")
         elif isinstance(result, bytes):

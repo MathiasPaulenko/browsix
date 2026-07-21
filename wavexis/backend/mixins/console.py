@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 
-class ConsoleBackend:
+class ConsoleBackend(ABC):
     """Console domain for message inspection and control."""
 
     @abstractmethod

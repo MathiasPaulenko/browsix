@@ -11,7 +11,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import inspect
 import json
+import re
+import tempfile
+import time
+from pathlib import Path
 from typing import Any
 
 try:
@@ -947,11 +952,9 @@ class BiDiBackend(AbstractBackend):
     async def wait_for(self, strategy: WaitStrategy) -> None:
         """Wait for a condition via polling script.evaluate."""
         client = self._require_launched()
-        import asyncio as _asyncio
-        import time as _time
 
-        deadline = _time.monotonic() + strategy.timeout / 1000
-        while _time.monotonic() < deadline:
+        deadline = time.monotonic() + strategy.timeout / 1000
+        while time.monotonic() < deadline:
             if strategy.strategy == "selector" and strategy.selector:
                 escaped = json.dumps(strategy.selector)
                 js = f"!!document.querySelector({escaped})"
@@ -978,8 +981,8 @@ class BiDiBackend(AbstractBackend):
                 is_idle = getattr(result, "value", False)
                 if is_idle:
                     if not hasattr(self, "_networkidle_start"):
-                        self._networkidle_start = _time.monotonic()
-                    elif _time.monotonic() - self._networkidle_start >= 0.5:
+                        self._networkidle_start = time.monotonic()
+                    elif time.monotonic() - self._networkidle_start >= 0.5:
                         delattr(self, "_networkidle_start")
                         return
                 else:
@@ -994,7 +997,7 @@ class BiDiBackend(AbstractBackend):
                     return
             else:
                 raise ValueError(f"Unsupported wait strategy: {strategy.strategy}")
-            await _asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
         raise WaitTimeoutError(strategy.strategy, strategy.timeout)
 
     async def pdf(self, params: PDFParams) -> bytes:
@@ -1010,9 +1013,7 @@ class BiDiBackend(AbstractBackend):
         if params.js:
             await client.script.evaluate(self._context, params.js)
         paper = PAPER_SIZES.get(params.paper, PAPER_SIZES["letter"])
-        import re as _re
-
-        margin_match = _re.match(r"([\d.]+)", params.margin)
+        margin_match = re.match(r"([\d.]+)", params.margin)
         margin_val = float(margin_match.group(1)) if margin_match else 0.4
         margin_dict = {
             "top": margin_val,
@@ -1046,7 +1047,6 @@ class BiDiBackend(AbstractBackend):
             List of image bytes (one per frame).
         """
         client = self._require_launched()
-        import asyncio as _asyncio
 
         frames: list[bytes] = []
         interval = 0.5
@@ -1059,7 +1059,7 @@ class BiDiBackend(AbstractBackend):
             data = result.get("data", "") if result else ""
             if data:
                 frames.append(base64.b64decode(data))
-            await _asyncio.sleep(interval)
+            await asyncio.sleep(interval)
             elapsed += interval
         return frames
 
@@ -1108,7 +1108,6 @@ class BiDiBackend(AbstractBackend):
             List of console entry dicts with type, level, text, timestamp.
         """
         client = self._require_launched()
-        import asyncio as _asyncio
 
         entries: list[dict[str, Any]] = []
         level_order = {"all": 0, "debug": 0, "info": 1, "warning": 2, "error": 3}
@@ -1133,7 +1132,7 @@ class BiDiBackend(AbstractBackend):
                 )
 
         sub = await client.on_log_entry(_handler)
-        await _asyncio.sleep(0.5)
+        await asyncio.sleep(0.5)
         client.off(sub)
         return entries
 
@@ -1792,9 +1791,8 @@ class BiDiBackend(AbstractBackend):
             params.url,
             wait="complete",
         )
-        import asyncio as _asyncio
 
-        await _asyncio.sleep(params.timeout / 1000)
+        await asyncio.sleep(params.timeout / 1000)
         result = await client.cdp.send_command(
             "Network.getResponseBody",
             {"requestId": ""},
@@ -2043,9 +2041,6 @@ class BiDiBackend(AbstractBackend):
         Raises:
             WaitTimeoutError: If the element is not found within the timeout.
         """
-        import asyncio as _asyncio
-        import time as _time
-
         client = self._require_client()
         escaped = json.dumps(selector)
         js = (
@@ -2054,13 +2049,13 @@ class BiDiBackend(AbstractBackend):
             f"var rect=el.getBoundingClientRect();"
             f"return rect.width>0&&rect.height>0;}})()"
         )
-        deadline = _time.monotonic() + timeout_ms / 1000
-        while _time.monotonic() < deadline:
+        deadline = time.monotonic() + timeout_ms / 1000
+        while time.monotonic() < deadline:
             result = await client.script.evaluate(self._context, js)
             value = getattr(result, "value", None)
             if value is True or value == "true":
                 return
-            await _asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
         raise WaitTimeoutError("selector", timeout_ms)
 
     async def _scroll_into_view_if_needed(self, selector: str) -> None:
@@ -2113,8 +2108,6 @@ class BiDiBackend(AbstractBackend):
 
     async def type_text(self, selector: str, text: str, delay: int = 0) -> None:
         """Type text into an element via BiDi."""
-        import asyncio as _asyncio
-
         client = self._require_launched()
         escaped = json.dumps(selector)
         await client.script.evaluate(
@@ -2128,7 +2121,7 @@ class BiDiBackend(AbstractBackend):
             js = f"document.querySelector({escaped}).value += {escaped_char}"
             await client.script.evaluate(self._context, js)
             if delay > 0:
-                await _asyncio.sleep(delay / 1000)
+                await asyncio.sleep(delay / 1000)
 
     async def fill(self, selector: str, value: str, auto_wait: bool = True) -> None:
         """Fill an input element with a value via BiDi.
@@ -2265,9 +2258,6 @@ class BiDiBackend(AbstractBackend):
         Raises:
             WaitTimeoutError: If the element is not found within the timeout.
         """
-        import asyncio as _asyncio
-        import time as _time
-
         client = self._require_client()
         escaped_iframe = json.dumps(iframe_selector)
         escaped_sel = json.dumps(selector)
@@ -2279,13 +2269,13 @@ class BiDiBackend(AbstractBackend):
             f"var rect=el.getBoundingClientRect();"
             f"return rect.width>0&&rect.height>0;}})()"
         )
-        deadline = _time.monotonic() + timeout_ms / 1000
-        while _time.monotonic() < deadline:
+        deadline = time.monotonic() + timeout_ms / 1000
+        while time.monotonic() < deadline:
             result = await client.script.evaluate(self._context, js)
             value = getattr(result, "value", None)
             if value is True or value == "true":
                 return
-            await _asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
         raise WaitTimeoutError("selector", timeout_ms)
 
     async def iframe_click(
@@ -2402,9 +2392,6 @@ class BiDiBackend(AbstractBackend):
         Raises:
             WaitTimeoutError: If the element is not found within the timeout.
         """
-        import asyncio as _asyncio
-        import time as _time
-
         client = self._require_client()
         pierce_js = self._build_shadow_pierce_js(selectors)
         js = (
@@ -2413,13 +2400,13 @@ class BiDiBackend(AbstractBackend):
             f"var rect=el.getBoundingClientRect();"
             f"return rect.width>0&&rect.height>0;}})()"
         )
-        deadline = _time.monotonic() + timeout_ms / 1000
-        while _time.monotonic() < deadline:
+        deadline = time.monotonic() + timeout_ms / 1000
+        while time.monotonic() < deadline:
             result = await client.script.evaluate(self._context, js)
             value = getattr(result, "value", None)
             if value is True or value == "true":
                 return
-            await _asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
         raise WaitTimeoutError("selector", timeout_ms)
 
     async def shadow_click(self, selectors: list[str], auto_wait: bool = True) -> None:
@@ -2715,10 +2702,9 @@ class BiDiBackend(AbstractBackend):
             url_filter: Optional URL pattern to filter which entries to replay.
         """
         client = self._require_client()
-        import asyncio as _asyncio
 
         try:
-            content = await _asyncio.to_thread(validate_path(har_path).read_text, encoding="utf-8")
+            content = await asyncio.to_thread(validate_path(har_path).read_text, encoding="utf-8")
         except OSError as e:
             raise WavexisError(f"Failed to read HAR file: {e}") from e
         har_data = json.loads(content)
@@ -2874,10 +2860,8 @@ class BiDiBackend(AbstractBackend):
         Returns:
             A trace ID string for later stopping and collecting results.
         """
-        import time as _time
-
         client = self._require_client()
-        trace_id = f"trace-{int(_time.time() * 1000)}"
+        trace_id = f"trace-{int(time.time() * 1000)}"
 
         state: dict[str, Any] = {
             "trace_events": [],
@@ -2940,7 +2924,7 @@ class BiDiBackend(AbstractBackend):
             if result.get("data"):
                 state["screenshots"].append(
                     {
-                        "timestamp": _time.time(),
+                        "timestamp": time.time(),
                         "data": result["data"],
                     }
                 )
@@ -2970,28 +2954,32 @@ class BiDiBackend(AbstractBackend):
             return {"error": f"Unknown trace_id: {trace_id}"}
 
         trace_events: list[dict[str, Any]] = []
+        tracing_done = asyncio.Event()
 
         async def _on_tracing_complete(params: dict[str, Any]) -> None:
             """Handle Tracing.tracingComplete and extract trace events."""
-            stream_handle = params.get("stream")
-            if stream_handle:
-                chunks: list[bytes] = []
-                while True:
-                    resp = await client.cdp.send_command("IO.read", {"handle": stream_handle})
-                    data = resp.get("data", "")
-                    if not data:
-                        break
-                    chunks.append(base64.b64decode(data))
-                    if not resp.get("base64Encoded", True):
-                        break
-                raw = b"".join(chunks)
-                try:
-                    zf = zipfile.ZipFile(io.BytesIO(raw))
-                    for name in zf.namelist():
-                        content = zf.read(name).decode("utf-8", errors="replace")
-                        trace_events.extend(json.loads(content).get("traceEvents", []))
-                except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
-                    trace_events.append({"raw_size": len(raw)})
+            try:
+                stream_handle = params.get("stream")
+                if stream_handle:
+                    chunks: list[bytes] = []
+                    while True:
+                        resp = await client.cdp.send_command("IO.read", {"handle": stream_handle})
+                        data = resp.get("data", "")
+                        if not data:
+                            break
+                        chunks.append(base64.b64decode(data))
+                        if not resp.get("base64Encoded", True):
+                            break
+                    raw = b"".join(chunks)
+                    try:
+                        zf = zipfile.ZipFile(io.BytesIO(raw))
+                        for name in zf.namelist():
+                            content = zf.read(name).decode("utf-8", errors="replace")
+                            trace_events.extend(json.loads(content).get("traceEvents", []))
+                    except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
+                        trace_events.append({"raw_size": len(raw)})
+            finally:
+                tracing_done.set()
 
         client.cdp.on("Tracing.tracingComplete", _on_tracing_complete)
         try:
@@ -3007,9 +2995,9 @@ class BiDiBackend(AbstractBackend):
                         }
                     )
 
-            import asyncio as _asyncio
-
-            await _asyncio.sleep(0.5)
+            # Wait for the tracingComplete handler to finish (max 10s).
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(tracing_done.wait(), timeout=10.0)
         finally:
             client.cdp.off("Tracing.tracingComplete", _on_tracing_complete)
 
@@ -3076,10 +3064,8 @@ class BiDiBackend(AbstractBackend):
         Returns:
             A subscription ID for later unsubscription.
         """
-        import time as _time
-
         client = self._require_client()
-        sub_id = f"sub-{int(_time.time() * 1000)}"
+        sub_id = f"sub-{int(time.time() * 1000)}"
 
         if not hasattr(self, "_subscriptions"):
             self._subscriptions: dict[str, list[Any]] = {}
@@ -3124,7 +3110,10 @@ class BiDiBackend(AbstractBackend):
                     return _handler
 
                 handler = make_handler(label)
-                subscription = subscribe_fn(handler)
+                if inspect.iscoroutinefunction(subscribe_fn):
+                    subscription = await subscribe_fn(handler)
+                else:
+                    subscription = subscribe_fn(handler)
                 subscriptions.append(subscription)
 
         self._subscriptions[sub_id] = subscriptions
@@ -3195,9 +3184,11 @@ class BiDiBackend(AbstractBackend):
     async def intercept_download(self, pattern: str = ".*") -> bytes:
         """Set download behavior via CDP and return placeholder.
 
-        Uses CDP Page.setDownloadBehavior to allow downloads.
-        Actual interception requires event listening which is
-        not available via the CDP bridge.
+        Uses CDP Page.setDownloadBehavior to allow downloads. The download
+        directory is created under the system temp directory for cross-platform
+        compatibility. Actual interception requires event listening which is
+        not available via the CDP bridge, so an empty bytes placeholder is
+        returned.
 
         Args:
             pattern: Unused — kept for API parity.
@@ -3206,9 +3197,10 @@ class BiDiBackend(AbstractBackend):
             Empty bytes placeholder.
         """
         client = self._require_launched()
+        download_dir = str(Path(tempfile.gettempdir()) / "wavexis-downloads")
         await client.cdp.send_command(
             "Page.setDownloadBehavior",
-            {"behavior": "allow", "downloadPath": "/tmp/wavexis-downloads"},
+            {"behavior": "allow", "downloadPath": download_dir},
         )
         return b""
 
@@ -3723,9 +3715,8 @@ class BiDiBackend(AbstractBackend):
             "Tracing.start",
             {"traceConfig": {"recordMode": "recordUntilFull"}},
         )
-        import asyncio as _asyncio
 
-        await _asyncio.sleep(duration_ms / 1000)
+        await asyncio.sleep(duration_ms / 1000)
         result = await client.cdp.send_command("Tracing.end", {})
         return dict(result) if result else {}
 
@@ -3741,9 +3732,8 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         await client.cdp.send_command("Profiler.enable", {})
         await client.cdp.send_command("Profiler.start", {})
-        import asyncio as _asyncio
 
-        await _asyncio.sleep(duration_ms / 1000)
+        await asyncio.sleep(duration_ms / 1000)
         result = await client.cdp.send_command("Profiler.stop", {})
         return dict(result) if result else {}
 
@@ -3789,9 +3779,8 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         await client.cdp.send_command("CSS.enable", {})
         await client.cdp.send_command("CSS.startRuleUsageTracking", {})
-        import asyncio as _asyncio
 
-        await _asyncio.sleep(1)
+        await asyncio.sleep(1)
         result = await client.cdp.send_command(
             "CSS.stopRuleUsageTracking",
             {},
@@ -6342,22 +6331,22 @@ class BiDiBackend(AbstractBackend):
     async def webaudio_get_contexts(self) -> list[dict[str, Any]]:
         """Get WebAudio contexts via CDP.
 
+        Enables the WebAudio domain and collects all contextCreated events
+        emitted within a short window. Returns the list of contexts.
+
         Returns:
             List of AudioContext dicts.
         """
         client = self._require_launched()
         await client.cdp.send_command("WebAudio.enable", {})
 
-        contexts: list[dict[str, Any]] = []
         try:
-            event = await asyncio.wait_for(
-                client.cdp.wait_for_event("WebAudio.contextCreated"),
-                timeout=1.0,
+            events = await client.cdp.collect_events(
+                "WebAudio.contextCreated", timeout=1.0
             )
-            contexts.append(dict(event.get("context", event)))
         except TimeoutError:
-            pass
-        return contexts
+            events = []
+        return [dict(ev.get("context", ev)) for ev in events]
 
     async def webaudio_get_context(self, context_id: str) -> dict[str, Any]:
         """Get a specific WebAudio context by ID via CDP.
@@ -8316,15 +8305,13 @@ class BiDiBackend(AbstractBackend):
             WaitTimeoutError: If the expression does not return truthy in time.
         """
         client = self._require_launched()
-        import asyncio as _asyncio
-        import time as _time
 
-        deadline = _time.monotonic() + timeout_ms / 1000
-        while _time.monotonic() < deadline:
+        deadline = time.monotonic() + timeout_ms / 1000
+        while time.monotonic() < deadline:
             result = await client.script.evaluate(self._context, expression, await_promise=True)
             if hasattr(result, "value") and result.value:
                 return
-            await _asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
         raise WaitTimeoutError("function", timeout_ms)
 
     async def wait_for_selector(self, selector: str, timeout_ms: int = 30000) -> None:
@@ -8340,17 +8327,15 @@ class BiDiBackend(AbstractBackend):
             WaitTimeoutError: If the selector does not appear in time.
         """
         client = self._require_launched()
-        import asyncio as _asyncio
-        import time as _time
 
-        deadline = _time.monotonic() + timeout_ms / 1000
+        deadline = time.monotonic() + timeout_ms / 1000
         escaped = json.dumps(selector)
         js = f"!!document.querySelector({escaped})"
-        while _time.monotonic() < deadline:
+        while time.monotonic() < deadline:
             result = await client.script.evaluate(self._context, js, await_promise=False)
             if hasattr(result, "value") and result.value:
                 return
-            await _asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)
         raise WaitTimeoutError("selector", timeout_ms)
 
     async def locate_nodes(
@@ -10628,3 +10613,7 @@ class BiDiTabHandle(BiDiBackend):
             await client.browsing.close(self._context)
             self._context = None
         self._client = None
+        # Drop any in-progress combined traces so their captured frames
+        # and events are released before the backend is reused or GC'd.
+        if hasattr(self, "_combined_traces"):
+            self._combined_traces.clear()

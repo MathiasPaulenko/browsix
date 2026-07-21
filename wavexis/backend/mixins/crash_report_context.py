@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any
 
 
-class CrashReportContextBackend:
+class CrashReportContextBackend(ABC):
     """CrashReportContext domain for crash report entries."""
 
     @abstractmethod

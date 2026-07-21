@@ -191,10 +191,8 @@ class CDPBackend(AbstractBackend):
         elif wait.strategy == "url":
             if not wait.url_pattern:
                 raise ValueError("url wait strategy requires a url_pattern")
-            import time as _time
-
-            deadline = _time.monotonic() + timeout_sec
-            while _time.monotonic() < deadline:
+            deadline = time.monotonic() + timeout_sec
+            while time.monotonic() < deadline:
                 result = await session.runtime.evaluate("window.location.href")
                 href = result.get("result", {}).get("value", "") or ""
                 if wait.url_pattern in href:
@@ -890,9 +888,7 @@ class CDPBackend(AbstractBackend):
         await session.emulation.set_emulated_media(media=params.media)
 
         paper_dims = PAPER_SIZES.get(params.paper, PAPER_SIZES["letter"])
-        import re as _re
-
-        margin_match = _re.match(r"([\d.]+)", params.margin)
+        margin_match = re.match(r"([\d.]+)", params.margin)
         margin_val = float(margin_match.group(1)) if margin_match else 0.4
 
         result = await session.page.print_to_pdf(
@@ -3058,31 +3054,35 @@ class CDPBackend(AbstractBackend):
             return {"error": f"Unknown trace_id: {trace_id}"}
 
         trace_events: list[dict[str, Any]] = []
+        tracing_done = asyncio.Event()
 
         async def _on_tracing_complete(params: dict[str, Any]) -> None:
             """Handle Tracing.tracingComplete and extract trace events."""
             import io
             import zipfile
 
-            stream_handle = params.get("stream")
-            if stream_handle:
-                chunks: list[bytes] = []
-                while True:
-                    resp = await session.send("IO.read", {"handle": stream_handle})
-                    data = resp.get("data", "")
-                    if not data:
-                        break
-                    chunks.append(base64.b64decode(data))
-                    if not resp.get("base64Encoded", True):
-                        break
-                raw = b"".join(chunks)
-                try:
-                    zf = zipfile.ZipFile(io.BytesIO(raw))
-                    for name in zf.namelist():
-                        content = zf.read(name).decode("utf-8", errors="replace")
-                        trace_events.extend(json.loads(content).get("traceEvents", []))
-                except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
-                    trace_events.append({"raw_size": len(raw)})
+            try:
+                stream_handle = params.get("stream")
+                if stream_handle:
+                    chunks: list[bytes] = []
+                    while True:
+                        resp = await session.send("IO.read", {"handle": stream_handle})
+                        data = resp.get("data", "")
+                        if not data:
+                            break
+                        chunks.append(base64.b64decode(data))
+                        if not resp.get("base64Encoded", True):
+                            break
+                    raw = b"".join(chunks)
+                    try:
+                        zf = zipfile.ZipFile(io.BytesIO(raw))
+                        for name in zf.namelist():
+                            content = zf.read(name).decode("utf-8", errors="replace")
+                            trace_events.extend(json.loads(content).get("traceEvents", []))
+                    except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
+                        trace_events.append({"raw_size": len(raw)})
+            finally:
+                tracing_done.set()
 
         session.on("Tracing.tracingComplete", _on_tracing_complete)
         try:
@@ -3098,7 +3098,9 @@ class CDPBackend(AbstractBackend):
                         }
                     )
 
-            await asyncio.sleep(0.5)
+            # Wait for the tracingComplete handler to finish (max 10s).
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(tracing_done.wait(), timeout=10.0)
         finally:
             session.off("Tracing.tracingComplete", _on_tracing_complete)
 
@@ -3285,14 +3287,20 @@ class CDPBackend(AbstractBackend):
 
     # ── Downloads ──────────────────────────────────────────
 
-    async def intercept_download(self, pattern: str = ".*") -> bytes:
+    async def intercept_download(self, pattern: str = ".*", timeout: float = 30.0) -> bytes:
         """Intercept a file download matching a URL pattern and return bytes.
+
+        Sets the download behavior to a temp directory, then polls for the
+        first downloaded file to appear and finishes writing. Returns the
+        file bytes, or empty bytes if no download appears within the timeout.
 
         Args:
             pattern: URL pattern to match downloads (regex, default matches all).
+                Currently informational — all downloads in the temp dir are returned.
+            timeout: Maximum seconds to wait for a download to appear (default 30s).
 
         Returns:
-            Downloaded file bytes.
+            Downloaded file bytes, or empty bytes if no file appears.
         """
         session = self._require_session()
         import tempfile
@@ -3303,16 +3311,40 @@ class CDPBackend(AbstractBackend):
                 {"behavior": "allow", "downloadPath": download_dir},
             )
 
-            await asyncio.sleep(2)
+            download_path = Path(download_dir)
+            deadline = time.monotonic() + timeout
+            found: Path | None = None
+            while time.monotonic() < deadline:
+                def _list_files() -> list[Path]:
+                    return [p for p in download_path.iterdir() if p.is_file()]
 
-            def _list_files() -> list[Path]:
-                return list(Path(download_dir).iterdir())
+                candidates = await asyncio.to_thread(_list_files)
+                if candidates:
+                    found = candidates[0]
+                    break
+                await asyncio.sleep(0.25)
 
-            for fpath in await asyncio.to_thread(_list_files):
-                if await asyncio.to_thread(Path(fpath).is_file):
-                    return await asyncio.to_thread(Path(fpath).read_bytes)
+            if found is None:
+                return b""
 
-        return b""
+            # Wait for the download to finish writing (size stable for 0.5s).
+            prev_size = -1
+            stable_until = time.monotonic() + min(timeout, 10.0)
+            while time.monotonic() < stable_until:
+                try:
+                    size = await asyncio.to_thread(found.stat)
+                except OSError:
+                    # File was deleted or renamed mid-download.
+                    return b""
+                if size.st_size == prev_size and size.st_size > 0:
+                    break
+                prev_size = size.st_size
+                await asyncio.sleep(0.5)
+
+            try:
+                return await asyncio.to_thread(found.read_bytes)
+            except OSError:
+                return b""
 
     # ── Dialogs ────────────────────────────────────────────
 
@@ -6323,19 +6355,23 @@ class CDPBackend(AbstractBackend):
     # ── WebAudio (experimental) ────────────────────────────
 
     async def webaudio_get_contexts(self) -> list[dict[str, Any]]:
-        """Get all WebAudio contexts via CDP WebAudio domain."""
+        """Get all WebAudio contexts via CDP WebAudio domain.
+
+        Enables the WebAudio domain and collects all contextCreated events
+        emitted within a short window. Returns the list of contexts.
+
+        Returns:
+            List of WebAudio context dicts.
+        """
         session = self._require_session()
         await session.send("WebAudio.enable", {})
-        contexts: list[dict[str, Any]] = []
         try:
-            event = await asyncio.wait_for(
-                session.wait_for_event("WebAudio.contextCreated"),
-                timeout=1.0,
+            events = await session.collect_events(
+                "WebAudio.contextCreated", timeout=1.0
             )
-            contexts.append(dict(event.get("context", event)))
         except TimeoutError:
-            pass
-        return contexts
+            events = []
+        return [dict(ev.get("context", ev)) for ev in events]
 
     async def webaudio_get_context(self, context_id: str) -> dict[str, Any]:
         """Get a specific WebAudio context by ID via CDP WebAudio domain."""
@@ -10372,3 +10408,7 @@ class TabHandle(CDPBackend):
             await self._session.close()
             self._session = None
         self._client = None
+        # Drop any in-progress combined traces so their captured frames
+        # and events are released before the backend is reused or GC'd.
+        if hasattr(self, "_combined_traces"):
+            self._combined_traces.clear()

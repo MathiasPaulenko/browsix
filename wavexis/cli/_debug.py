@@ -2663,11 +2663,9 @@ def target_set_remote_locations(
     locations: str = typer.Argument(..., help="JSON array of location dicts with host and port"),
 ) -> None:
     """Set remote locations for target discovery."""
-    import json as _json
-
     try:
-        locs = _json.loads(locations)
-    except _json.JSONDecodeError as e:
+        locs = json.loads(locations)
+    except json.JSONDecodeError as e:
         typer.echo(f"Invalid locations JSON: {e}", err=True)
         raise typer.Exit(2) from e
     _run_async(_target_direct(url, lambda b: b.target_set_remote_locations(locs)))

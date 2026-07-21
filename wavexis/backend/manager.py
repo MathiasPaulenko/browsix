@@ -79,14 +79,17 @@ class BackendManager:
         """Select a backend by preference or availability.
 
         Args:
-            preferred: Preferred backend name. If None or unavailable,
-                falls back to the first available backend.
+            preferred: Preferred backend name. If None, selects the first
+                available backend. If specified but not available, raises
+                ``BackendNotAvailableError``. For automatic fallback to
+                other backends, use ``select_with_fallback_sync``.
 
         Returns:
             An instance of the selected backend.
 
         Raises:
-            BackendNotAvailableError: If no backend is available.
+            BackendNotAvailableError: If no backend is available, or if the
+                preferred backend is specified but not available.
         """
         available = self.list_available()
         if not available:

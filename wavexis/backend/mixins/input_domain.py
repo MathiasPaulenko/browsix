@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any
 
 
-class InputDomainBackend:
+class InputDomainBackend(ABC):
     """Low-level CDP Input domain for dispatching raw input events."""
 
     @abstractmethod

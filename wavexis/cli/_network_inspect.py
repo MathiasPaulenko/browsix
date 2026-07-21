@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["axe", "events", "har_replay", "inspect", "modify", "modify_response", "trace"]
 
+import asyncio
 import json
 from typing import Any
 
@@ -109,8 +110,6 @@ async def _modify(url: str, pattern: str, modifications: dict[str, Any], wait: f
         modifications: Dict with optional keys: headers, url, method, post_data.
         wait: Seconds to keep interception active after navigation.
     """
-    import asyncio
-
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
@@ -180,8 +179,6 @@ async def _modify_response(
         modifications: Dict with optional keys: status, headers, body.
         wait: Seconds to keep interception active after navigation.
     """
-    import asyncio
-
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
@@ -374,8 +371,6 @@ def events(
 
 async def _events_subscribe(url: str, event_types: list[str], duration: int) -> None:
     """Async helper for event subscription."""
-    import asyncio
-
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())

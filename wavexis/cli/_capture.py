@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["_check_assertion"]
 
+import asyncio
 import json
 from typing import Annotated, Any
 
@@ -429,8 +430,6 @@ async def _scrape(
 
     When concurrency > 1, uses tabs in a single Chrome process for parallel scraping.
     """
-    import asyncio
-
     backend = _get_backend()
     total = len(urls)
     _echo(f"Scraping {total} URL(s)…")
@@ -468,6 +467,8 @@ async def _scrape(
             gathered = await asyncio.gather(*tasks, return_exceptions=True)
             results: list[dict[str, Any]] = []
             for url, batch in zip(urls, gathered, strict=True):
+                if isinstance(batch, BaseException) and not isinstance(batch, Exception):
+                    raise batch
                 if isinstance(batch, Exception):
                     _echo(f"Error scraping {url}: {batch}")
                     continue
