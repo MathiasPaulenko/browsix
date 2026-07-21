@@ -181,7 +181,11 @@ def user_agent(
     ``wavexis --user-agent "Mozilla/5.0 (Test)" screenshot https://example.com``
     """
     result = _run_async(_user_agent(ua, url))
-    if result is None:
+    if result is None and url:
+        # _run_async returns None when a WavexisError was handled (it
+        # already printed an error and set the exit code). But _user_agent
+        # also returns None when no --url was given, so only treat None as
+        # an error when we actually expected a verification result.
         return
     if url:
         typer.echo(f"User-Agent set to: {ua}")

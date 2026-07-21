@@ -2,6 +2,13 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.16.4 — 2026-07-21
+
+### Bug Fixes
+
+- **`user-agent` without `--url` printed nothing** — Bug #29 introduced a regression where `wavexis user-agent "..."` (without `--url`) produced empty stdout because the CLI treated the legitimate `None` return value (meaning "no verification requested") as an error sentinel. The success message is now always printed when the command succeeds.
+- **`dom_get_attr` flaky `ElementNotFoundError`** — `_find_node` now retries for up to 5 seconds when `query_selector` returns nodeId 0, handling race conditions where the DOM is not fully ready after navigation. Fixes the intermittent `test_dom_get_attr` integration test failure on CI.
+
 ## v2.16.3 — 2026-07-21
 
 ### CI / Tooling

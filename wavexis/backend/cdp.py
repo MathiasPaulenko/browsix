@@ -1207,17 +1207,32 @@ class CDPBackend(AbstractBackend):
 
     # ── DOM ────────────────────────────────────────────────
 
-    async def _find_node(self, selector: str) -> int:
-        """Find a node by CSS selector and return its nodeId."""
+    async def _find_node(self, selector: str, timeout: float = 5.0) -> int:
+        """Find a node by CSS selector and return its nodeId.
+
+        Retries for up to ``timeout`` seconds to handle race conditions
+        where the DOM is not fully ready after navigation.
+        """
         session = self._require_session()
         await session.dom.enable()
-        doc = await session.dom.get_document()
-        root_node_id = doc.get("root", {}).get("nodeId", 0)
-        result = await session.dom.query_selector(root_node_id, selector)
-        node_id = result.get("nodeId", 0)
-        if node_id == 0:
-            raise ElementNotFoundError(selector)
-        return int(node_id)
+        deadline = asyncio.get_event_loop().time() + timeout
+        last_error: Exception | None = None
+        while True:
+            try:
+                doc = await session.dom.get_document(depth=-1)
+                root_node_id = doc.get("root", {}).get("nodeId", 0)
+                result = await session.dom.query_selector(root_node_id, selector)
+                node_id = result.get("nodeId", 0)
+                if node_id != 0:
+                    return int(node_id)
+            except Exception as e:
+                last_error = e
+            if asyncio.get_event_loop().time() >= deadline:
+                break
+            await asyncio.sleep(0.25)
+        if last_error:
+            raise ElementNotFoundError(selector) from last_error
+        raise ElementNotFoundError(selector)
 
     async def dom_get(self, selector: str, outer: bool = True) -> str:
         """Get the HTML of an element matching a CSS selector.
