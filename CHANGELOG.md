@@ -2,6 +2,28 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.16.1 — 2026-07-21
+
+### Bug Fixes
+
+- **`OSError: [Errno 22]` on Windows console output** — Rich could not render unicode glyphs (checkmark, info symbol) on legacy Windows codepages. `wavexis.output` now reconfigures `stdout`/`stderr` to UTF-8 on Windows.
+- **`wavexis completions` called a non-existent command** — It spawned `python -m wavexis completion <shell>` instead of using Typer's built-in `--install-completion`. It now invokes the correct flag and forces UTF-8 I/O for the child process.
+- **`page-pdf` crashed with `TypeError`** — `PageDomain.print_to_pdf()` received camelCase kwargs (`displayHeaderFooter`) while cdpwave expects snake_case. Fixed and expanded CLI options (`--display-header-footer`, `--print-background`, paper sizes, margins).
+- **Global `--timeout` was ignored** — Most CLI commands hardcoded `WaitStrategy(strategy="load")` with the default 30000ms. Added `_wait_strategy()` helper that honors `--timeout` and config file values.
+- **No way to choose a wait strategy** — Added global `--wait-strategy` flag (load, domcontentloaded, networkidle) and `wait_strategy` config key.
+- **`crawl` returned exit 0 when every page failed** — Now exits with a non-zero code when zero pages were crawled, making CI/pipeline failures visible.
+- **Unnecessary `url` arguments on browser-state commands** — `target list` and `emulation can-emulate` no longer require or navigate to a URL.
+- **`console` group lacked a capture command** — Added `wavexis console capture <url>` with `--level` and `--output` options.
+- **Command naming inconsistency** — `emulation dark_mode` (underscore) now has `emulation dark-mode` as the canonical command with the underscore form as a hidden alias.
+
+### Documentation
+
+- **`docs/guide/commands.md`** updated to match the actual CLI: `auth`, `record`, `replay`, `console capture`, `page-pdf`, `emulation dark-mode`, `emulation can-emulate`, `target list`, and the new `--wait-strategy` global flag.
+
+### Testing
+
+- **2300 unit tests passing** — Added regression tests for unicode output, completions, page-pdf kwargs, timeout/wait-strategy propagation, crawl exit codes, `target list` without URL, `emulation can-emulate` without URL, and `console capture`.
+
 ## v2.16.0 — 2026-07-21
 
 ### Bug Fixes
