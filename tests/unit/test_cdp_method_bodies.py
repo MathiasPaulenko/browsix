@@ -1331,6 +1331,38 @@ class TestCDPMethodBodies:
         result = await backend.page_print_to_pdf()
         assert isinstance(result, str)
 
+    async def test_page_print_to_pdf_passes_snake_case_kwargs(self) -> None:
+        """Regression for bug #18: cdpwave expects snake_case kwargs, not camelCase."""
+        backend, _, mock = _make_mock_backend()
+        await backend.page_print_to_pdf(
+            landscape=True,
+            display_header_footer=True,
+            print_background=True,
+            scale=1.5,
+            paper_width=5.0,
+            paper_height=8.0,
+            margin_top=0.1,
+            margin_bottom=0.2,
+            margin_left=0.3,
+            margin_right=0.4,
+        )
+        mock.page.print_to_pdf.assert_awaited_once()
+        kwargs = mock.page.print_to_pdf.await_args.kwargs
+        # All kwargs passed to cdpwave must be snake_case; camelCase raises TypeError.
+        assert "displayHeaderFooter" not in kwargs
+        assert "printBackground" not in kwargs
+        assert "paperWidth" not in kwargs
+        assert kwargs["display_header_footer"] is True
+        assert kwargs["print_background"] is True
+        assert kwargs["landscape"] is True
+        assert kwargs["scale"] == 1.5
+        assert kwargs["paper_width"] == 5.0
+        assert kwargs["paper_height"] == 8.0
+        assert kwargs["margin_top"] == 0.1
+        assert kwargs["margin_bottom"] == 0.2
+        assert kwargs["margin_left"] == 0.3
+        assert kwargs["margin_right"] == 0.4
+
     async def test_page_start_screencast(self) -> None:
         backend, _, mock = _make_mock_backend()
         await backend.page_start_screencast("jpeg", 80)

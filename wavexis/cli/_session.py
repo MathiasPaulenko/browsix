@@ -17,8 +17,8 @@ from wavexis.cli._shared import (
     _handle_error,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
 from wavexis.exceptions import WavexisError
 from wavexis.output import validate_path
 
@@ -100,7 +100,7 @@ def session(
             backend = _get_backend()
             await backend.launch(_browser_options())
             try:
-                await backend.navigate(url, WaitStrategy(strategy="load"))
+                await backend.navigate(url, _wait_strategy())
                 save_action = SessionSaveAction(session_path)
                 return await save_action.execute(backend)
             finally:
@@ -121,7 +121,7 @@ def session(
                 load_action = SessionLoadAction(session_path)
                 await load_action.execute(backend)
                 if url:
-                    await backend.navigate(url, WaitStrategy(strategy="load"))
+                    await backend.navigate(url, _wait_strategy())
                     title = await backend.eval("document.title", await_promise=False)
                     return title
                 return "Session loaded"
@@ -183,7 +183,7 @@ def extract(
                 url=url,
                 schema=schema_dict,
                 selector=selector or None,
-                wait=WaitStrategy(strategy="load"),
+                wait=_wait_strategy(),
             )
             action = ExtractAction(params)
             return await action.execute(backend)
@@ -242,7 +242,7 @@ def form(
                 url=url,
                 fields=fields,
                 submit=submit or None,
-                wait=WaitStrategy(strategy="load"),
+                wait=_wait_strategy(),
             )
             action = FormAction(params)
             return await action.execute(backend)

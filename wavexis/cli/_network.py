@@ -17,8 +17,9 @@ from wavexis.cli._shared import (
     _run_async,
     _write_json_output,
     app,
+    _wait_strategy,
 )
-from wavexis.config import CookieParams, ThrottleParams, WaitStrategy
+from wavexis.config import CookieParams, ThrottleParams
 from wavexis.output import validate_path
 
 network_app = typer.Typer(help="Network commands (block, throttle, cache, intercept, mock)")
@@ -79,7 +80,7 @@ async def _cookies(
     try:
         await backend.launch(_browser_options())
         if url:
-            await backend.navigate(url, WaitStrategy(strategy="load"))
+            await backend.navigate(url, _wait_strategy())
 
         if action == "get":
             return await backend.get_cookies()
@@ -339,7 +340,7 @@ async def _network_auth(
         await backend.launch(_browser_options())
         await backend.handle_auth(url_pattern, username, password)
         if navigate_url:
-            await backend.navigate(navigate_url, WaitStrategy(strategy=wait))
+            await backend.navigate(navigate_url, _wait_strategy(strategy=wait))
     finally:
         await _close_backend(backend)
 

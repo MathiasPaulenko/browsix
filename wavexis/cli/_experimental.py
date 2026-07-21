@@ -29,8 +29,9 @@ from wavexis.cli._shared import (
     _run_async,
     app,
     get_manager,
+    _wait_strategy,
 )
-from wavexis.config import AnimationParams, StorageParams, SystemInfoParams, WaitStrategy
+from wavexis.config import AnimationParams, StorageParams, SystemInfoParams
 from wavexis.output import Output
 
 
@@ -120,7 +121,7 @@ def storage(
         request_headers=request_headers_list,
         skip_count=skip_count,
         page_size=page_size,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _storage_action() -> Any:
@@ -327,7 +328,7 @@ def sw(
         data=data,
         tag=tag,
         last_chance=last_chance,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _sw_action() -> Any:
@@ -359,7 +360,7 @@ def animation(
         action=action,
         animation_id=animation_id or None,
         time_ms=time_ms if time_ms else None,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _animation_action() -> Any:
@@ -432,7 +433,7 @@ def webauthn(
         is_bogus_signature=is_bogus_signature,
         is_bad_uv=is_bad_uv,
         is_bad_up=is_bad_up,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _webauthn_action() -> Any:
@@ -466,7 +467,7 @@ def webaudio(
         url=url,
         action=action,
         context_id=context_id or None,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _webaudio_action() -> Any:
@@ -496,7 +497,7 @@ def media(
         url=url,
         action=action,
         player_id=player_id or None,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _media_action() -> Any:
@@ -531,7 +532,7 @@ def cast(
         url=url,
         action=action,
         sink_name=sink_name or None,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _cast_action() -> Any:
@@ -562,7 +563,7 @@ def bluetooth(
         action=action,
         name=name or None,
         address=address,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _bluetooth_action() -> None:
@@ -618,7 +619,7 @@ def smartcard(
         data=data or None,
         status=status or None,
         readers=readers_list,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _smartcard_action() -> Any:
@@ -699,7 +700,7 @@ def system_info(
         url=url,
         action=action,
         feature_name=feature_name or None,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
 
     async def _system_info_action() -> Any:

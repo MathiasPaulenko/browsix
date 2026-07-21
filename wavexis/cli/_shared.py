@@ -15,6 +15,7 @@ from wavexis.cleanup import register_backend, unregister_backend
 from wavexis.config import (
     DEVICE_PRESETS,
     BrowserOptions,
+    WaitStrategy,
 )
 from wavexis.exceptions import (
     BackendNotAvailableError,
@@ -53,6 +54,7 @@ __all__ = [
     "_load_global_config",
     "_progress",
     "_run_async",
+    "_wait_strategy",
     "_write_json_output",
     "app",
     "get_manager",
@@ -81,6 +83,7 @@ class CLIContext:
     quiet: bool = False
     headless: bool = True
     timeout: int = 30000
+    wait_strategy: str = "load"
     proxy: str | None = None
     user_data_dir: str | None = None
     browser_url: str | None = None
@@ -122,6 +125,8 @@ def _load_global_config() -> None:
             ctx.headless = bool(raw["headless"])
         if "timeout" in raw:
             ctx.timeout = int(raw["timeout"])
+        if "wait_strategy" in raw:
+            ctx.wait_strategy = str(raw["wait_strategy"])
         if "proxy" in raw:
             ctx.proxy = str(raw["proxy"])
         if "user_data_dir" in raw:
@@ -156,6 +161,11 @@ def main_callback(
     timeout: int = typer.Option(
         0, "--timeout", help="Navigation timeout in milliseconds (default: 30000)"
     ),
+    wait_strategy: str = typer.Option(
+        "load",
+        "--wait-strategy",
+        help="Default navigation wait strategy: load, domcontentloaded, or networkidle",
+    ),
     proxy: str | None = typer.Option(
         None, "--proxy", help="Proxy server URL (e.g. http://proxy:8080)"
     ),
@@ -187,6 +197,8 @@ def main_callback(
         ctx.headless = False
     if timeout > 0:
         ctx.timeout = timeout
+    if wait_strategy:
+        ctx.wait_strategy = wait_strategy
     if proxy:
         ctx.proxy = proxy
     if user_data_dir:
@@ -331,6 +343,33 @@ def _browser_options() -> BrowserOptions:
         browser_url=ctx.browser_url,
         remote_url=ctx.remote_url,
         stealth=ctx.stealth,
+    )
+
+
+def _wait_strategy(
+    strategy: str | None = None,
+    *,
+    selector: str | None = None,
+    url_pattern: str | None = None,
+    timeout: int | None = None,
+) -> WaitStrategy:
+    """Build a WaitStrategy that honours the global ``--timeout`` and ``--wait-strategy`` flags.
+
+    Bug #3: previously CLI commands hardcoded ``WaitStrategy(strategy="load")``
+    which always used the 30000ms default, ignoring ``--timeout`` and the
+    config file. This helper applies ``ctx.timeout`` unless an explicit
+    ``timeout`` is provided.
+
+    Bug #4: callers can pass ``strategy=None`` to fall back to the global
+    ``--wait-strategy`` flag (default ``"load"``). Pass an explicit string to
+    override (e.g. ``"selector"`` with a ``selector`` argument).
+    """
+    ctx = _get_ctx()
+    return WaitStrategy(
+        strategy=ctx.wait_strategy if strategy is None else strategy,
+        selector=selector,
+        url_pattern=url_pattern,
+        timeout=ctx.timeout if timeout is None else timeout,
     )
 
 

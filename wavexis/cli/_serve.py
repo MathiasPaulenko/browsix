@@ -18,10 +18,8 @@ from wavexis.cli._shared import (
     _run_async,
     app,
     get_manager,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
-
-
 @app.command()
 def backends() -> None:
     """List available backends."""
@@ -167,7 +165,7 @@ def ws(
                 url_pattern=pattern,
                 duration_ms=duration,
                 mock_responses=mock_dict,
-                wait=WaitStrategy(strategy="load"),
+                wait=_wait_strategy(),
             )
             action = WebSocketInterceptAction(params)
             return await action.execute(backend)

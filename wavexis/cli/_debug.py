@@ -16,8 +16,8 @@ from wavexis.cli._shared import (
     _run_async,
     _write_json_output,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
 from wavexis.exceptions import ElementNotFoundError, WavexisError
 
 css_app = typer.Typer(help="CSS inspection commands (styles, stylesheets, rules, computed)")
@@ -207,7 +207,7 @@ async def _css_action(
         action=action,
         selector=selector,
         stylesheet_id=stylesheet_id,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
     backend = _get_backend()
     try:
@@ -922,7 +922,7 @@ async def _debug_action(
         function_name=function_name,
         breakpoint_id=breakpoint_id,
         selector=selector,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
     backend = _get_backend()
     try:
@@ -1538,7 +1538,7 @@ async def _overlay_action(
         action=action,
         selector=selector,
         color=color,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
     backend = _get_backend()
     try:
@@ -1985,7 +1985,7 @@ async def _dom_action(
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
 
         if action == "document":
             return await backend.dom_get_document()
@@ -2468,11 +2468,15 @@ def sensor_set_override_cmd(
 
 @target_app.command("list")
 def target_list(
-    url: str = typer.Argument(..., help="URL to navigate to"),
     output: str = typer.Option("-", "-o", "--output", help="Output file (- for stdout)"),
 ) -> None:
-    """Get all available targets."""
-    result = _run_async(_target_direct(url, lambda b: b.target_get_targets()))
+    """Get all available targets.
+
+    Bug #12: previously required a ``url`` argument and navigated to it before
+    listing targets. Listing targets is a browser-level operation that does
+    not require a page navigation, so the ``url`` argument has been removed.
+    """
+    result = _run_async(_target_no_navigate(lambda b: b.target_get_targets()))
     if result is None:
         return
     _write_json_output(result, output, "targets")
@@ -2678,6 +2682,21 @@ async def _target_direct(url: str, action_fn: Any) -> Any:
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url)
+        return await action_fn(backend)
+    finally:
+        await _close_backend(backend)
+
+
+async def _target_no_navigate(action_fn: Any) -> Any:
+    """Launch backend without navigating and run a target action.
+
+    Bug #12/#23: ``target list`` and other pure state-inspection commands do
+    not need to navigate to a URL. Forcing navigation triggered the load
+    timeout (#2) and made the command unusable.
+    """
+    backend = _get_backend()
+    try:
+        await backend.launch(_browser_options())
         return await action_fn(backend)
     finally:
         await _close_backend(backend)
@@ -3397,11 +3416,15 @@ def emulation_add_screen(
 
 @emulation_app.command("can-emulate")
 def emulation_can_emulate(
-    url: str = typer.Argument(..., help="URL to navigate to"),
     output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
 ) -> None:
-    """Check whether the browser supports emulation."""
-    result = _run_async(_emulation_direct(url, "can_emulate"))
+    """Check whether the browser supports emulation.
+
+    Bug #23: previously required a ``url`` argument and navigated to it before
+    checking emulation support. This is a browser-capability query and does
+    not need a page navigation, so the ``url`` argument has been removed.
+    """
+    result = _run_async(_emulation_no_navigate("can_emulate"))
     if result is None:
         return
     _write_json_output({"canEmulate": result}, output, "canEmulate")
@@ -3893,141 +3916,160 @@ async def _emulation_direct(url: str, action: str, **kwargs: Any) -> Any:
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url)
-        if action == "add_screen":
-            await backend.add_screen(kwargs["screen"])
-            return None
-        if action == "can_emulate":
-            return await backend.can_emulate()
-        if action == "clear_auto_dark_mode_override":
-            await backend.clear_auto_dark_mode_override()
-            return None
-        if action == "clear_default_background_color_override":
-            await backend.clear_default_background_color_override()
-            return None
-        if action == "clear_device_posture_override":
-            await backend.clear_device_posture_override()
-            return None
-        if action == "clear_display_features_override":
-            await backend.clear_display_features_override()
-            return None
-        if action == "clear_geolocation_override":
-            await backend.clear_geolocation_override()
-            return None
-        if action == "clear_timezone_override":
-            await backend.clear_timezone_override()
-            return None
-        if action == "get_overridden_sensor_information":
-            return await backend.get_overridden_sensor_information(kwargs["sensor_type"])
-        if action == "get_screen_infos":
-            return await backend.get_screen_infos()
-        if action == "remove_screen":
-            await backend.remove_screen(kwargs["screen_id"])
-            return None
-        if action == "reset_page_scale_factor":
-            await backend.reset_page_scale_factor()
-            return None
-        if action == "set_auto_dark_mode_override":
-            await backend.set_auto_dark_mode_override(kwargs["enabled"])
-            return None
-        if action == "set_automation_override":
-            await backend.set_automation_override(kwargs["enabled"])
-            return None
-        if action == "set_cpu_throttling_rate":
-            await backend.set_cpu_throttling_rate(kwargs["rate"])
-            return None
-        if action == "set_data_saver_override":
-            await backend.set_data_saver_override(kwargs["enabled"])
-            return None
-        if action == "set_default_background_color_override":
-            await backend.set_default_background_color_override(kwargs["color"])
-            return None
-        if action == "set_device_posture_override":
-            await backend.set_device_posture_override(kwargs["posture"])
-            return None
-        if action == "set_disabled_image_types":
-            await backend.set_disabled_image_types(kwargs["image_types"])
-            return None
-        if action == "set_display_features_override":
-            await backend.set_display_features_override(kwargs["features"])
-            return None
-        if action == "set_document_cookie_disabled":
-            await backend.set_document_cookie_disabled(kwargs["disabled"])
-            return None
-        if action == "set_emit_touch_events_for_mouse":
-            await backend.set_emit_touch_events_for_mouse(kwargs["enabled"])
-            return None
-        if action == "set_emulated_media_feature":
-            await backend.set_emulated_media_feature(kwargs["features"])
-            return None
-        if action == "set_emulated_os_text_scale":
-            await backend.set_emulated_os_text_scale(kwargs["scale"])
-            return None
-        if action == "set_focus_emulation_enabled":
-            await backend.set_focus_emulation_enabled(kwargs["enabled"])
-            return None
-        if action == "set_geolocation_override":
-            await backend.set_geolocation_override(
-                kwargs["latitude"], kwargs["longitude"], kwargs["accuracy"]
-            )
-            return None
-        if action == "set_hardware_concurrency_override":
-            await backend.set_hardware_concurrency_override(kwargs["concurrency"])
-            return None
-        if action == "set_locale_override":
-            await backend.set_locale_override(kwargs["locale"])
-            return None
-        if action == "set_navigator_overrides":
-            await backend.set_navigator_overrides(kwargs["navigator"])
-            return None
-        if action == "set_page_scale_factor":
-            await backend.set_page_scale_factor(kwargs["factor"])
-            return None
-        if action == "set_pressure_source_override_enabled":
-            await backend.set_pressure_source_override_enabled(kwargs["source"], kwargs["enabled"])
-            return None
-        if action == "set_pressure_state_override":
-            await backend.set_pressure_state_override(
-                kwargs["source"], kwargs["state"], kwargs["value"]
-            )
-            return None
-        if action == "set_primary_screen":
-            await backend.set_primary_screen(kwargs["screen_id"])
-            return None
-        if action == "set_safe_area_insets_override":
-            await backend.set_safe_area_insets_override(kwargs["insets"])
-            return None
-        if action == "set_scrollbars_hidden":
-            await backend.set_scrollbars_hidden(kwargs["hidden"])
-            return None
-        if action == "set_sensor_override_enabled":
-            await backend.set_sensor_override_enabled(kwargs["sensor_type"], kwargs["enabled"])
-            return None
-        if action == "set_sensor_override_readings":
-            await backend.set_sensor_override_readings(kwargs["sensor_type"], kwargs["readings"])
-            return None
-        if action == "set_small_viewport_height_difference_override":
-            await backend.set_small_viewport_height_difference_override(kwargs["difference"])
-            return None
-        if action == "set_timezone_override":
-            await backend.set_timezone_override(kwargs["timezone_id"])
-            return None
-        if action == "set_touch_emulation_enabled":
-            await backend.set_touch_emulation_enabled(kwargs["enabled"], kwargs["max_touch_points"])
-            return None
-        if action == "set_user_agent_override":
-            await backend.set_user_agent_override(
-                kwargs["user_agent"], kwargs["accept_language"], kwargs["platform"]
-            )
-            return None
-        if action == "set_virtual_time_policy":
-            await backend.set_virtual_time_policy(kwargs["policy"], kwargs["budget"])
-            return None
-        if action == "update_screen":
-            await backend.update_screen(kwargs["screen_id"], kwargs["screen"])
-            return None
-        raise WavexisError(f"Unknown emulation action: {action}")
+        return await _emulation_action(backend, action, **kwargs)
     finally:
         await _close_backend(backend)
+
+
+async def _emulation_no_navigate(action: str, **kwargs: Any) -> Any:
+    """Launch backend without navigating and run an emulation action.
+
+    Bug #23: ``can-emulate`` and other browser-capability checks do not need
+    a page navigation. Forcing one triggered the load timeout (#2).
+    """
+    backend = _get_backend()
+    try:
+        await backend.launch(_browser_options())
+        return await _emulation_action(backend, action, **kwargs)
+    finally:
+        await _close_backend(backend)
+
+
+async def _emulation_action(backend: Any, action: str, **kwargs: Any) -> Any:
+    """Dispatch an emulation action against the backend."""
+    if action == "add_screen":
+        await backend.add_screen(kwargs["screen"])
+        return None
+    if action == "can_emulate":
+        return await backend.can_emulate()
+    if action == "clear_auto_dark_mode_override":
+        await backend.clear_auto_dark_mode_override()
+        return None
+    if action == "clear_default_background_color_override":
+        await backend.clear_default_background_color_override()
+        return None
+    if action == "clear_device_posture_override":
+        await backend.clear_device_posture_override()
+        return None
+    if action == "clear_display_features_override":
+        await backend.clear_display_features_override()
+        return None
+    if action == "clear_geolocation_override":
+        await backend.clear_geolocation_override()
+        return None
+    if action == "clear_timezone_override":
+        await backend.clear_timezone_override()
+        return None
+    if action == "get_overridden_sensor_information":
+        return await backend.get_overridden_sensor_information(kwargs["sensor_type"])
+    if action == "get_screen_infos":
+        return await backend.get_screen_infos()
+    if action == "remove_screen":
+        await backend.remove_screen(kwargs["screen_id"])
+        return None
+    if action == "reset_page_scale_factor":
+        await backend.reset_page_scale_factor()
+        return None
+    if action == "set_auto_dark_mode_override":
+        await backend.set_auto_dark_mode_override(kwargs["enabled"])
+        return None
+    if action == "set_automation_override":
+        await backend.set_automation_override(kwargs["enabled"])
+        return None
+    if action == "set_cpu_throttling_rate":
+        await backend.set_cpu_throttling_rate(kwargs["rate"])
+        return None
+    if action == "set_data_saver_override":
+        await backend.set_data_saver_override(kwargs["enabled"])
+        return None
+    if action == "set_default_background_color_override":
+        await backend.set_default_background_color_override(kwargs["color"])
+        return None
+    if action == "set_device_posture_override":
+        await backend.set_device_posture_override(kwargs["posture"])
+        return None
+    if action == "set_disabled_image_types":
+        await backend.set_disabled_image_types(kwargs["image_types"])
+        return None
+    if action == "set_display_features_override":
+        await backend.set_display_features_override(kwargs["features"])
+        return None
+    if action == "set_document_cookie_disabled":
+        await backend.set_document_cookie_disabled(kwargs["disabled"])
+        return None
+    if action == "set_emit_touch_events_for_mouse":
+        await backend.set_emit_touch_events_for_mouse(kwargs["enabled"])
+        return None
+    if action == "set_emulated_media_feature":
+        await backend.set_emulated_media_feature(kwargs["features"])
+        return None
+    if action == "set_emulated_os_text_scale":
+        await backend.set_emulated_os_text_scale(kwargs["scale"])
+        return None
+    if action == "set_focus_emulation_enabled":
+        await backend.set_focus_emulation_enabled(kwargs["enabled"])
+        return None
+    if action == "set_geolocation_override":
+        await backend.set_geolocation_override(
+            kwargs["latitude"], kwargs["longitude"], kwargs["accuracy"]
+        )
+        return None
+    if action == "set_hardware_concurrency_override":
+        await backend.set_hardware_concurrency_override(kwargs["concurrency"])
+        return None
+    if action == "set_locale_override":
+        await backend.set_locale_override(kwargs["locale"])
+        return None
+    if action == "set_navigator_overrides":
+        await backend.set_navigator_overrides(kwargs["navigator"])
+        return None
+    if action == "set_page_scale_factor":
+        await backend.set_page_scale_factor(kwargs["factor"])
+        return None
+    if action == "set_pressure_source_override_enabled":
+        await backend.set_pressure_source_override_enabled(kwargs["source"], kwargs["enabled"])
+        return None
+    if action == "set_pressure_state_override":
+        await backend.set_pressure_state_override(
+            kwargs["source"], kwargs["state"], kwargs["value"]
+        )
+        return None
+    if action == "set_primary_screen":
+        await backend.set_primary_screen(kwargs["screen_id"])
+        return None
+    if action == "set_safe_area_insets_override":
+        await backend.set_safe_area_insets_override(kwargs["insets"])
+        return None
+    if action == "set_scrollbars_hidden":
+        await backend.set_scrollbars_hidden(kwargs["hidden"])
+        return None
+    if action == "set_sensor_override_enabled":
+        await backend.set_sensor_override_enabled(kwargs["sensor_type"], kwargs["enabled"])
+        return None
+    if action == "set_sensor_override_readings":
+        await backend.set_sensor_override_readings(kwargs["sensor_type"], kwargs["readings"])
+        return None
+    if action == "set_small_viewport_height_difference_override":
+        await backend.set_small_viewport_height_difference_override(kwargs["difference"])
+        return None
+    if action == "set_timezone_override":
+        await backend.set_timezone_override(kwargs["timezone_id"])
+        return None
+    if action == "set_touch_emulation_enabled":
+        await backend.set_touch_emulation_enabled(kwargs["enabled"], kwargs["max_touch_points"])
+        return None
+    if action == "set_user_agent_override":
+        await backend.set_user_agent_override(
+            kwargs["user_agent"], kwargs["accept_language"], kwargs["platform"]
+        )
+        return None
+    if action == "set_virtual_time_policy":
+        await backend.set_virtual_time_policy(kwargs["policy"], kwargs["budget"])
+        return None
+    if action == "update_screen":
+        await backend.update_screen(kwargs["screen_id"], kwargs["screen"])
+        return None
+    raise WavexisError(f"Unknown emulation action: {action}")
 
 
 # ── DeviceAccess commands ────────────────────────────────
@@ -5522,6 +5564,26 @@ def console_clear_messages_cmd(url: str = typer.Argument(..., help="URL to navig
     """Clear all console messages."""
     _run_async(_debug_direct(url, lambda b: b.console_clear_messages()))
     typer.echo("Console messages cleared.")
+
+
+@console_app.command("capture")
+def console_capture_cmd(
+    url: str = typer.Argument(..., help="URL to navigate to"),
+    level: str = typer.Option(
+        "all", "--level", help="Minimum log level to capture (all, log, info, warning, error)"
+    ),
+    output: str = typer.Option("-", "--output", "-o", help="Output file (- for stdout)"),
+) -> None:
+    """Capture console messages emitted by the page.
+
+    Bug #21: ``commands.md`` documented ``wavexis console <url>`` but the CLI
+    only exposed ``clear-messages``/``enable``/``disable``. This command
+    provides the missing capture functionality.
+    """
+    result = _run_async(_debug_direct(url, lambda b: b.capture_console(level=level)))
+    if result is None:
+        return
+    _write_json_output(result, output, "console messages")
 
 
 @console_app.command("disable")

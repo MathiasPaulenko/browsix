@@ -15,10 +15,8 @@ from wavexis.cli._shared import (
     _get_backend,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
-
-
 @app.command()
 def shadow(
     action: str = typer.Argument(..., help="Shadow DOM action: click, fill, eval"),
@@ -90,7 +88,7 @@ async def _shadow_click(url: str, selectors: list[str], auto_wait: bool) -> None
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.shadow_click(selectors, auto_wait=auto_wait)
     finally:
         await _close_backend(backend)
@@ -106,7 +104,7 @@ async def _shadow_fill(
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.shadow_fill(selectors, value, auto_wait=auto_wait)
     finally:
         await _close_backend(backend)
@@ -117,7 +115,7 @@ async def _shadow_eval(url: str, selectors: list[str], expression: str, await_pr
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         return await backend.shadow_eval(selectors, expression, await_promise)
     finally:
         await _close_backend(backend)

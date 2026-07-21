@@ -27,6 +27,7 @@ from wavexis.cli._shared import (
     _get_backend,
     _run_async,
     app,
+    _wait_strategy,
 )
 from wavexis.config import WaitStrategy
 
@@ -38,9 +39,9 @@ def navigate(
 ) -> None:
     """Navigate to a URL and optionally wait for an element."""
     wait = (
-        WaitStrategy(strategy="selector", selector=wait_for)
+        _wait_strategy("selector", selector=wait_for)
         if wait_for
-        else WaitStrategy(strategy="load")
+        else _wait_strategy()
     )
     _run_async(_navigate(url, wait))
     typer.echo(f"Navigated to {url}")
@@ -200,7 +201,7 @@ async def _console(url: str, level: str, capture: str = "console") -> Any:
         params = ConsoleParams(
             url=url,
             level=level,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
             capture=capture,
         )
         return await ConsoleAction(params).execute(backend)
@@ -232,7 +233,7 @@ async def _logs(url: str) -> Any:
         await backend.launch(_browser_options())
         params = ConsoleParams(
             url=url,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
             capture="logs",
         )
         return await ConsoleAction(params).execute(backend)
@@ -303,11 +304,38 @@ def page_pdf(
     output: str = typer.Option("page.pdf", "--output", "-o", help="Output PDF file path"),
     landscape: bool = typer.Option(False, "--landscape", help="Landscape orientation"),
     scale: float = typer.Option(1.0, "--scale", help="Scale factor"),
+    print_background: bool = typer.Option(
+        False, "--print-background", help="Print background graphics"
+    ),
+    display_header_footer: bool = typer.Option(
+        False, "--display-header-footer", help="Include header/footer in the PDF"
+    ),
+    paper_width: float = typer.Option(8.5, "--paper-width", help="Paper width in inches"),
+    paper_height: float = typer.Option(11.0, "--paper-height", help="Paper height in inches"),
+    margin_top: float = typer.Option(0.4, "--margin-top", help="Top margin in inches"),
+    margin_bottom: float = typer.Option(0.4, "--margin-bottom", help="Bottom margin in inches"),
+    margin_left: float = typer.Option(0.4, "--margin-left", help="Left margin in inches"),
+    margin_right: float = typer.Option(0.4, "--margin-right", help="Right margin in inches"),
 ) -> None:
     """Print the current page to PDF."""
     import base64
 
-    data = _run_async(_page_op(lambda b: b.page_print_to_pdf(landscape=landscape, scale=scale)))
+    data = _run_async(
+        _page_op(
+            lambda b: b.page_print_to_pdf(
+                landscape=landscape,
+                scale=scale,
+                print_background=print_background,
+                display_header_footer=display_header_footer,
+                paper_width=paper_width,
+                paper_height=paper_height,
+                margin_top=margin_top,
+                margin_bottom=margin_bottom,
+                margin_left=margin_left,
+                margin_right=margin_right,
+            )
+        )
+    )
     if data is None:
         return
     Output.write_bytes(base64.b64decode(data), output)

@@ -15,10 +15,8 @@ from wavexis.cli._shared import (
     _get_backend,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
-
-
 @app.command()
 def iframe(
     action: str = typer.Argument(..., help="iframe action: click, fill, eval"),
@@ -89,7 +87,7 @@ async def _iframe_click(url: str, iframe_selector: str, selector: str, auto_wait
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.iframe_click(iframe_selector, selector, auto_wait=auto_wait)
     finally:
         await _close_backend(backend)
@@ -106,7 +104,7 @@ async def _iframe_fill(
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.iframe_fill(iframe_selector, selector, value, auto_wait=auto_wait)
     finally:
         await _close_backend(backend)
@@ -117,7 +115,7 @@ async def _iframe_eval(url: str, iframe_selector: str, expression: str, await_pr
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         return await backend.iframe_eval(iframe_selector, expression, await_promise)
     finally:
         await _close_backend(backend)

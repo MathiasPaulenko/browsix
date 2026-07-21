@@ -23,8 +23,9 @@ from wavexis.cli._shared import (
     _progress,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import EvalParams, PDFParams, ScrapeParams, ScreenshotParams, WaitStrategy
+from wavexis.config import EvalParams, PDFParams, ScrapeParams, ScreenshotParams
 from wavexis.output import validate_path
 
 
@@ -440,7 +441,7 @@ async def _batch_single_on(
         WavexisError: If the action type is unknown.
     """
     if action == "screenshot":
-        sp = ScreenshotParams(url=url, full_page=True, wait=WaitStrategy(strategy="load"))
+        sp = ScreenshotParams(url=url, full_page=True, wait=_wait_strategy())
         result = await ScreenshotAction(sp).execute(backend)
         safe_url = _sanitize_filename(url)
         try:
@@ -450,7 +451,7 @@ async def _batch_single_on(
         return result
 
     if action == "pdf":
-        pp = PDFParams(url=url, wait=WaitStrategy(strategy="load"))
+        pp = PDFParams(url=url, wait=_wait_strategy())
         result = await PDFAction(pp).execute(backend)
         safe_url = _sanitize_filename(url)
         try:
@@ -463,12 +464,12 @@ async def _batch_single_on(
         scp = ScrapeParams(
             urls=[url],
             expression=expression,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         return await ScrapeAction(scp).execute(backend)
 
     if action == "eval":
-        ep = EvalParams(url=url, expression=expression, wait=WaitStrategy(strategy="load"))
+        ep = EvalParams(url=url, expression=expression, wait=_wait_strategy())
         return await EvalAction(ep).execute(backend)
 
     raise WavexisError(f"Unknown batch action: {action}")

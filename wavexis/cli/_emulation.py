@@ -12,9 +12,9 @@ from wavexis.cli._shared import (
     _echo,
     _get_backend,
     _run_async,
+    _wait_strategy,
     app,
 )
-from wavexis.config import WaitStrategy
 
 emulation_app = typer.Typer(
     help="Emulation commands (device, viewport, geolocation, timezone, dark_mode)"
@@ -53,7 +53,7 @@ async def _emulation_device(url: str, device: str) -> bytes:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.emulate_device(device)
         from wavexis.config import ScreenshotParams
 
@@ -85,7 +85,7 @@ async def _emulation_viewport(url: str, width: int, height: int) -> bytes:
     try:
         await backend.launch(_browser_options())
         await backend.set_viewport(width, height)
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         from wavexis.config import ScreenshotParams
 
         params = ScreenshotParams(url=url, full_page=True)
@@ -115,7 +115,7 @@ async def _emulation_geolocation(url: str, lat: float, lon: float) -> bytes:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.set_geolocation(lat, lon)
         from wavexis.config import ScreenshotParams
 
@@ -145,7 +145,7 @@ async def _emulation_timezone(url: str, tz: str) -> bytes:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.set_timezone(tz)
         from wavexis.config import ScreenshotParams
 
@@ -155,12 +155,15 @@ async def _emulation_timezone(url: str, tz: str) -> bytes:
         await _close_backend(backend)
 
 
-@emulation_app.command("dark_mode")
+@emulation_app.command("dark-mode")
 def emulation_dark_mode(
     url: str = typer.Argument(..., help="URL to navigate to"),
     output: str = typer.Option("screenshot.png", "--output", "-o", help="Output file path"),
 ) -> None:
-    """Enable dark mode and take a screenshot."""
+    """Enable dark mode and take a screenshot.
+
+    Also registered as ``dark_mode`` (underscore) for backwards compatibility.
+    """
     image_bytes = _run_async(_emulation_dark_mode(url))
     if image_bytes is None:
         return
@@ -169,12 +172,22 @@ def emulation_dark_mode(
     typer.echo(f"Screenshot saved to {output}")
 
 
+# Backwards-compatible alias with underscore naming (bug #15).
+@emulation_app.command("dark_mode", hidden=True)
+def emulation_dark_mode_underscore(
+    url: str = typer.Argument(..., help="URL to navigate to"),
+    output: str = typer.Option("screenshot.png", "--output", "-o", help="Output file path"),
+) -> None:
+    """Alias for ``emulation dark-mode``."""
+    emulation_dark_mode(url, output)
+
+
 async def _emulation_dark_mode(url: str) -> bytes:
     """Async helper for dark mode + screenshot."""
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.set_dark_mode(True)
         from wavexis.config import ScreenshotParams
 
@@ -282,7 +295,7 @@ async def _emulation_simple(
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
 
         if action == "media" and media:
             await backend.set_emulated_media(media)

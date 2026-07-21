@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 import wavexis.cli.app  # noqa: F401 — ensure module is loaded
+import wavexis.cli._shared as _shared
 from wavexis.config import BrowserOptions
 
 pytestmark = pytest.mark.unit
@@ -100,6 +101,52 @@ class TestBrowserOptionsHelper:
         ctx.timeout = 60000
         opts = _cli._browser_options()
         assert opts.timeout == 60000
+
+    def test_wait_strategy_uses_global_timeout(self) -> None:
+        """Regression for bug #3: _wait_strategy must honour --timeout."""
+        ctx = _fresh_ctx()
+        ctx.timeout = 60000
+        ws = _shared._wait_strategy("load")
+        assert ws.strategy == "load"
+        assert ws.timeout == 60000
+
+    def test_wait_strategy_explicit_timeout_overrides_ctx(self) -> None:
+        """An explicit timeout wins over the global --timeout."""
+        ctx = _fresh_ctx()
+        ctx.timeout = 60000
+        ws = _shared._wait_strategy("load", timeout=5000)
+        assert ws.timeout == 5000
+
+    def test_wait_strategy_default_uses_ctx_default(self) -> None:
+        """With a fresh context, the default 30000ms is used."""
+        ctx = _fresh_ctx()
+        assert ctx.timeout == 30000
+        ws = _shared._wait_strategy("load")
+        assert ws.timeout == 30000
+
+    def test_wait_strategy_selector_passes_selector(self) -> None:
+        ctx = _fresh_ctx()
+        ctx.timeout = 45000
+        ws = _shared._wait_strategy("selector", selector="#foo")
+        assert ws.strategy == "selector"
+        assert ws.selector == "#foo"
+        assert ws.timeout == 45000
+
+    def test_wait_strategy_uses_global_wait_strategy_flag(self) -> None:
+        """Regression for bug #4: --wait-strategy must be honoured."""
+        ctx = _fresh_ctx()
+        ctx.wait_strategy = "networkidle"
+        ctx.timeout = 60000
+        ws = _shared._wait_strategy()
+        assert ws.strategy == "networkidle"
+        assert ws.timeout == 60000
+
+    def test_wait_strategy_explicit_strategy_overrides_flag(self) -> None:
+        """An explicit strategy wins over the global --wait-strategy."""
+        ctx = _fresh_ctx()
+        ctx.wait_strategy = "networkidle"
+        ws = _shared._wait_strategy("domcontentloaded")
+        assert ws.strategy == "domcontentloaded"
 
 
 class TestLoadGlobalConfig:

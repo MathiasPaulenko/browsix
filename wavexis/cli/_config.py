@@ -21,8 +21,9 @@ from wavexis.cli._shared import (
     _run_async,
     _write_json_output,
     app,
+    _wait_strategy,
 )
-from wavexis.config import EvalParams, ScreenshotParams, WaitStrategy
+from wavexis.config import EvalParams, ScreenshotParams
 from wavexis.exceptions import WavexisError
 
 
@@ -30,22 +31,50 @@ from wavexis.exceptions import WavexisError
 def completions(
     shell: str = typer.Argument(..., help="Shell: bash, zsh, fish, powershell"),
 ) -> None:
-    """Install shell completions for wavexis."""
-    import subprocess
+    """Install shell completions for wavexis.
 
+    Delegates to Typer's built-in ``--install-completion`` mechanism. The
+    previous implementation spawned ``python -m wavexis completion <shell>``,
+    which referenced a non-existent ``completion`` subcommand (bug #7).
+    """
     shells = {"bash", "zsh", "fish", "powershell"}
     if shell not in shells:
         Output.error(f"Unsupported shell: {shell}. Choose from: {', '.join(sorted(shells))}")
         raise typer.Exit(EXIT_CONFIG_ERROR)
 
+    import os
+    import subprocess
+
+    env = os.environ.copy()
+    # Force UTF-8 so the child process can print unicode glyphs (e.g. the
+    # checkmark emitted by Typer's --install-completion) on Windows consoles
+    # that default to a legacy codepage (cp1252/cp850). See bug #1.
+    env["PYTHONIOENCODING"] = "utf-8"
+
     try:
-        subprocess.run(
-            [sys.executable, "-m", "wavexis", "completion", shell],
-            check=True,
+        # Capture stdout/stderr so the child's unicode output does not crash
+        # the parent's legacy Windows console. The child still writes the
+        # completion script to the user's shell profile; we just suppress its
+        # terminal output here and print our own success message.
+        result = subprocess.run(
+            [sys.executable, "-m", "wavexis", "--install-completion", shell],
+            input="y\n",
+            text=True,
+            env=env,
+            capture_output=True,
+            timeout=30,
         )
-    except subprocess.CalledProcessError as e:
-        Output.error(f"Failed to install completions: {e}")
+    except subprocess.TimeoutExpired as e:
+        Output.error("Failed to install completions: timed out")
         raise typer.Exit(EXIT_BROWSER_ERROR) from e
+
+    # Typer's --install-completion prints a checkmark (\u2713) which can fail
+    # to encode on legacy Windows consoles. Treat a non-zero exit code with a
+    # successful installation message as success.
+    combined = (result.stdout or "") + (result.stderr or "")
+    if result.returncode != 0 and "installed" not in combined.lower():
+        Output.error(f"Failed to install completions: {combined.strip() or result.returncode}")
+        raise typer.Exit(EXIT_BROWSER_ERROR)
 
     Output.success(f"Completions installed for {shell}")
 
@@ -84,14 +113,14 @@ def auth(
                 return await backend.screenshot(
                     ScreenshotParams(
                         url=url,
-                        wait=WaitStrategy(strategy="load"),
+                        wait=_wait_strategy(),
                     ),
                 )
             return await backend.eval(
                 EvalParams(
                     url=url,
                     expression="document.title",
-                    wait=WaitStrategy(strategy="load"),
+                    wait=_wait_strategy(),
                 ),
             )
         finally:

@@ -16,10 +16,8 @@ from wavexis.cli._shared import (
     _get_backend,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
-
-
 @app.command()
 def inspect(
     url: str = typer.Argument(..., help="URL to navigate to"),
@@ -49,7 +47,7 @@ async def _inspect(url: str, request_id: str, body_type: str) -> str | None:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         if body_type == "request":
             result: str | None = await backend.get_request_body(request_id)
         else:
@@ -114,7 +112,7 @@ async def _modify(url: str, pattern: str, modifications: dict[str, Any], wait: f
     try:
         await backend.launch(_browser_options())
         await backend.modify_request({"urlPattern": pattern}, modifications)
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         if wait > 0:
             await asyncio.sleep(wait)
     finally:
@@ -183,7 +181,7 @@ async def _modify_response(
     try:
         await backend.launch(_browser_options())
         await backend.modify_response({"urlPattern": pattern}, modifications)
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         if wait > 0:
             await asyncio.sleep(wait)
     finally:
@@ -212,7 +210,7 @@ async def _har_replay(har_path: str, url: str, url_filter: str) -> None:
     try:
         await backend.launch(_browser_options())
         if url:
-            await backend.navigate(url, WaitStrategy(strategy="load"))
+            await backend.navigate(url, _wait_strategy())
         await backend.replay_har(har_path, url_filter)
     finally:
         await _close_backend(backend)
@@ -282,7 +280,7 @@ async def _trace_start(
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         trace_id: str = await backend.start_combined_trace(
             capture_screenshots=screenshots,
             capture_network=network,
@@ -332,7 +330,7 @@ async def _axe(url: str) -> dict[str, Any]:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         result: dict[str, Any] = await backend.axe_audit()
         return result
     finally:
@@ -374,7 +372,7 @@ async def _events_subscribe(url: str, event_types: list[str], duration: int) -> 
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
 
         def on_event(event: dict[str, Any]) -> None:
             typer.echo(json.dumps(event, default=str))

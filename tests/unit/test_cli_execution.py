@@ -134,6 +134,65 @@ class TestCLIExecutionCapture:
             result = runner.invoke(app, ["pdf", "https://example.com", "-o", out])
         assert result.exit_code == 0
 
+    def test_page_pdf_executes_with_options(self, tmp_path: Path) -> None:
+        """Regression for bug #18: page-pdf must accept header/footer options."""
+        backend = _make_mock_backend()
+        backend.page_print_to_pdf = AsyncMock(return_value="YmFzZTY0")
+        out = str(tmp_path / "page.pdf")
+        with patch("wavexis.cli._navigation._get_backend", return_value=backend):
+            result = runner.invoke(
+                app,
+                [
+                    "page-pdf",
+                    "-o",
+                    out,
+                    "--landscape",
+                    "--display-header-footer",
+                    "--print-background",
+                    "--scale",
+                    "1.5",
+                    "--paper-width",
+                    "5.0",
+                    "--paper-height",
+                    "8.0",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        backend.page_print_to_pdf.assert_awaited_once()
+        kwargs = backend.page_print_to_pdf.await_args.kwargs
+        assert kwargs["landscape"] is True
+        assert kwargs["display_header_footer"] is True
+        assert kwargs["print_background"] is True
+        assert kwargs["scale"] == 1.5
+        assert kwargs["paper_width"] == 5.0
+        assert kwargs["paper_height"] == 8.0
+
+    def test_crawl_exits_nonzero_when_no_pages_crawled(self) -> None:
+        """Regression for bug #25: crawl must exit non-zero when 0 pages visited."""
+        from wavexis.exceptions import WaitTimeoutError
+
+        backend = _make_mock_backend()
+        # Every navigate() call times out → 0 pages crawled.
+        backend.navigate = AsyncMock(side_effect=WaitTimeoutError("load", 30000))
+        with patch("wavexis.cli._capture._get_backend", return_value=backend):
+            result = runner.invoke(app, ["crawl", "https://example.com", "--depth", "1"])
+        assert result.exit_code != 0, result.output
+        assert "0 pages" in result.output
+
+    def test_crawl_exits_zero_when_pages_crawled(self) -> None:
+        """A successful crawl of at least one page must exit 0."""
+        backend = _make_mock_backend()
+        backend.navigate = AsyncMock()
+        # eval is called twice per page (title, then links). Provide enough
+        # values for the start page and any discovered links at depth 1.
+        backend.eval = AsyncMock(
+            side_effect=["Example Page", [], "About Page", []]
+        )
+        with patch("wavexis.cli._capture._get_backend", return_value=backend):
+            result = runner.invoke(app, ["crawl", "https://example.com", "--depth", "1"])
+        assert result.exit_code == 0, result.output
+        assert "pages" in result.output
+
     def test_eval_executes(self) -> None:
         backend = _make_mock_backend()
         with patch("wavexis.cli._capture._get_backend", return_value=backend):
@@ -187,6 +246,34 @@ class TestCLIExecutionCapture:
         with patch("wavexis.cli._debug._get_backend", return_value=backend):
             result = runner.invoke(app, ["console", "enable", "https://example.com"])
         assert result.exit_code == 0
+
+    def test_console_capture_executes(self, tmp_path: Path) -> None:
+        """Regression for bug #21: `console capture` must exist and work."""
+        backend = _make_mock_backend()
+        backend.capture_console = AsyncMock(
+            return_value=[{"type": "log", "text": "hello"}]
+        )
+        out = str(tmp_path / "console.json")
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app, ["console", "capture", "https://example.com", "-o", out]
+            )
+        assert result.exit_code == 0, result.output
+        backend.capture_console.assert_awaited_once()
+        # Default level is "all"
+        assert backend.capture_console.await_args.kwargs.get("level", "all") == "all"
+
+    def test_console_capture_level_option(self) -> None:
+        """The --level option must be forwarded to the backend."""
+        backend = _make_mock_backend()
+        backend.capture_console = AsyncMock(return_value=[])
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app,
+                ["console", "capture", "https://example.com", "--level", "warning"],
+            )
+        assert result.exit_code == 0, result.output
+        assert backend.capture_console.await_args.kwargs.get("level") == "warning"
 
     def test_logs_executes(self) -> None:
         backend = _make_mock_backend()
@@ -734,6 +821,27 @@ class TestCLIExecutionDebug:
             result = runner.invoke(app, ["logs", "https://example.com"])
         assert result.exit_code == 0
 
+    def test_target_list_does_not_require_url(self) -> None:
+        """Regression for bug #12/#23: `target list` must not require a URL."""
+        backend = _make_mock_backend()
+        backend.target_get_targets = AsyncMock(
+            return_value=[{"targetId": "t1", "url": "https://example.com"}]
+        )
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["target", "list"])
+        assert result.exit_code == 0, result.output
+        backend.target_get_targets.assert_awaited_once()
+        # Crucially, navigate must NOT have been called.
+        backend.navigate.assert_not_awaited()
+
+    def test_target_list_with_url_is_rejected(self) -> None:
+        """Passing a URL to `target list` should now be rejected (no such arg)."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["target", "list", "https://example.com"])
+        # Typer rejects the extra positional argument.
+        assert result.exit_code != 0
+
 
 @pytest.mark.unit
 class TestCLIExecutionEmulationFull:
@@ -751,6 +859,16 @@ class TestCLIExecutionEmulationFull:
     def test_devices_list(self) -> None:
         result = runner.invoke(app, ["devices"])
         assert result.exit_code == 0
+
+    def test_emulation_can_emulate_no_url(self) -> None:
+        """Regression for bug #23: `emulation can-emulate` must not require a URL."""
+        backend = _make_mock_backend()
+        backend.can_emulate = AsyncMock(return_value=True)
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["emulation", "can-emulate"])
+        assert result.exit_code == 0, result.output
+        backend.can_emulate.assert_awaited_once()
+        backend.navigate.assert_not_awaited()
 
 
 @pytest.mark.unit

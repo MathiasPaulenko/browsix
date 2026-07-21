@@ -12,8 +12,9 @@ from wavexis.cli._shared import (
     _get_backend,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import InputParams, WaitStrategy
+from wavexis.config import InputParams
 
 input_app = typer.Typer(help="Input commands (click, type, fill, select, hover, key, drag, tap)")
 app.add_typer(input_app, name="input")
@@ -193,7 +194,7 @@ async def _input_action(
             scroll_x=scroll_x,
             scroll_y=scroll_y,
             files=files,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         await InputAction(params).execute(backend)
     finally:

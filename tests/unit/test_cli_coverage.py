@@ -458,6 +458,16 @@ class TestCLIAdvancedCommands:
         result = runner.invoke(app, ["emulation", "--help"])
         assert result.exit_code == 0
 
+    def test_emulation_dark_mode_dash_alias(self) -> None:
+        """Regression for bug #15: `emulation dark-mode` (dash) must work."""
+        result = runner.invoke(app, ["emulation", "dark-mode", "--help"])
+        assert result.exit_code == 0, result.output
+
+    def test_emulation_dark_mode_underscore_alias(self) -> None:
+        """Regression for bug #15: `emulation dark_mode` (underscore) must still work."""
+        result = runner.invoke(app, ["emulation", "dark_mode", "--help"])
+        assert result.exit_code == 0, result.output
+
     def test_crawl_help(self) -> None:
         result = runner.invoke(app, ["crawl", "--help"])
         assert result.exit_code == 0
@@ -503,6 +513,23 @@ class TestCLIAdvancedCommands:
     def test_completions_help(self) -> None:
         result = runner.invoke(app, ["completions", "--help"])
         assert result.exit_code == 0
+
+    def test_completions_invalid_shell(self) -> None:
+        """Unsupported shells must exit with a config error, not crash."""
+        result = runner.invoke(app, ["completions", "tcsh"])
+        assert result.exit_code != 0
+        assert "tcsh" in result.output
+
+    @patch("subprocess.run")
+    def test_completions_uses_install_completion_flag(self, mock_run: MagicMock) -> None:
+        """Regression for bug #7: must call --install-completion, not `completion`."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = runner.invoke(app, ["completions", "bash"], input="y\n")
+        assert result.exit_code == 0, result.output
+        args = mock_run.call_args.args[0]
+        # Must NOT contain the old broken "completion" subcommand.
+        assert "completion" not in args or "--install-completion" in args
+        assert "--install-completion" in args
 
 
 @pytest.mark.unit

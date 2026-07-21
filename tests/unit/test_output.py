@@ -200,6 +200,25 @@ class TestOutputRichFallback:
         captured = capsys.readouterr()
         assert "test info message" in captured.out
 
+    def test_success_prints_unicode_checkmark(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Regression for bug #1: Output.success must not crash on unicode.
+
+        On Windows consoles with a legacy codepage (cp1252/cp850), the
+        checkmark glyph (U+2713) used by Rich caused
+        `OSError: [Errno 22] Invalid argument`. The Output module now wraps
+        stdout/stderr with a UTF-8 TextIOWrapper on Windows, so this should
+        always succeed.
+        """
+        Output.success("unicode test \u2713 \u2139 \u00e9")
+        captured = capsys.readouterr()
+        assert "unicode test" in captured.out
+
+    def test_info_prints_unicode_info_glyph(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Regression for bug #1: Output.info must not crash on unicode."""
+        Output.info("info \u2139")
+        captured = capsys.readouterr()
+        assert "info" in captured.out
+
 
 class TestOutputOSError:
     """Regression tests: Output helpers must fail cleanly on write errors."""

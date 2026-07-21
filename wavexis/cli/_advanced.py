@@ -14,8 +14,8 @@ from wavexis.cli._shared import (
     _get_backend,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
 from wavexis.output import validate_path
 
 
@@ -59,7 +59,7 @@ async def _a11y(url: str, action: str, node_id: str) -> Any:
             action=action,
             node_id=node_id,
             url=url,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         return await act.execute(backend)
     finally:
@@ -99,7 +99,7 @@ async def _download(url: str, pattern: str) -> bytes:
         act = DownloadAction(
             params=pattern,
             url=url,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         return await act.execute(backend)
     finally:
@@ -135,7 +135,7 @@ async def _dialog(url: str, action: str, prompt_text: str | None) -> None:
             action=action,
             prompt_text=prompt_text,
             url=url,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         await act.execute(backend)
     finally:
@@ -175,7 +175,7 @@ async def _permissions(action: str, permission: str, url: str) -> None:
             action=action,
             permission=permission,
             url=url,
-            wait=WaitStrategy(strategy="load") if url else None,
+            wait=_wait_strategy() if url else None,
         )
         await act.execute(backend)
     finally:
@@ -224,7 +224,7 @@ async def _security(url: str, action: str) -> Any:
             params="",
             action=action,
             url=url,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         return await act.execute(backend)
     finally:
@@ -316,7 +316,7 @@ def lighthouse(
             params = LighthouseParams(
                 url=url,
                 categories=cats,
-                wait=WaitStrategy(strategy="load"),
+                wait=_wait_strategy(),
                 budgets=budgets,
             )
             action = LighthouseAction(params)

@@ -45,8 +45,25 @@ except ImportError:
 try:
     from rich.console import Console
 
-    _console_err: Console | None = Console(stderr=True)
-    _console_out: Console | None = Console()
+    # On Windows, the default console encoding (cp1252/cp850) cannot encode
+    # many unicode glyphs (e.g. the checkmark U+2713 used in success
+    # messages), which causes `OSError: [Errno 22] Invalid argument` when
+    # Rich flushes its buffer. Reconfigure stdout/stderr to use UTF-8 so
+    # that Rich can render unicode safely. See bug #1 in ref/cli-bugs.md.
+    if sys.platform == "win32":
+        for _stream_name in ("stdout", "stderr"):
+            _stream = getattr(sys, _stream_name, None)
+            # `reconfigure` is available on TextIOWrapper (Python 3.7+) and
+            # preserves the underlying buffer, so it is safe to use even
+            # when pytest or other tools have replaced sys.stdout.
+            if _stream is not None and hasattr(_stream, "reconfigure"):
+                try:
+                    _stream.reconfigure(encoding="utf-8", errors="replace")
+                except (AttributeError, OSError, ValueError):
+                    pass  # Fall back to the original encoding.
+
+    _console_err: Console | None = Console(stderr=True, legacy_windows=False)
+    _console_out: Console | None = Console(legacy_windows=False)
 except ImportError:
     _console_err = None
     _console_out = None

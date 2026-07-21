@@ -17,6 +17,7 @@ from wavexis.actions.pdf import PDFAction
 from wavexis.actions.scrape import ScrapeAction
 from wavexis.actions.screenshot import ScreenshotAction
 from wavexis.cli._shared import (
+    EXIT_BROWSER_ERROR,
     Output,
     WavexisError,
     _browser_options,
@@ -27,6 +28,7 @@ from wavexis.cli._shared import (
     _run_async,
     _write_json_output,
     app,
+    _wait_strategy,
 )
 from wavexis.config import (
     DOMParams,
@@ -54,9 +56,9 @@ def screenshot(
 ) -> None:
     """Take a screenshot of a web page."""
     wait = (
-        WaitStrategy(strategy="selector", selector=wait_for)
+        _wait_strategy("selector", selector=wait_for)
         if wait_for
-        else WaitStrategy(strategy="load")
+        else _wait_strategy()
     )
     image_bytes = _run_async(_take_screenshot(url, full_page, selector, device, format, js, wait))
     if image_bytes is None:
@@ -102,7 +104,7 @@ async def _take_annotated(
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         result: tuple[bytes, dict[str, str]] = await backend.annotated_screenshot(
             selectors, format=format
         )
@@ -179,7 +181,7 @@ async def _generate_pdf(
             margin=margins,
             media=media,
             no_header_footer=no_header_footer,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         action = PDFAction(params)
         return await action.execute(backend)
@@ -299,7 +301,7 @@ async def _eval(url: str, expression: str, await_promise: bool, file: str | None
             expression=expression,
             await_promise=await_promise,
             file=file,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         action = EvalAction(params)
         return await action.execute(backend)
@@ -371,7 +373,7 @@ async def _dom(
     try:
         await backend.launch(_browser_options())
         if action == "suggest_locator":
-            await backend.navigate(url, WaitStrategy(strategy="load"))
+            await backend.navigate(url, _wait_strategy())
             return await backend.suggest_locator(selector, all=all)
         params = DOMParams(
             url=url,
@@ -381,7 +383,7 @@ async def _dom(
             all=all,
             attribute=attribute,
             value=value,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         return await DOMAction(params).execute(backend)
     finally:
@@ -452,7 +454,7 @@ async def _scrape(
                             file=file,
                             output_format="json",
                             selector=selector,
-                            wait=WaitStrategy(strategy="load"),
+                            wait=_wait_strategy(),
                         )
                         return await ScrapeAction(params).execute(tab)
                     finally:
@@ -483,7 +485,7 @@ async def _scrape(
                 file=file,
                 output_format="json",
                 selector=selector,
-                wait=WaitStrategy(strategy="load"),
+                wait=_wait_strategy(),
             )
             result = await ScrapeAction(params).execute(backend)
             results_seq.extend(result)
@@ -526,6 +528,12 @@ def crawl(
     else:
         typer.echo(f"Crawled {len(results)} pages")
 
+    # Bug #25: a crawl that visits zero pages (e.g. because the start URL was
+    # unreachable) should be a non-zero exit so CI/pipeline failures are
+    # visible. A successful crawl of at least one page exits 0.
+    if not results:
+        raise typer.Exit(EXIT_BROWSER_ERROR)
+
 
 async def _crawl(
     url: str,
@@ -557,7 +565,7 @@ async def _crawl(
             max_pages=max_pages,
             same_origin=same_origin,
             url_pattern=url_pattern,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
         )
         return await CrawlAction(params).execute(backend)
     finally:
@@ -588,7 +596,7 @@ async def _har(url: str, wait: int, filter: str | None) -> Any:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        params = HarParams(url=url, wait=WaitStrategy(timeout=wait), filter=filter)
+        params = HarParams(url=url, wait=_wait_strategy(timeout=wait), filter=filter)
         return await HARAction(params).execute(backend)
     finally:
         await _close_backend(backend)
@@ -611,7 +619,7 @@ def screencast(
         format=format,
         quality=quality,
         duration=duration,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
     frames = _run_async(_screencast(params, output_dir))
     if frames is None:
@@ -665,7 +673,7 @@ async def _dom_snapshot_action(url: str) -> dict[str, Any]:
 
     params = DOMSnapshotParams(
         url=url,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
     backend = _get_backend()
     try:

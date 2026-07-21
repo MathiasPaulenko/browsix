@@ -12,10 +12,8 @@ from wavexis.cli._shared import (
     _get_backend,
     _run_async,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
-
-
 @app.command()
 def nl(
     action: str = typer.Argument(..., help="Natural language action: click, fill, find"),
@@ -65,7 +63,7 @@ async def _nl_click(url: str, query: str, auto_wait: bool) -> None:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.nl_click(query, auto_wait=auto_wait)
     finally:
         await _close_backend(backend)
@@ -76,7 +74,7 @@ async def _nl_fill(url: str, query: str, value: str, auto_wait: bool) -> None:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         await backend.nl_fill(query, value, auto_wait=auto_wait)
     finally:
         await _close_backend(backend)
@@ -87,7 +85,7 @@ async def _nl_find(url: str, query: str, all: bool) -> list[str] | str:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
         result: list[str] | str = await backend.find_by_text(query, all=all)
         return result
     finally:

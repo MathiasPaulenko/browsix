@@ -524,15 +524,15 @@ class CDPBackend(AbstractBackend):
         session = self._require_session()
         result = await session.page.print_to_pdf(
             landscape=landscape,
-            displayHeaderFooter=display_header_footer,
-            printBackground=print_background,
+            display_header_footer=display_header_footer,
+            print_background=print_background,
             scale=scale,
-            paperWidth=paper_width,
-            paperHeight=paper_height,
-            marginTop=margin_top,
-            marginBottom=margin_bottom,
-            marginLeft=margin_left,
-            marginRight=margin_right,
+            paper_width=paper_width,
+            paper_height=paper_height,
+            margin_top=margin_top,
+            margin_bottom=margin_bottom,
+            margin_left=margin_left,
+            margin_right=margin_right,
         )
         return str(result.get("data", ""))
 

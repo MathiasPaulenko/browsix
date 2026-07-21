@@ -16,9 +16,8 @@ from wavexis.cli._shared import (
     _run_async,
     _write_json_output,
     app,
+    _wait_strategy,
 )
-from wavexis.config import WaitStrategy
-
 perf_app = typer.Typer(help="Performance commands (metrics, trace, profile, heap, coverage)")
 app.add_typer(perf_app, name="perf")
 
@@ -166,7 +165,7 @@ async def _perf_action(url: str, action: str, duration_ms: int = 3000) -> dict[s
         url=url,
         action=action,
         duration_ms=duration_ms,
-        wait=WaitStrategy(strategy="load"),
+        wait=_wait_strategy(),
     )
     backend = _get_backend()
     act = PerformanceAction(params)
@@ -271,7 +270,7 @@ async def _perf(url: str, metric: str, duration: int) -> Any:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        await backend.navigate(url, WaitStrategy(strategy="load"))
+        await backend.navigate(url, _wait_strategy())
 
         if metric == "metrics":
             return await backend.perf_metrics()
@@ -328,7 +327,7 @@ def cwv(
 
         params = CoreWebVitalsParams(
             url=url,
-            wait=WaitStrategy(strategy="load"),
+            wait=_wait_strategy(),
             browser=_browser_options(),
             budgets=budgets,
             observe_ms=observe,
