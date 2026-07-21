@@ -6,6 +6,7 @@ import asyncio
 import base64
 import contextlib
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -100,6 +101,17 @@ class CDPBackend(AbstractBackend):
         if options.proxy:
             extra_args.append(f"--proxy-server={options.proxy}")
 
+        # CI runners often have a small /dev/shm and a strict sandbox; cdpwave
+        # already adds --no-sandbox when CI env vars are present, but these
+        # companion flags prevent additional launch failures on GitHub Actions.
+        if os.environ.get("CI"):
+            extra_args.extend(
+                [
+                    "--disable-dev-shm-usage",
+                    "--no-zygote",
+                ]
+            )
+
         if options.browser_url:
             from urllib.parse import urlparse
 
@@ -110,10 +122,12 @@ class CDPBackend(AbstractBackend):
         elif options.remote_url:
             self._client = await CDPClient.connect(ws_url=options.remote_url)
         else:
+            launch_timeout = 30.0 if os.environ.get("CI") else 10.0
             self._client = await CDPClient.launch(
                 headless=options.headless,
                 user_data_dir=options.user_data_dir,  # type: ignore[call-arg]
                 extra_args=extra_args if extra_args else None,
+                timeout=launch_timeout,
             )
 
         client = self._client
