@@ -83,7 +83,7 @@ def _make_mock_backend() -> tuple[Any, Any, Any]:
         return_value={"model": {"border": [0, 0, 100, 0, 100, 50, 0, 50]}}
     )
     mock_session.dom.set_attribute_value = AsyncMock()
-    mock_session.dom.get_attribute = AsyncMock(return_value={"attributes": ["class", "active"]})
+    mock_session.dom.get_attribute = AsyncMock(return_value={"value": "active"})
     mock_session.dom.remove_attribute = AsyncMock()
     mock_session.dom.remove_node = AsyncMock()
     mock_session.dom.focus = AsyncMock()
