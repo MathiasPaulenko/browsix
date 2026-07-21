@@ -22,8 +22,8 @@ from wavexis.cli._shared import (
     _handle_error,
     _progress,
     _run_async,
-    app,
     _wait_strategy,
+    app,
 )
 from wavexis.config import EvalParams, PDFParams, ScrapeParams, ScreenshotParams
 from wavexis.output import validate_path

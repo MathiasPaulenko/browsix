@@ -171,7 +171,8 @@ async def execute_actions(
                 message += (
                     "\nHint: 'type' and 'fill' require a focusable element "
                     "(<input>, <textarea>, <select> or a contenteditable element). "
-                    "Use a different selector for the type action, or use 'click' for non-input elements."
+                    "Use a different selector for the type action, or use 'click' "
+                    "for non-input elements."
                 )
             raise WavexisError(message) from e
         results.append(result)

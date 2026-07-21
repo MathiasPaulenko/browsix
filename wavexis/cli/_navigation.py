@@ -26,8 +26,8 @@ from wavexis.cli._shared import (
     _close_backend,
     _get_backend,
     _run_async,
-    app,
     _wait_strategy,
+    app,
 )
 from wavexis.config import WaitStrategy
 

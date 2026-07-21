@@ -19,9 +19,9 @@ from wavexis.cli._shared import (
     _get_backend,
     _handle_error,
     _run_async,
+    _wait_strategy,
     _write_json_output,
     app,
-    _wait_strategy,
 )
 from wavexis.config import EvalParams, ScreenshotParams
 from wavexis.exceptions import WavexisError

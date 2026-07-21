@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-import wavexis.cli.app  # noqa: F401 — ensure module is loaded
 import wavexis.cli._shared as _shared
+import wavexis.cli.app  # noqa: F401 — ensure module is loaded
 from wavexis.config import BrowserOptions
 
 pytestmark = pytest.mark.unit

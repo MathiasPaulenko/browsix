@@ -16,10 +16,12 @@ from wavexis.cli._shared import (
     _get_ctx,
     _handle_error,
     _run_async,
+    _wait_strategy,
     app,
     get_manager,
-    _wait_strategy,
 )
+
+
 @app.command()
 def backends() -> None:
     """List available backends."""

@@ -90,7 +90,7 @@ class CDPBackend(AbstractBackend):
         return self._session
 
     @staticmethod
-    async def _send_cdp(session: "CDPSession", method: str, params: dict[str, Any] | None = None) -> Any:
+    async def _send_cdp(session: CDPSession, method: str, params: dict[str, Any] | None = None) -> Any:
         """Send a CDP command and translate "method not found" / "not allowed"
         errors into a friendly :class:`WavexisError`.
 
@@ -221,7 +221,13 @@ class CDPBackend(AbstractBackend):
                     target = non_blank[0] if non_blank else pages[0]
                     # TargetInfo uses ``target_id``, not ``id``.
                     target_id = getattr(target, "target_id", None) or getattr(target, "id", None)
-                    self._session = await client.connect_to_page(target_id)
+                    if not target_id:
+                        raise WavexisError(
+                            "Could not determine target id of the existing page. "
+                            "Use `wavexis navigate <url>` without --browser-url to "
+                            "open a fresh page."
+                        )
+                    self._session = await client.connect_to_page(str(target_id))
                 else:
                     self._session = await client.new_page()
             else:

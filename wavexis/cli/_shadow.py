@@ -14,9 +14,11 @@ from wavexis.cli._shared import (
     _close_backend,
     _get_backend,
     _run_async,
-    app,
     _wait_strategy,
+    app,
 )
+
+
 @app.command()
 def shadow(
     action: str = typer.Argument(..., help="Shadow DOM action: click, fill, eval"),

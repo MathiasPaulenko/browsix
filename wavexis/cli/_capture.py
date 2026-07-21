@@ -26,9 +26,9 @@ from wavexis.cli._shared import (
     _handle_error,
     _progress_stderr,
     _run_async,
+    _wait_strategy,
     _write_json_output,
     app,
-    _wait_strategy,
 )
 from wavexis.config import (
     DOMParams,

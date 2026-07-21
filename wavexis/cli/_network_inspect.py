@@ -15,9 +15,11 @@ from wavexis.cli._shared import (
     _close_backend,
     _get_backend,
     _run_async,
-    app,
     _wait_strategy,
+    app,
 )
+
+
 @app.command()
 def inspect(
     url: str = typer.Argument(..., help="URL to navigate to"),
@@ -397,7 +399,11 @@ async def _events_subscribe(
 
         out_path = Path(output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_file = out_path.open("a", encoding="utf-8")
+        # ASYNC230: open the file outside the async path using a helper
+        # that runs the blocking call in a thread.
+        out_file = await asyncio.to_thread(
+            out_path.open, "a", encoding="utf-8"
+        )
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url, _wait_strategy())

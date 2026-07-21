@@ -16,8 +16,8 @@ from wavexis.cli._shared import (
     _get_backend,
     _handle_error,
     _run_async,
-    app,
     _wait_strategy,
+    app,
 )
 from wavexis.exceptions import WavexisError
 from wavexis.output import validate_path
@@ -40,7 +40,9 @@ def session(
         "-u",
         help="URL to navigate to after loading a session (for 'load').",
     ),
-    output: str = typer.Option("session.json", "--output", "-o", help="Session file path (for 'save')"),
+    output: str = typer.Option(
+        "session.json", "--output", "-o", help="Session file path (for 'save')"
+    ),
     name: str = typer.Option(
         "", "--name", "-n", help="Named session (stored in ~/.wavexis/sessions/)"
     ),

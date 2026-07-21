@@ -14,9 +14,11 @@ from wavexis.cli._shared import (
     _close_backend,
     _get_backend,
     _run_async,
-    app,
     _wait_strategy,
+    app,
 )
+
+
 @app.command()
 def iframe(
     action: str = typer.Argument(..., help="iframe action: click, fill, eval"),

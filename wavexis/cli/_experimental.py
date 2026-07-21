@@ -27,9 +27,9 @@ from wavexis.cli._shared import (
     _echo,
     _get_backend,
     _run_async,
+    _wait_strategy,
     app,
     get_manager,
-    _wait_strategy,
 )
 from wavexis.config import AnimationParams, StorageParams, SystemInfoParams
 from wavexis.output import Output

@@ -102,6 +102,14 @@ module = "yaml"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "cdpwave.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "bidiwave.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "wavexis.backend.cdp"
 disable_error_code = ["no-redef", "no-any-return", "return-value"]
 

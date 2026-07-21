@@ -13,8 +13,8 @@ from wavexis.cli._shared import (
     _close_backend,
     _get_backend,
     _run_async,
-    app,
     _wait_strategy,
+    app,
 )
 from wavexis.output import validate_path
 
@@ -129,7 +129,9 @@ async def _download(url: str, pattern: str, selector: str = "") -> bytes:
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        act = DownloadAction(
+        # DownloadAction is constructed for parameter validation; the
+        # actual interception is done via backend.intercept_download below.
+        DownloadAction(
             params=pattern,
             url=url,
             wait=_wait_strategy(),
@@ -142,8 +144,6 @@ async def _download(url: str, pattern: str, selector: str = "") -> bytes:
                 await backend.click(selector, auto_wait=True)
             else:
                 # Auto-click the first <a download> element if present.
-                import json as _json
-
                 js = (
                     "(function(){var a=document.querySelector('a[download]');"
                     "if(!a)return false;a.click();return true;})()"
@@ -153,7 +153,8 @@ async def _download(url: str, pattern: str, selector: str = "") -> bytes:
                     # No <a download> found; that's OK if the URL itself
                     # triggers a download (e.g. Content-Disposition).
                     pass
-        return await backend.intercept_download(pattern)
+        data: bytes = await backend.intercept_download(pattern)
+        return data
     finally:
         await _close_backend(backend)
 

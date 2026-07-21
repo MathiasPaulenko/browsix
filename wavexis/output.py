@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import json
@@ -57,10 +58,9 @@ try:
             # preserves the underlying buffer, so it is safe to use even
             # when pytest or other tools have replaced sys.stdout.
             if _stream is not None and hasattr(_stream, "reconfigure"):
-                try:
+                # Fall back to the original encoding if reconfigure fails.
+                with contextlib.suppress(AttributeError, OSError, ValueError):
                     _stream.reconfigure(encoding="utf-8", errors="replace")
-                except (AttributeError, OSError, ValueError):
-                    pass  # Fall back to the original encoding.
 
     _console_err: Console | None = Console(stderr=True, legacy_windows=False)
     _console_out: Console | None = Console(legacy_windows=False)

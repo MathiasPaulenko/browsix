@@ -4,6 +4,7 @@ import pytest
 
 from wavexis.backend.cdp import CDPBackend
 from wavexis.config import BrowserOptions
+from wavexis.exceptions import WavexisError
 
 pytestmark = [pytest.mark.integration, pytest.mark.chrome]
 
@@ -73,7 +74,10 @@ async def test_raw_bidi_command() -> None:
     opts = BrowserOptions(headless=True)
     try:
         await backend.launch(opts)
-    except (ImportError, OSError, ConnectionError, RuntimeError) as exc:
+    except (ImportError, OSError, ConnectionError, RuntimeError, WavexisError) as exc:
+        # Bug #34: BiDiBackend.launch() now raises WavexisError (instead of
+        # the raw OSError) when ChromeDriver is not running, so the test
+        # must skip on WavexisError too.
         pytest.skip(f"BiDi backend not available in this environment: {exc}")
     try:
         result = await backend.raw("session.status", {})

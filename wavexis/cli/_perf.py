@@ -14,10 +14,11 @@ from wavexis.cli._shared import (
     _close_backend,
     _get_backend,
     _run_async,
+    _wait_strategy,
     _write_json_output,
     app,
-    _wait_strategy,
 )
+
 perf_app = typer.Typer(
     help="Performance commands (metrics, trace, profile, heap, coverage)",
     invoke_without_command=True,
