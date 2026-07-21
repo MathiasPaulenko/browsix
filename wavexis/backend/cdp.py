@@ -177,6 +177,7 @@ class CDPBackend(AbstractBackend):
         timeout_sec: float = timeout_ms / 1000
 
         await session.page.enable()
+        await session.send("Page.setLifecycleEventsEnabled", {"enabled": True})
         await session.page.navigate(url)
         self._current_url = url
 
