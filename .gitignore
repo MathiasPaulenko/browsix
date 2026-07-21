@@ -38,3 +38,5 @@ TEST-ROADMAP.md
 BUG-ROADMAP.md
 ref/
 out.yml
+.venv*
+AGENTS.md
