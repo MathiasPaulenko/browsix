@@ -2,6 +2,7 @@
 
 import sys
 import warnings
+from typing import Any
 
 from wavexis.cli.app import app
 
@@ -24,9 +25,9 @@ def _install_asyncio_cleanup_hooks() -> None:
 
     original_hook = sys.unraisablehook
 
-    def _wavexis_unraisablehook(unraisable: sys.UnraisableHookArgs) -> None:
-        err_msg = unraisable.err_msg or ""
-        exc = unraisable.exc_value
+    def _wavexis_unraisablehook(unraisable: Any) -> None:
+        err_msg = getattr(unraisable, "err_msg", None) or ""
+        exc = getattr(unraisable, "exc_value", None)
         exc_msg = str(exc) if exc is not None else ""
         is_pipe_noise = "I/O operation on closed pipe" in exc_msg and (
             "Exception ignored while calling deallocator" in err_msg
