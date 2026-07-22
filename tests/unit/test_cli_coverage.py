@@ -763,3 +763,56 @@ class TestCLISharedFunctions:
 
         result = _run_async(succeed())
         assert result == "ok"
+
+    def test_run_coro_handles_cdp_error(self) -> None:
+        """_run_async should handle cdpwave CommandError by raising typer.Exit."""
+        import typer
+        from cdpwave.exceptions import CommandError
+
+        from wavexis.cli._shared import _run_async
+
+        async def fail() -> None:
+            raise CommandError(-32000, "No node")
+
+        with pytest.raises(typer.Exit):
+            _run_async(fail())
+
+    def test_run_coro_handles_event_loop_stopped_runtime_error(self) -> None:
+        """_run_async should handle Python's asyncio 'event loop stopped' RuntimeError.
+
+        The real message includes a trailing period, so the substring check must
+        match it to avoid leaking a Python traceback to the user.
+        """
+        import typer
+
+        from wavexis.cli._shared import _run_async
+
+        async def fail() -> None:
+            raise RuntimeError("Event loop stopped before Future completed.")
+
+        with pytest.raises(typer.Exit):
+            _run_async(fail())
+
+    def test_run_coro_handles_value_error(self) -> None:
+        """_run_async should handle ValueError from backend libraries."""
+        import typer
+
+        from wavexis.cli._shared import _run_async
+
+        async def fail() -> None:
+            raise ValueError("Either object_id or execution_context_id must be provided")
+
+        with pytest.raises(typer.Exit):
+            _run_async(fail())
+
+    def test_run_coro_handles_type_error(self) -> None:
+        """_run_async should handle TypeError from backend libraries."""
+        import typer
+
+        from wavexis.cli._shared import _run_async
+
+        async def fail() -> None:
+            raise TypeError("got an unexpected keyword argument 'show'")
+
+        with pytest.raises(typer.Exit):
+            _run_async(fail())

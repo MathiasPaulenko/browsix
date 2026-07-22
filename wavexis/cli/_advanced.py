@@ -16,6 +16,7 @@ from wavexis.cli._shared import (
     _wait_strategy,
     app,
 )
+from wavexis.exceptions import WavexisError
 from wavexis.output import validate_path
 
 
@@ -100,15 +101,7 @@ def download(
         return
 
     Output.write_bytes(data, output)
-    if len(data) == 0:
-        typer.echo(
-            f"WARNING: no download was intercepted within the timeout. "
-            f"Output file '{output}' is 0 bytes. Verify the page triggers "
-            f"a download or pass --selector to click a download link.",
-            err=True,
-        )
-    else:
-        typer.echo(f"Download saved to {output} ({len(data)} bytes)")
+    typer.echo(f"Download saved to {output} ({len(data)} bytes)")
 
 
 async def _download(url: str, pattern: str, selector: str = "") -> bytes:
@@ -123,12 +116,16 @@ async def _download(url: str, pattern: str, selector: str = "") -> bytes:
 
     Returns:
         Downloaded file bytes.
+
+    Raises:
+        WavexisError: If no download was intercepted within the timeout.
     """
     from wavexis.actions.download import DownloadAction
 
     backend = _get_backend()
     try:
-        await backend.launch(_browser_options())
+        options = _browser_options()
+        await backend.launch(options)
         # DownloadAction is constructed for parameter validation; the
         # actual interception is done via backend.intercept_download below.
         DownloadAction(
@@ -153,7 +150,14 @@ async def _download(url: str, pattern: str, selector: str = "") -> bytes:
                     # No <a download> found; that's OK if the URL itself
                     # triggers a download (e.g. Content-Disposition).
                     pass
-        data: bytes = await backend.intercept_download(pattern)
+        timeout_s = options.timeout / 1000.0
+        data: bytes = await backend.intercept_download(pattern, timeout=timeout_s)
+        if not data:
+            raise WavexisError(
+                f"No download was intercepted within {timeout_s:.1f}s. "
+                "Verify the page triggers a download, pass --selector "
+                "to click a download link, or increase --timeout."
+            )
         return data
     finally:
         await _close_backend(backend)
@@ -182,13 +186,15 @@ async def _dialog(url: str, action: str, prompt_text: str | None) -> None:
 
     backend = _get_backend()
     try:
-        await backend.launch(_browser_options())
+        options = _browser_options()
+        await backend.launch(options)
         act = DialogAction(
             params="",
             action=action,
             prompt_text=prompt_text,
             url=url,
             wait=_wait_strategy(),
+            timeout=options.timeout / 1000.0,
         )
         await act.execute(backend)
     finally:

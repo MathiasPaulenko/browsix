@@ -13,6 +13,7 @@ from wavexis.cli._shared import (
     _close_backend,
     _echo,
     _get_backend,
+    _handle_error,
     _run_async,
     _wait_strategy,
     _write_json_output,
@@ -283,12 +284,21 @@ def css_set_stylesheet_text(
 def css_set_selector(
     url: str = typer.Argument(..., help="URL to navigate to"),
     stylesheet_id: str = typer.Option(..., "--stylesheet-id", help="Stylesheet ID"),
-    rule_id: str = typer.Option(..., "--rule-id", help="Rule ordinal ID"),
+    start_line: int = typer.Option(..., "--start-line", help="Selector start line"),
+    start_column: int = typer.Option(..., "--start-column", help="Selector start column"),
+    end_line: int = typer.Option(..., "--end-line", help="Selector end line"),
+    end_column: int = typer.Option(..., "--end-column", help="Selector end column"),
     selector: str = typer.Argument(..., help="New selector text"),
 ) -> None:
     """Set the selector text of a CSS rule."""
+    range_ = {
+        "startLine": start_line,
+        "startColumn": start_column,
+        "endLine": end_line,
+        "endColumn": end_column,
+    }
     _run_async(
-        _css_direct(url, lambda b: b.css_set_rule_selector(stylesheet_id, rule_id, selector))
+        _css_direct(url, lambda b: b.css_set_rule_selector(stylesheet_id, range_, selector))
     )
     _echo("Selector updated")
 
@@ -769,11 +779,18 @@ def css_track_computed_style_updates_for_node(
 
 
 async def _css_direct(url: str, action_fn: Any) -> Any:
-    """Launch backend, navigate, and run a direct CSS action."""
+    """Launch backend, navigate, and run a direct CSS action.
+
+    The DOM domain is enabled (via ``dom_get_document``) before any CSS
+    operation because many CSS CDP methods require ``DOM.enable`` first.
+    Without this, commands like ``css enable`` fail with
+    *DOM agent needs to be enabled first*.
+    """
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url)
+        await backend.dom_get_document()
         return await action_fn(backend)
     finally:
         await _close_backend(backend)
@@ -1452,11 +1469,17 @@ def dom_debugger_set_xhr_breakpoint(
 
 
 async def _dom_debugger_direct(url: str, action: str, **kwargs: Any) -> Any:
-    """Launch backend, navigate, and run a DOMDebugger action."""
+    """Launch backend, navigate, and run a DOMDebugger action.
+
+    The DOM domain is enabled (via ``dom_get_document``) before any
+    DOMDebugger operation because methods that take ``node_id`` require
+    ``DOM.enable`` to resolve the node.
+    """
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url)
+        await backend.dom_get_document()
         if action == "get_event_listeners":
             return await backend.dom_debugger_get_event_listeners(
                 kwargs["object_id"], kwargs["depth"], kwargs["pierce"]
@@ -1866,11 +1889,18 @@ def overlay_window_controls_overlay(
 
 
 async def _overlay_direct(url: str, action_fn: Any) -> Any:
-    """Launch backend, navigate, and run a direct overlay action."""
+    """Launch backend, navigate, and run a direct overlay action.
+
+    The DOM domain is enabled (via ``dom_get_document``) before any overlay
+    operation because many Overlay CDP methods require ``DOM.enable`` first.
+    Without this, commands like ``overlay enable`` fail with
+    *DOM should be enabled first*.
+    """
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url)
+        await backend.dom_get_document()
         return await action_fn(backend)
     finally:
         await _close_backend(backend)
@@ -1986,6 +2016,7 @@ async def _dom_action(
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url, _wait_strategy())
+        await backend.dom_get_document()
 
         if action == "document":
             return await backend.dom_get_document()
@@ -2347,8 +2378,19 @@ def schema_get_domains_cmd(
 
 # ── Security commands ────────────────────────────────────
 
-security_app = typer.Typer(help="Security commands (certificate errors, security state)")
+security_app = typer.Typer(
+    help="Security commands (certificate errors, security state)",
+    invoke_without_command=True,
+)
 app.add_typer(security_app, name="security")
+
+
+@security_app.callback(invoke_without_command=True)
+def security_callback(ctx: typer.Context) -> None:
+    """Show help when the security group is invoked without a subcommand."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit(0)
 
 
 @security_app.command("disable")
@@ -2765,10 +2807,10 @@ def dom_set_outer_html(
 @dom_app.command("request-node")
 def dom_request_node(
     url: str = typer.Argument(..., help="URL to navigate to"),
-    node_id: int = typer.Argument(..., help="CDP node ID"),
+    object_id: str = typer.Argument(..., help="JavaScript object ID"),
 ) -> None:
-    """Request a node by ID."""
-    result = _run_async(_dom_node_direct(url, "request_node", node_id=node_id))
+    """Request a node by JavaScript object reference."""
+    result = _run_async(_dom_node_direct(url, "request_node", object_id=object_id))
     _echo(f"Node ID: {result}")
 
 
@@ -3127,7 +3169,11 @@ def dom_push_nodes_by_backend_ids(
     backend_ids: str = typer.Argument(..., help="Comma-separated backend node IDs"),
 ) -> None:
     """Push nodes by backend IDs to frontend."""
-    ids = [int(x.strip()) for x in backend_ids.split(",")]
+    try:
+        ids = [int(x.strip()) for x in backend_ids.split(",")]
+    except ValueError:
+        _handle_error(WavexisError(f"Invalid backend node IDs: '{backend_ids}'. Expected comma-separated integers."))
+        return
     result = _run_async(
         _dom_node_direct(url, "push_nodes_by_backend_ids_to_frontend", backend_node_ids=ids)
     )
@@ -3257,6 +3303,7 @@ async def _dom_node_direct(url: str, action: str, **kwargs: Any) -> Any:
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url)
+        await backend.dom_get_document()
         if action == "describe":
             return await backend.dom_describe_node(kwargs["node_id"])
         if action == "outer_html":
@@ -3271,7 +3318,7 @@ async def _dom_node_direct(url: str, action: str, **kwargs: Any) -> Any:
             await backend.dom_set_outer_html(kwargs["node_id"], kwargs["outer_html"])
             return None
         if action == "request_node":
-            return await backend.dom_request_node(kwargs["node_id"])
+            return await backend.dom_request_node(kwargs["object_id"])
         if action == "resolve_node":
             return await backend.dom_resolve_node(kwargs["node_id"])
         if action == "set_attribute_value":

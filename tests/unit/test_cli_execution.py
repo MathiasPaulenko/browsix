@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -214,6 +216,25 @@ class TestCLIExecutionCapture:
         with patch("wavexis.cli._debug._get_backend", return_value=backend):
             result = runner.invoke(app, ["dom", "document", "https://example.com"])
         assert result.exit_code == 0
+
+    def test_dom_describe_enables_dom_first(self) -> None:
+        """DOM node commands must fetch the document before using node IDs."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["dom", "describe", "https://example.com", "1"])
+        assert result.exit_code == 0
+        backend.dom_get_document.assert_awaited_once()
+        backend.dom_describe_node.assert_awaited_once_with(1)
+
+    def test_dom_query_selector_enables_dom_first(self) -> None:
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app, ["dom", "query-selector", "https://example.com", "1", "input"]
+            )
+        assert result.exit_code == 0
+        backend.dom_get_document.assert_awaited_once()
+        backend.dom_query_selector.assert_awaited_once_with(1, "input")
 
     def test_scrape_executes(self) -> None:
         backend = _make_mock_backend()
@@ -684,6 +705,46 @@ class TestCLIExecutionAdvancedFull:
             result = runner.invoke(app, ["download", "https://example.com", "-o", out])
         assert result.exit_code == 0
 
+    def test_download_no_download_raises_error(self, tmp_path: Path) -> None:
+        """Missing download within timeout should report a clean error."""
+        backend = _make_mock_backend()
+        backend.intercept_download = AsyncMock(return_value=b"")
+        out = str(tmp_path / "dl.bin")
+        with patch("wavexis.cli._advanced._get_backend", return_value=backend):
+            result = runner.invoke(app, ["download", "https://example.com", "-o", out])
+        assert result.exit_code == 1
+        assert "No download was intercepted" in result.output
+
+    def test_download_pattern_wildcard_not_expanded(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Windows wildcards in option values must not expand to file lists."""
+        if os.name != "nt":
+            pytest.skip("Windows wildcard expansion only applies on Windows")
+        out = str(tmp_path / "dl.bin")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "wavexis",
+                "download",
+                "https://example.com/",
+                "--pattern",
+                ".*",
+                "--selector",
+                "none",
+                "-o",
+                out,
+            ],
+        )
+        backend = _make_mock_backend()
+        backend.intercept_download = AsyncMock(return_value=b"file-data")
+        with patch("wavexis.cli._advanced._get_backend", return_value=backend):
+            result = app(standalone_mode=False)
+        assert result in (None, 0)
+        assert backend.intercept_download.called
+        assert backend.intercept_download.call_args.args[0] == ".*"
+
     def test_dialog_executes(self) -> None:
         backend = _make_mock_backend()
         with patch("wavexis.cli._advanced._get_backend", return_value=backend):
@@ -695,6 +756,15 @@ class TestCLIExecutionAdvancedFull:
         with patch("wavexis.cli._advanced._get_backend", return_value=backend):
             result = runner.invoke(app, ["dialog", "https://example.com", "-a", "dismiss"])
         assert result.exit_code == 0
+
+    def test_dialog_no_dialog_reports_clean_error(self) -> None:
+        """When no dialog opens within the timeout, the CLI reports a clean error."""
+        backend = _make_mock_backend()
+        backend.dialog_wait_for_opening = AsyncMock(side_effect=TimeoutError())
+        with patch("wavexis.cli._advanced._get_backend", return_value=backend):
+            result = runner.invoke(app, ["dialog", "https://example.com"])
+        assert result.exit_code == 1
+        assert "No JavaScript dialog opened" in result.output
 
     def test_permissions_executes(self) -> None:
         backend = _make_mock_backend()
@@ -713,6 +783,13 @@ class TestCLIExecutionAdvancedFull:
         with patch("wavexis.cli._debug._get_backend", return_value=backend):
             result = runner.invoke(app, ["security", "enable", "https://example.com"])
         assert result.exit_code == 0
+
+    def test_security_no_subcommand_shows_help(self) -> None:
+        """Running `wavexis security` without a subcommand should show help."""
+        result = runner.invoke(app, ["security"])
+        assert result.exit_code == 0
+        assert "Commands" in result.output
+        assert "enable" in result.output
 
     def test_security_ignore_cert(self) -> None:
         backend = _make_mock_backend()
@@ -930,8 +1007,20 @@ class TestCLIExecutionRecordReplay:
         result = runner.invoke(app, ["record", "--help"])
         assert result.exit_code == 0
 
+    def test_record_interactive_help(self) -> None:
+        """--interactive help must be parseable so the batch runner can skip it."""
+        result = runner.invoke(
+            app, ["record", "https://example.com", "--interactive", "--help"]
+        )
+        assert result.exit_code == 0
+
     def test_replay_help(self) -> None:
         result = runner.invoke(app, ["replay", "--help"])
+        assert result.exit_code == 0
+
+    def test_repl_help(self) -> None:
+        """repl --help must be parseable so the batch runner can skip it."""
+        result = runner.invoke(app, ["repl", "--help"])
         assert result.exit_code == 0
 
 
@@ -1114,6 +1203,35 @@ class TestCLIExecutionCSS:
             result = runner.invoke(app, ["css", "computed", "https://example.com", "-s", "div"])
         assert result.exit_code == 0
 
+    def test_css_enable_enables_dom_first(self) -> None:
+        """CSS enable command must enable DOM domain before CSS.enable."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["css", "enable", "https://example.com"])
+        assert result.exit_code == 0
+        backend.dom_get_document.assert_awaited_once()
+
+    def test_css_set_stylesheet_text_enables_dom_first(self) -> None:
+        """CSS set-stylesheet-text must enable DOM domain before operating."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app, ["css", "set-stylesheet-text", "https://example.com", "s1", "body{}"]
+            )
+        assert result.exit_code == 0
+        backend.dom_get_document.assert_awaited_once()
+
+    def test_css_collect_class_names_enables_dom_first(self) -> None:
+        """CSS collect-class-names must enable DOM domain before operating."""
+        backend = _make_mock_backend()
+        backend.css_collect_class_names = AsyncMock(return_value=[])
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app, ["css", "collect-class-names", "https://example.com", "1"]
+            )
+        assert result.exit_code == 0
+        backend.dom_get_document.assert_awaited_once()
+
 
 @pytest.mark.unit
 class TestCLIExecutionDebugFull:
@@ -1211,6 +1329,60 @@ class TestCLIExecutionOverlay:
             result = runner.invoke(app, ["overlay", "clear", "https://example.com"])
         assert result.exit_code == 0
 
+    def test_overlay_paint_rects_uses_result_param(self) -> None:
+        """overlay paint-rects must send 'result' not 'show' to CDP."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["overlay", "paint-rects", "https://example.com"])
+        assert result.exit_code == 0
+        backend.overlay_set_show_paint_rects.assert_awaited_once_with(True)
+
+    def test_overlay_layout_shift_regions_uses_result_param(self) -> None:
+        """overlay layout-shift-regions must send 'result' not 'show' to CDP."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app, ["overlay", "layout-shift-regions", "https://example.com"]
+            )
+        assert result.exit_code == 0
+        backend.overlay_set_show_layout_shift_regions.assert_awaited_once_with(True)
+
+    def test_overlay_enable_enables_dom_first(self) -> None:
+        """overlay enable must enable DOM domain before Overlay.enable."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(app, ["overlay", "enable", "https://example.com"])
+        assert result.exit_code == 0
+        backend.dom_get_document.assert_awaited_once()
+
+    def test_dom_debugger_set_dom_breakpoint_enables_dom_first(self) -> None:
+        """dom-debugger set-dom-breakpoint must enable DOM domain before operating."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app,
+                [
+                    "dom-debugger",
+                    "set-dom-breakpoint",
+                    "https://example.com",
+                    "1",
+                    "subtree-modified",
+                ],
+            )
+        assert result.exit_code == 0
+        backend.dom_get_document.assert_awaited_once()
+
+    def test_dom_push_nodes_by_backend_ids_invalid_input(self) -> None:
+        """dom push-nodes-by-backend-ids with non-integer input gives clean error."""
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._debug._get_backend", return_value=backend):
+            result = runner.invoke(
+                app,
+                ["dom", "push-nodes-by-backend-ids", "https://example.com", "test"],
+            )
+        assert result.exit_code == 1
+        backend.dom_push_nodes_by_backend_ids_to_frontend.assert_not_awaited()
+
 
 @pytest.mark.unit
 class TestCLIExecutionEmulationExtra:
@@ -1280,6 +1452,14 @@ class TestCLIExecutionServeCLI:
     def test_ws_help(self) -> None:
         result = runner.invoke(app, ["ws", "--help"])
         assert result.exit_code == 0
+
+    def test_ws_duration_exceeds_timeout(self) -> None:
+        """A WS capture duration >= command timeout should fail fast."""
+        result = runner.invoke(
+            app, ["ws", "https://example.com", "--duration", "30000"]
+        )
+        assert result.exit_code == 1
+        assert "shorter than the command timeout" in result.output
 
 
 @pytest.mark.unit

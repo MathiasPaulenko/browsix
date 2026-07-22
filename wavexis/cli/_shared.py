@@ -28,6 +28,32 @@ from wavexis.exceptions import (
 )
 from wavexis.output import Output
 
+try:
+    from cdpwave.exceptions import (
+        BrowserNotFoundError as CdpBrowserNotFoundError,
+    )
+    from cdpwave.exceptions import (
+        CDPError,
+    )
+    from cdpwave.exceptions import (
+        CommandTimeoutError as CdpCommandTimeoutError,
+    )
+    from cdpwave.exceptions import (
+        LaunchError as CdpLaunchError,
+    )
+    from cdpwave.exceptions import (
+        LaunchTimeoutError as CdpLaunchTimeoutError,
+    )
+except ImportError:  # pragma: no cover - cdpwave is optional
+    class _CDPErrorSentinelError(Exception):
+        pass
+
+    CDPError = _CDPErrorSentinelError
+    CdpBrowserNotFoundError = _CDPErrorSentinelError
+    CdpCommandTimeoutError = _CDPErrorSentinelError
+    CdpLaunchError = _CDPErrorSentinelError
+    CdpLaunchTimeoutError = _CDPErrorSentinelError
+
 __all__ = [
     "BackendNotAvailableError",
     "BrowserOptions",
@@ -66,11 +92,27 @@ EXIT_BROWSER_ERROR = 1
 EXIT_CONFIG_ERROR = 2
 EXIT_BACKEND_ERROR = 3
 
+
+class _NoExpandTyperGroup(typer.core.TyperGroup):
+    """TyperGroup that leaves shell wildcards untouched on Windows.
+
+    Click/Typer expand globs such as ``.*`` into the list of matching files
+    in the current directory on Windows.  That breaks options like
+    ``--pattern .*`` (which become ``.dockerignore .git .github ...``).
+    This subclass disables wildcard expansion by default.
+    """
+
+    def main(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("windows_expand_args", False)
+        return super().main(*args, **kwargs)
+
+
 app = typer.Typer(
     name="wavexis",
     help="Browser automation CLI — wraps cdpwave and bidiwave. No Node.js, no Chromium download.",
     no_args_is_help=True,
     invoke_without_command=True,
+    cls=_NoExpandTyperGroup,
 )
 
 
@@ -263,6 +305,16 @@ _ERROR_EXIT_CODES: dict[type[Exception], int] = {
     WavexisError: EXIT_BROWSER_ERROR,
 }
 
+# cdpwave exceptions are optional; add them with specific exit codes when available.
+if CDPError is not None:
+    _ERROR_EXIT_CODES.update({
+        CdpBrowserNotFoundError: EXIT_BROWSER_ERROR,
+        CdpLaunchError: EXIT_BROWSER_ERROR,
+        CdpLaunchTimeoutError: EXIT_BROWSER_ERROR,
+        CdpCommandTimeoutError: EXIT_BACKEND_ERROR,
+        CDPError: EXIT_BACKEND_ERROR,
+    })
+
 _ERROR_MESSAGES: dict[type[Exception], str] = {
     BackendNotAvailableError: (
         "No backend available.\n"
@@ -277,7 +329,7 @@ _ERROR_MESSAGES: dict[type[Exception], str] = {
 
 
 def _handle_error(e: Exception) -> None:
-    """Handle a WavexisError with the correct exit code and message.
+    """Handle a known CLI exception with the correct exit code and message.
 
     Args:
         e: The exception to handle.
@@ -292,7 +344,7 @@ def _handle_error(e: Exception) -> None:
 
 
 def _run_async(coro: Any) -> Any:
-    """Run an async coroutine synchronously, handling WavexisError.
+    """Run an async coroutine synchronously, handling known CLI errors.
 
     Args:
         coro: The coroutine to run.
@@ -304,6 +356,39 @@ def _run_async(coro: Any) -> Any:
         return asyncio.run(_run_with_cleanup(coro))
     except WavexisError as e:
         _handle_error(e)
+        return None
+    except TimeoutError as e:
+        _handle_error(WavexisError(str(e)))
+        return None
+    except CDPError as e:
+        _handle_error(e)
+        return None
+    except RuntimeError as e:
+        # Typer's Exit exception is a RuntimeError subclass and must be
+        # re-raised so Typer can exit with the intended code.  The
+        # "event loop stopped before Future completed" RuntimeError comes
+        # from asyncio cleanup after a command timed out or the backend
+        # connection was dropped; wrap it as a user-friendly timeout.
+        if isinstance(e, typer.Exit):
+            raise
+        msg = str(e)
+        if "Event loop stopped before Future completed." in msg:
+            _handle_error(
+                WavexisError(
+                    "Browser operation failed or timed out while waiting for a "
+                    "response. Hint: increase --timeout or check the backend "
+                    "connection."
+                )
+            )
+        else:
+            _handle_error(WavexisError(msg))
+        return None
+    except (ValueError, TypeError) as e:
+        # Backend libraries (cdpwave, bidiwave) raise ValueError/TypeError
+        # for invalid arguments (e.g. missing object_id).  These would
+        # otherwise surface as raw Python tracebacks.  Wrap them as
+        # user-friendly WavexisError messages.
+        _handle_error(WavexisError(str(e)))
         return None
 
 

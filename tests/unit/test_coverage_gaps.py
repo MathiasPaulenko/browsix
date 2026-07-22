@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from typer.testing import CliRunner
 
 from tests.conftest import MockBackend
 
@@ -301,12 +302,77 @@ class TestMainModule:
             mock_main.assert_called_once()
 
     def test_cli_main_invokes_app(self) -> None:
-        """wavexis.cli.main() should invoke the typer app."""
+        """wavexis.cli.main() should invoke the typer app with a clean prog_name."""
         with patch("wavexis.cli.app") as mock_app:
             from wavexis.cli import main
 
             main()
-            mock_app.assert_called_once()
+            mock_app.assert_called_once_with(prog_name="wavexis")
+
+    def test_show_completion_uses_clean_prog_name(self) -> None:
+        """Shell completion scripts must not contain spaces in env vars or command names."""
+        from wavexis.cli.app import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["--show-completion", "powershell"], prog_name="wavexis")
+        assert result.exit_code == 0
+        script = result.output
+        assert "$Env:_WAVEXIS_COMPLETE" in script
+        assert "_PYTHON _M" not in script
+        assert "Register-ArgumentCompleter -Native -CommandName wavexis" in script
+        assert "python -m wavexis" not in script
+
+    def test_cleanup_hook_suppresses_proactor_noise(self) -> None:
+        """The unraisablehook swallows asyncio Proactor cleanup artefacts."""
+        import sys
+        from types import SimpleNamespace
+
+        from wavexis.cli import _install_asyncio_cleanup_hooks
+
+        called: list[SimpleNamespace] = []
+
+        def fake_original(unraisable: SimpleNamespace) -> None:
+            called.append(unraisable)
+
+        old_hook = sys.unraisablehook
+        try:
+            sys.unraisablehook = fake_original
+            _install_asyncio_cleanup_hooks()
+            hook = sys.unraisablehook
+
+            # Pattern 1: "Exception ignored while calling deallocator"
+            noise_dealloc = SimpleNamespace(
+                err_msg="Exception ignored while calling deallocator",
+                exc_value=ValueError("I/O operation on closed pipe"),
+            )
+            hook(noise_dealloc)
+            assert not called, "deallocator pipe noise should be suppressed"
+
+            # Pattern 2: "Exception ignored in:"
+            noise_in = SimpleNamespace(
+                err_msg="Exception ignored in:",
+                exc_value=ValueError("I/O operation on closed pipe"),
+            )
+            hook(noise_in)
+            assert not called, "'Exception ignored in:' pipe noise should be suppressed"
+
+            # Non-pipe deallocator errors should still be reported
+            other = SimpleNamespace(
+                err_msg="Exception ignored while calling deallocator",
+                exc_value=ValueError("something else"),
+            )
+            hook(other)
+            assert called == [other], "Other deallocator errors should still be reported"
+
+            # Pipe errors with unrelated err_msg should be reported
+            unrelated = SimpleNamespace(
+                err_msg="some other context",
+                exc_value=ValueError("I/O operation on closed pipe"),
+            )
+            hook(unrelated)
+            assert called == [other, unrelated], "Unrelated pipe errors should be reported"
+        finally:
+            sys.unraisablehook = old_hook
 
 
 @pytest.mark.unit

@@ -160,7 +160,17 @@ def ws(
 
     async def _ws() -> dict[str, Any]:
         backend = _get_backend()
-        await backend.launch(_browser_options())
+        options = _browser_options()
+        # The JS evaluation has its own timeout; if the requested capture
+        # duration is not shorter than the command timeout it will be killed
+        # by the backend and the frames will be lost.  Fail fast instead.
+        if duration >= options.timeout:
+            raise WavexisError(
+                f"WS capture duration ({duration}ms) must be shorter than the "
+                f"command timeout ({options.timeout}ms). Increase --timeout "
+                "or use a shorter --duration."
+            )
+        await backend.launch(options)
         try:
             params = WebSocketParams(
                 url=url,

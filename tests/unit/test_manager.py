@@ -204,7 +204,7 @@ class FakeBackend:
     async def mock_response(self, url, response):
         """Mock response."""
 
-    async def intercept_download(self, url):
+    async def intercept_download(self, url, timeout=None):
         """Intercept download."""
 
     async def a11y_tree(self):
