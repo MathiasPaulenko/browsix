@@ -28,6 +28,8 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
+from wavexis import __version__
+from wavexis.backend._trace import extract_trace_events
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import (
     DEVICE_PRESETS,
@@ -49,6 +51,24 @@ from wavexis.exceptions import (
     WavexisError,
 )
 from wavexis.output import validate_path
+
+
+def _safe_json_loads(value: Any, default: Any = None) -> Any:
+    """Parse a JSON string or pass through an already-parsed structure safely.
+
+    Returns ``default`` when the value is missing, not a string, or cannot be
+    parsed as JSON. This avoids raising from remote scripts that return null
+    or malformed JSON.
+    """
+    if isinstance(value, (dict, list)):
+        return value
+    if not isinstance(value, str) or not value:
+        return default
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return default
+
 
 try:
     from bidiwave import BiDiClient
@@ -270,6 +290,12 @@ class BiDiBackend(AbstractBackend):
         """Close the BiDi client and release resources."""
         client = self._client
         if client is not None:
+            subs: dict[str, list[Any]] = getattr(self, "_subscriptions", {})
+            for subscriptions in subs.values():
+                for subscription in subscriptions:
+                    with contextlib.suppress(Exception):
+                        client.off(subscription)
+            subs.clear()
             if self._context is not None:
                 await client.browsing.close(self._context)
                 self._context = None
@@ -387,7 +413,9 @@ class BiDiBackend(AbstractBackend):
         rect_str = result.value if hasattr(result, "value") else result
         if not rect_str:
             raise ElementNotFoundError(selector)
-        rect = json.loads(rect_str)
+        rect = _safe_json_loads(rect_str, {})
+        if not isinstance(rect, dict):
+            raise ElementNotFoundError(selector)
 
         screenshot_result = await client.browsing.screenshot(
             self._context, format=format, quality=quality
@@ -1650,7 +1678,9 @@ class BiDiBackend(AbstractBackend):
         raw = getattr(result, "value", None)
         if not raw:
             raise ElementNotFoundError(selector)
-        suggestions: list[str] = json.loads(raw)
+        suggestions = _safe_json_loads(raw, [])
+        if not isinstance(suggestions, list):
+            raise ElementNotFoundError(selector)
         if all:
             return suggestions
         return suggestions[0] if suggestions else selector
@@ -1719,8 +1749,8 @@ class BiDiBackend(AbstractBackend):
         raw = getattr(result, "value", None)
         if not raw:
             raise ElementNotFoundError(query)
-        selectors: list[str] = json.loads(raw)
-        if not selectors:
+        selectors = _safe_json_loads(raw, [])
+        if not isinstance(selectors, list) or not selectors:
             raise ElementNotFoundError(query)
         if all:
             return selectors
@@ -1786,7 +1816,7 @@ class BiDiBackend(AbstractBackend):
         return {
             "log": {
                 "version": "1.2",
-                "creator": {"name": "wavexis", "version": "1.7.0"},
+                "creator": {"name": "wavexis", "version": __version__},
                 "entries": [],
                 "cookies": entries.get("cookies", []) if entries else [],
             },
@@ -2685,7 +2715,12 @@ class BiDiBackend(AbstractBackend):
             content = await asyncio.to_thread(validate_path(har_path).read_text, encoding="utf-8")
         except OSError as e:
             raise WavexisError(f"Failed to read HAR file: {e}") from e
-        har_data = json.loads(content)
+        try:
+            har_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            raise WavexisError(f"Invalid HAR file JSON: {e}") from e
+        if not isinstance(har_data, dict):
+            raise WavexisError("HAR file must contain a JSON object")
 
         entries = har_data.get("log", {}).get("entries", [])
         for entry in entries:
@@ -2922,9 +2957,6 @@ class BiDiBackend(AbstractBackend):
         Returns:
             Dict with keys: trace_events, screenshots, network, console.
         """
-        import io
-        import zipfile
-
         client = self._require_client()
         traces: dict[str, dict[str, Any]] = getattr(self, "_combined_traces", {})
         state = traces.get(trace_id)
@@ -2949,13 +2981,8 @@ class BiDiBackend(AbstractBackend):
                         if not resp.get("base64Encoded", True):
                             break
                     raw = b"".join(chunks)
-                    try:
-                        zf = zipfile.ZipFile(io.BytesIO(raw))
-                        for name in zf.namelist():
-                            content = zf.read(name).decode("utf-8", errors="replace")
-                            trace_events.extend(json.loads(content).get("traceEvents", []))
-                    except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
-                        trace_events.append({"raw_size": len(raw)})
+                    extracted = await asyncio.to_thread(extract_trace_events, raw)
+                    trace_events.extend(extracted)
             finally:
                 tracing_done.set()
 
@@ -3159,9 +3186,7 @@ class BiDiBackend(AbstractBackend):
 
     # ── Downloads ──────────────────────────────────────────
 
-    async def intercept_download(
-        self, pattern: str = ".*", timeout: float | None = None
-    ) -> bytes:
+    async def intercept_download(self, pattern: str = ".*", timeout: float | None = None) -> bytes:
         """Set download behavior via CDP and return placeholder.
 
         Uses CDP Page.setDownloadBehavior to allow downloads. The download
@@ -3218,14 +3243,12 @@ class BiDiBackend(AbstractBackend):
             TimeoutError: If no dialog opens within ``timeout``.
         """
         client = self._require_launched()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, Any]] = loop.create_future()
 
         def _handler(params: Any) -> None:
             if not future.done():
-                data = (
-                    params.model_dump() if hasattr(params, "model_dump") else dict(params)
-                )
+                data = params.model_dump() if hasattr(params, "model_dump") else dict(params)
                 future.set_result(data)
 
         subscription = client.on_user_prompt_opened(_handler)
@@ -3711,7 +3734,7 @@ class BiDiBackend(AbstractBackend):
         )
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
-        return json.loads(val) if isinstance(val, str) else dict(val)
+        return _safe_json_loads(val, {})
 
     async def perf_trace(self, duration_ms: int = 3000) -> dict[str, Any]:
         """Capture a performance trace via CDP Tracing.
@@ -3917,7 +3940,7 @@ class BiDiBackend(AbstractBackend):
         val = result.value if hasattr(result, "value") else result
         if not val:
             raise ElementNotFoundError(selector)
-        return json.loads(val) if isinstance(val, str) else dict(val)
+        return _safe_json_loads(val, {})
 
     async def css_get_stylesheets(self) -> list[dict[str, Any]]:
         """List all stylesheets in the page via JS.
@@ -3939,7 +3962,7 @@ class BiDiBackend(AbstractBackend):
         )
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
-        return json.loads(val) if isinstance(val, str) else list(val)
+        return _safe_json_loads(val, [])
 
     async def css_get_rules(self, stylesheet_id: str) -> list[dict[str, Any]]:
         """Get CSS rules from a stylesheet by index via JS.
@@ -3964,7 +3987,7 @@ class BiDiBackend(AbstractBackend):
         )
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
-        return json.loads(val) if isinstance(val, str) else list(val)
+        return _safe_json_loads(val, [])
 
     async def css_get_computed(self, selector: str) -> dict[str, Any]:
         """Get computed styles for an element via JS getComputedStyle.
@@ -3994,7 +4017,7 @@ class BiDiBackend(AbstractBackend):
         val = result.value if hasattr(result, "value") else result
         if not val:
             raise ElementNotFoundError(selector)
-        return json.loads(val) if isinstance(val, str) else dict(val)
+        return _safe_json_loads(val, {})
 
     async def css_add_rule(self, stylesheet_id: str, rule_text: str, location: int = 0) -> str:
         """Add a new CSS rule to a stylesheet via CDP bridge."""
@@ -5548,7 +5571,7 @@ class BiDiBackend(AbstractBackend):
         js = "caches.keys().then(function(names){  return JSON.stringify(names);})"
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
-        return json.loads(val) if isinstance(val, str) else list(val)
+        return _safe_json_loads(val, [])
 
     async def cache_storage_entries(
         self,
@@ -5575,7 +5598,7 @@ class BiDiBackend(AbstractBackend):
         )
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
-        return json.loads(val) if isinstance(val, str) else list(val)
+        return _safe_json_loads(val, [])
 
     def _get_origin(self) -> str:
         """Extract the security origin from the current page URL."""
@@ -5992,7 +6015,7 @@ class BiDiBackend(AbstractBackend):
         )
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
-        return json.loads(val) if isinstance(val, str) else list(val)
+        return _safe_json_loads(val, [])
 
     async def sw_unregister(self, registration_id: str) -> None:
         """Unregister a service worker by scope via JS.
@@ -6152,7 +6175,7 @@ class BiDiBackend(AbstractBackend):
         )
         result = await client.script.evaluate(self._context, js)
         val = result.value if hasattr(result, "value") else result
-        return json.loads(val) if isinstance(val, str) else list(val)
+        return _safe_json_loads(val, [])
 
     async def animation_pause(self, animation_id: str) -> None:
         """Pause an animation by index via JS.
@@ -6414,9 +6437,7 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("WebAudio.enable", {})
 
         try:
-            events = await client.cdp.collect_events(
-                "WebAudio.contextCreated", timeout=1.0
-            )
+            events = await client.cdp.collect_events("WebAudio.contextCreated", timeout=1.0)
         except TimeoutError:
             events = []
         return [dict(ev.get("context", ev)) for ev in events]
@@ -10396,7 +10417,8 @@ class BiDiBackend(AbstractBackend):
         valid_path = validate_path(path)
         return dict(
             await client.cdp.send_command(
-                "Extensions.loadUnpacked", {"path": str(valid_path), "enableInIncognito": enable_in_incognito}
+                "Extensions.loadUnpacked",
+                {"path": str(valid_path), "enableInIncognito": enable_in_incognito},
             )
         )
 

@@ -7,8 +7,10 @@ from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
-from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.config import BrowserOptions, WaitStrategy, _validate_url
 from wavexis.exceptions import ActionError
+
+__all__ = ["ModifyRequestAction", "ModifyRequestParams"]
 
 
 @dataclass
@@ -29,6 +31,14 @@ class ModifyRequestParams:
     modifications: dict[str, Any] = field(default_factory=dict)
     wait: WaitStrategy | None = None
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate request modification parameters."""
+        _validate_url(self.url)
+        if not isinstance(self.pattern, dict):
+            raise ActionError("pattern must be a dict for modify_request action")
+        if not isinstance(self.modifications, dict):
+            raise ActionError("modifications must be a dict for modify_request action")
 
 
 class ModifyRequestAction(BaseAction[ModifyRequestParams, dict[str, Any]]):

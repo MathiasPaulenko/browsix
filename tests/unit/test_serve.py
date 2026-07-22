@@ -78,6 +78,20 @@ class TestServeCreateApp:
         assert "/ws" in routes
         assert "/plugins" in routes
 
+    def test_create_app_enforces_request_size_limit(self) -> None:
+        """Default request body size is capped to prevent memory exhaustion."""
+        from wavexis.serve import create_app
+
+        app = create_app()
+        assert app._client_max_size == 10 * 1024 * 1024
+
+    def test_create_app_custom_request_size_limit(self) -> None:
+        """Custom max_request_size is propagated to aiohttp."""
+        from wavexis.serve import create_app
+
+        app = create_app(max_request_size=1024)
+        assert app._client_max_size == 1024
+
 
 @pytest.mark.unit
 class TestServeHandlers:
@@ -892,9 +906,7 @@ class TestServeHandlerMocks:
         assert "middleware" in data
         await client.close()
 
-    async def test_auth_endpoint_missing_context_file_returns_400(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_auth_endpoint_missing_context_file_returns_400(self, tmp_path: Path) -> None:
         """A missing or invalid auth context file should return 400, not 500."""
         from unittest.mock import patch
 
@@ -924,6 +936,38 @@ class TestServeHandlerMocks:
             assert resp.status == 400
             text = await resp.text()
             assert "auth context" in text.lower()
+            await client.close()
+        finally:
+            serve_mod.set_allowed_base_dir(None)
+
+    async def test_auth_endpoint_rejects_path_traversal(self, tmp_path: Path) -> None:
+        """Path traversal, parent-directory references, and null bytes are rejected."""
+        from unittest.mock import patch
+
+        from aiohttp.test_utils import TestClient, TestServer
+
+        import wavexis.serve as serve_mod
+        from wavexis.serve import create_app
+
+        serve_mod.set_allowed_base_dir(str(tmp_path))
+        try:
+            mock_backend = self._make_mock_backend()
+            app = create_app(base_dir=str(tmp_path))
+            server = TestServer(app)
+            client = TestClient(server)
+            await client.start_server()
+            with patch(
+                "wavexis.backend.manager.BackendManager.select_with_fallback",
+                new_callable=AsyncMock,
+                return_value=mock_backend,
+            ):
+                resp = await client.post(
+                    "/auth",
+                    json={"context": "../outside.json", "url": "https://example.com"},
+                )
+            assert resp.status == 400
+            text = await resp.text()
+            assert "outside" in text.lower() or "invalid" in text.lower()
             await client.close()
         finally:
             serve_mod.set_allowed_base_dir(None)
@@ -1131,54 +1175,31 @@ class TestServeUtilities:
         finally:
             serve_mod._ws_max_connections = original_max
 
-    def test_backend_pool(self) -> None:
+    def test_backend_pool_get_backend_creation_failure_releases_slot(self) -> None:
+        """Backend creation failure must release the acquired slot and restore state."""
         import asyncio
+        from unittest.mock import patch
 
         from wavexis.serve import BackendPool
 
         pool = BackendPool(max_concurrent=2)
 
         async def _test() -> None:
-            await pool.acquire()
-            await pool.acquire()
-            pool.release()
-            pool.release()
-
-        asyncio.run(_test())
-
-    def test_backend_pool_get_backend_creation_failure_restores_slot(self) -> None:
-        """Regression: if backend creation fails, the reserved slot must be released.
-
-        Previously, ``_created`` was incremented under the lock but never
-        decremented when ``select_with_fallback`` raised, causing the pool
-        to slowly fill with phantom backends.
-        """
-        import asyncio
-
-        from wavexis.serve import BackendPool
-
-        pool = BackendPool(max_concurrent=2)
-
-        async def _test() -> None:
-            # Patch the manager so select_with_fallback always fails.
-            from unittest.mock import patch
-
-            with patch(
-                "wavexis.serve.get_manager"
-            ) as mock_get_manager:
+            with patch("wavexis.serve.get_manager") as mock_get_manager:
                 mock_manager = mock_get_manager.return_value
                 mock_manager.select_with_fallback.side_effect = RuntimeError("no backend")
                 with pytest.raises(RuntimeError, match="no backend"):
                     await pool.get_backend(preferred="cdp")
             # The slot reserved for the failed creation must have been released.
             assert pool._created == 0
+            assert pool._semaphore._value == pool._max_concurrent
 
         asyncio.run(_test())
 
-    def test_backend_pool_discard_backend_closes_and_decrements(self) -> None:
-        """Regression: discard_backend must close the backend and decrement _created."""
+    def test_backend_pool_return_backend_reuses_and_releases(self) -> None:
+        """Regression: return_backend must return the backend to the pool and release the slot."""
         import asyncio
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, patch
 
         from wavexis.serve import BackendPool
 
@@ -1186,61 +1207,70 @@ class TestServeUtilities:
 
         async def _test() -> None:
             backend = AsyncMock()
-            pool._created = 1
-            await pool.discard_backend(backend)
-            backend.close.assert_awaited_once()
-            assert pool._created == 0
-
-        asyncio.run(_test())
-
-    def test_backend_pool_return_backend_does_not_close(self) -> None:
-        """Regression: return_backend must NOT close the backend before returning it.
-
-        Previously, return_backend closed the backend then put it back in the
-        pool, so every reused backend was unusable. The fix returns the backend
-        to the pool without closing it.
-        """
-        import asyncio
-        from unittest.mock import AsyncMock
-
-        from wavexis.serve import BackendPool
-
-        pool = BackendPool(max_concurrent=2)
-
-        async def _test() -> None:
-            backend = AsyncMock()
-            pool._created = 1
+            with patch("wavexis.serve.get_manager") as mock_get_manager:
+                mock_manager = mock_get_manager.return_value
+                mock_manager.select_with_fallback = AsyncMock(return_value=backend)
+                acquired = await pool.get_backend()
+            assert acquired is backend
             await pool.return_backend(backend)
             # Backend must NOT be closed when returned to the pool.
             backend.close.assert_not_awaited()
             # Backend must be available for reuse.
             assert not pool._pool.empty()
+            assert pool._semaphore._value == pool._max_concurrent
             reused = await pool.get_backend()
             assert reused is backend
 
         asyncio.run(_test())
 
-    def test_backend_pool_return_backend_closes_when_pool_full(self) -> None:
-        """Regression: return_backend must close the backend when the pool is full."""
+    def test_backend_pool_discard_backend_closes_and_releases(self) -> None:
+        """Regression: discard_backend must close the backend and release the slot."""
         import asyncio
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, patch
 
         from wavexis.serve import BackendPool
 
         pool = BackendPool(max_concurrent=2)
 
         async def _test() -> None:
-            # Fill the pool to capacity.
-            b1 = AsyncMock()
-            b2 = AsyncMock()
-            await pool.return_backend(b1)
-            await pool.return_backend(b2)
-            # Now the pool is full; returning another backend should close it.
-            b3 = AsyncMock()
-            pool._created = 3
-            await pool.return_backend(b3)
-            b3.close.assert_awaited_once()
-            assert pool._created == 2
+            backend = AsyncMock()
+            with patch("wavexis.serve.get_manager") as mock_get_manager:
+                mock_manager = mock_get_manager.return_value
+                mock_manager.select_with_fallback = AsyncMock(return_value=backend)
+                await pool.get_backend()
+            await pool.discard_backend(backend)
+            backend.close.assert_awaited_once()
+            assert pool._created == 0
+            assert pool._semaphore._value == pool._max_concurrent
+
+        asyncio.run(_test())
+
+    def test_backend_pool_enforces_max_concurrency(self) -> None:
+        """Regression: only max_concurrent backends can be checked out at once."""
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+
+        from wavexis.serve import BackendPool
+
+        pool = BackendPool(max_concurrent=1)
+
+        async def _test() -> None:
+            new_backend = AsyncMock()
+            with patch("wavexis.serve.get_manager") as mock_get_manager:
+                mock_manager = mock_get_manager.return_value
+                mock_manager.select_with_fallback = AsyncMock(return_value=new_backend)
+                b1 = await pool.get_backend()
+
+                async def _try_get():
+                    return await pool.get_backend()
+
+                # Second get_backend should block until the first backend is returned.
+                pending = asyncio.create_task(_try_get())
+                await asyncio.sleep(0)
+                assert not pending.done()
+                await pool.return_backend(b1)
+                b2 = await pending
+                assert b2 is b1
 
         asyncio.run(_test())
 

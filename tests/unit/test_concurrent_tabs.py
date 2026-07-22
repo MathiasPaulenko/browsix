@@ -125,9 +125,7 @@ class TestBatchTabsMode:
             return f"result:{url}"
 
         with patch("wavexis.cli._workflow._batch_single", side_effect=mixed_single):
-            results = await _batch_processes(
-                urls, "screenshot", MagicMock(), "document.title", 2
-            )
+            results = await _batch_processes(urls, "screenshot", MagicMock(), "document.title", 2)
 
         assert len(results) == 2
         assert results[0] == "result:https://ok.com"
@@ -181,9 +179,7 @@ class TestBatchTabsMode:
             patch("wavexis.cli._workflow._browser_options", return_value=MagicMock()),
             patch("wavexis.cli._workflow._batch_single_on", side_effect=mixed_single),
         ):
-            results = await _batch_tabs(
-                urls, "screenshot", MagicMock(), "document.title", 2
-            )
+            results = await _batch_tabs(urls, "screenshot", MagicMock(), "document.title", 2)
 
         assert len(results) == 2
         assert results[0] == b"ok"

@@ -5,10 +5,10 @@
 wavexis is under active development. Security fixes are applied to the latest
 release only.
 
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | Yes       |
-| < 0.1   | No        |
+| Version  | Supported |
+|----------|-----------|
+| 2.16.x   | Yes       |
+| < 2.16   | No        |
 
 ## Reporting a Vulnerability
 

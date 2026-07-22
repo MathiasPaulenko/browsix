@@ -14,6 +14,8 @@ from wavexis.exceptions import WavexisError
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["LighthouseAction", "LighthouseParams"]
+
 
 @dataclass
 class LighthouseParams:
@@ -338,7 +340,7 @@ class LighthouseAction(BaseAction[LighthouseParams, dict[str, Any]]):
                 return {
                     issues: issues,
                     is_https: location.protocol === 'https:',
-                    console_errors: window.__wavexisConsoleErrors || [],
+                    console_errors: [],
                 };
             })()
         """

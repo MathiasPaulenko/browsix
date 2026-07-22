@@ -62,7 +62,11 @@ def load_auth_context(path: str) -> AuthContext:
         FileNotFoundError: If the file does not exist.
         json.JSONDecodeError: If the file is not valid JSON.
     """
-    data = json.loads(validate_path(path).read_text(encoding="utf-8"))
+    raw_data = json.loads(validate_path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw_data, dict):
+        got = type(raw_data).__name__
+        raise ValueError(f"Auth context file must contain a JSON object, got {got}")
+    data = raw_data
     password = data.get("password")
     if password and not os.environ.get("WAVEXIS_AUTH_NO_WARN"):
         logger.warning(
@@ -98,7 +102,8 @@ def load_auth(path: str | Path) -> list[dict[str, str]]:
         return data
     if isinstance(data, dict):
         return list(data.get("cookies", []))
-    return []
+    got = type(data).__name__
+    raise ValueError(f"Auth cookie file must contain a JSON list or object, got {got}")
 
 
 def load_headers(path: str | Path) -> dict[str, str]:
@@ -119,7 +124,7 @@ def load_headers(path: str | Path) -> dict[str, str]:
         if "headers" in data and isinstance(data["headers"], dict):
             return data["headers"]
         return data
-    return {}
+    raise ValueError(f"Headers file must contain a JSON object, got {type(data).__name__}")
 
 
 async def apply_auth_context(

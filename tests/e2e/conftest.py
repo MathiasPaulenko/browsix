@@ -42,19 +42,13 @@ def _cdpwave_available() -> bool:
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register the e2e marker."""
-    config.addinivalue_line(
-        "markers", "e2e: end-to-end CLI tests against a real browser"
-    )
+    config.addinivalue_line("markers", "e2e: end-to-end CLI tests against a real browser")
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip e2e tests when prerequisites are missing."""
     skip_e2e = not _cdpwave_available() or not _chrome_available()
-    skip_marker = pytest.mark.skip(
-        reason="cdpwave or Chrome not available — skipping e2e tests"
-    )
+    skip_marker = pytest.mark.skip(reason="cdpwave or Chrome not available — skipping e2e tests")
     for item in items:
         if "e2e" in item.keywords and skip_e2e:
             item.add_marker(skip_marker)
@@ -129,9 +123,7 @@ class CLIResult:
 
     def assert_stdout_contains(self, substring: str) -> CLIResult:
         """Assert that stdout contains a substring."""
-        assert substring in self.stdout, (
-            f"Expected '{substring}' in stdout, got:\n{self.stdout}"
-        )
+        assert substring in self.stdout, f"Expected '{substring}' in stdout, got:\n{self.stdout}"
         return self
 
     def assert_file_exists(self, path: str | Path) -> CLIResult:

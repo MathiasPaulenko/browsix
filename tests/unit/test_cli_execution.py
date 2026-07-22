@@ -187,9 +187,7 @@ class TestCLIExecutionCapture:
         backend.navigate = AsyncMock()
         # eval is called twice per page (title, then links). Provide enough
         # values for the start page and any discovered links at depth 1.
-        backend.eval = AsyncMock(
-            side_effect=["Example Page", [], "About Page", []]
-        )
+        backend.eval = AsyncMock(side_effect=["Example Page", [], "About Page", []])
         with patch("wavexis.cli._capture._get_backend", return_value=backend):
             result = runner.invoke(app, ["crawl", "https://example.com", "--depth", "1"])
         assert result.exit_code == 0, result.output
@@ -271,14 +269,10 @@ class TestCLIExecutionCapture:
     def test_console_capture_executes(self, tmp_path: Path) -> None:
         """Regression for bug #21: `console capture` must exist and work."""
         backend = _make_mock_backend()
-        backend.capture_console = AsyncMock(
-            return_value=[{"type": "log", "text": "hello"}]
-        )
+        backend.capture_console = AsyncMock(return_value=[{"type": "log", "text": "hello"}])
         out = str(tmp_path / "console.json")
         with patch("wavexis.cli._debug._get_backend", return_value=backend):
-            result = runner.invoke(
-                app, ["console", "capture", "https://example.com", "-o", out]
-            )
+            result = runner.invoke(app, ["console", "capture", "https://example.com", "-o", out])
         assert result.exit_code == 0, result.output
         backend.capture_console.assert_awaited_once()
         # Default level is "all"
@@ -970,9 +964,7 @@ class TestCLIExecutionConfig:
     def test_auth_missing_context_file_exits_cleanly(self) -> None:
         """A missing auth context file should produce a clean error, not a traceback."""
         with patch("wavexis.cli._config._get_backend") as mock_get:
-            result = runner.invoke(
-                app, ["auth", "does_not_exist.json", "https://example.com"]
-            )
+            result = runner.invoke(app, ["auth", "does_not_exist.json", "https://example.com"])
         assert result.exit_code == 1
         assert "auth context" in result.output.lower()
         mock_get.assert_not_called()
@@ -1009,9 +1001,7 @@ class TestCLIExecutionRecordReplay:
 
     def test_record_interactive_help(self) -> None:
         """--interactive help must be parseable so the batch runner can skip it."""
-        result = runner.invoke(
-            app, ["record", "https://example.com", "--interactive", "--help"]
-        )
+        result = runner.invoke(app, ["record", "https://example.com", "--interactive", "--help"])
         assert result.exit_code == 0
 
     def test_replay_help(self) -> None:
@@ -1060,9 +1050,7 @@ class TestCLIExecutionSessionFull:
             patch("wavexis.cli._session._get_backend", return_value=backend),
             patch("wavexis.actions.session.Path.read_text", side_effect=PermissionError("denied")),
         ):
-            result = runner.invoke(
-                app, ["session", "load", str(session_file)]
-            )
+            result = runner.invoke(app, ["session", "load", str(session_file)])
         assert result.exit_code == 1
         assert "failed to read session" in result.output.lower()
 
@@ -1072,9 +1060,7 @@ class TestCLIExecutionSessionFull:
         session_file = tmp_path / "session.json"
         session_file.write_text("not valid json")
         with patch("wavexis.cli._session._get_backend", return_value=backend):
-            result = runner.invoke(
-                app, ["session", "load", str(session_file)]
-            )
+            result = runner.invoke(app, ["session", "load", str(session_file)])
         assert result.exit_code == 1
         assert "invalid session json" in result.output.lower()
 
@@ -1226,9 +1212,7 @@ class TestCLIExecutionCSS:
         backend = _make_mock_backend()
         backend.css_collect_class_names = AsyncMock(return_value=[])
         with patch("wavexis.cli._debug._get_backend", return_value=backend):
-            result = runner.invoke(
-                app, ["css", "collect-class-names", "https://example.com", "1"]
-            )
+            result = runner.invoke(app, ["css", "collect-class-names", "https://example.com", "1"])
         assert result.exit_code == 0
         backend.dom_get_document.assert_awaited_once()
 
@@ -1341,9 +1325,7 @@ class TestCLIExecutionOverlay:
         """overlay layout-shift-regions must send 'result' not 'show' to CDP."""
         backend = _make_mock_backend()
         with patch("wavexis.cli._debug._get_backend", return_value=backend):
-            result = runner.invoke(
-                app, ["overlay", "layout-shift-regions", "https://example.com"]
-            )
+            result = runner.invoke(app, ["overlay", "layout-shift-regions", "https://example.com"])
         assert result.exit_code == 0
         backend.overlay_set_show_layout_shift_regions.assert_awaited_once_with(True)
 
@@ -1455,9 +1437,7 @@ class TestCLIExecutionServeCLI:
 
     def test_ws_duration_exceeds_timeout(self) -> None:
         """A WS capture duration >= command timeout should fail fast."""
-        result = runner.invoke(
-            app, ["ws", "https://example.com", "--duration", "30000"]
-        )
+        result = runner.invoke(app, ["ws", "https://example.com", "--duration", "30000"])
         assert result.exit_code == 1
         assert "shorter than the command timeout" in result.output
 
@@ -1551,9 +1531,7 @@ class TestBatchFilenameSanitization:
 
         with (
             patch("wavexis.cli._capture._get_backend", return_value=backend),
-            patch.object(
-                ScrapeAction, "execute", new=AsyncMock(side_effect=side_effects)
-            ),
+            patch.object(ScrapeAction, "execute", new=AsyncMock(side_effect=side_effects)),
         ):
             result = runner.invoke(
                 app,

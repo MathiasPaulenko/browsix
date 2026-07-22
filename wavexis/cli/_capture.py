@@ -55,11 +55,7 @@ def screenshot(
     wait_for: str | None = typer.Option(None, "--wait-for", help="CSS selector to wait for"),
 ) -> None:
     """Take a screenshot of a web page."""
-    wait = (
-        _wait_strategy("selector", selector=wait_for)
-        if wait_for
-        else _wait_strategy()
-    )
+    wait = _wait_strategy("selector", selector=wait_for) if wait_for else _wait_strategy()
     image_bytes = _run_async(_take_screenshot(url, full_page, selector, device, format, js, wait))
     if image_bytes is None:
         return

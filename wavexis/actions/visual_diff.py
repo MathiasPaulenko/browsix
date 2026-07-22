@@ -60,9 +60,7 @@ class VisualDiffAction(BaseAction[VisualDiffParams, dict[str, Any]]):
             raise ActionError("baseline_path is required for visual diff")
 
         if not 0 <= self.params.threshold <= 255:
-            raise ActionError(
-                f"threshold must be between 0 and 255, got {self.params.threshold}"
-            )
+            raise ActionError(f"threshold must be between 0 and 255, got {self.params.threshold}")
 
         baseline_path = validate_path(self.params.baseline_path)
         if not await asyncio.to_thread(baseline_path.exists):

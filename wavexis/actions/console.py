@@ -7,7 +7,8 @@ from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
-from wavexis.config import WaitStrategy
+from wavexis.config import WaitStrategy, _validate_url
+from wavexis.exceptions import ActionError
 
 
 @dataclass
@@ -25,6 +26,18 @@ class ConsoleParams:
     level: str = "all"
     wait: WaitStrategy | None = None
     capture: str = "console"
+
+    def __post_init__(self) -> None:
+        """Validate console parameters."""
+        _validate_url(self.url)
+        if self.level not in {"all", "error", "warning", "info"}:
+            raise ActionError(
+                f"Invalid console level {self.level!r}; allowed: all, error, warning, info"
+            )
+        if self.capture not in {"console", "logs", "both"}:
+            raise ActionError(
+                f"Invalid capture mode {self.capture!r}; allowed: console, logs, both"
+            )
 
 
 class ConsoleAction(BaseAction[ConsoleParams, dict[str, Any]]):

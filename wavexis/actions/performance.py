@@ -7,7 +7,7 @@ from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
-from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.config import BrowserOptions, WaitStrategy, _validate_url
 from wavexis.exceptions import ActionError
 
 
@@ -29,6 +29,12 @@ class PerformanceParams:
     duration_ms: int = 3000
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate performance parameters."""
+        _validate_url(self.url)
+        if self.duration_ms <= 0:
+            raise ActionError(f"duration_ms must be positive; got {self.duration_ms}")
 
 
 class PerformanceAction(BaseAction[PerformanceParams, dict[str, Any]]):

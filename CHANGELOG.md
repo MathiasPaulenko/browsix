@@ -2,6 +2,58 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.16.8 — 2026-07-22
+
+### Bug Fixes
+
+- **Backend pool lifecycle** — `BackendPool.get_backend` now acquires its own semaphore slot and releases it on creation failure; `return_backend` and `discard_backend` release the slot, eliminating semaphore leaks and phantom-backend races.
+- **Serve-mode hardening** — Added `max_request_size` (default 10 MB) to `create_app`/`serve`, hardened `_validate_path` against `..` and null-byte traversal, and caught path-validation errors as 400 responses.
+- **Auth JSON parsing** — `load_auth_context`, `load_auth`, and `load_headers` now raise `ValueError` on malformed JSON instead of returning empty defaults.
+- **ReDoS-safe substitution** — Tightened the `{{...}}` regex in `multi.py` so nested/unbalanced braces cannot cause runaway backtracking.
+- **Parameter validation** — Added `__post_init__` validation to `ModifyRequestParams`, `WebSocketParams`, and `NetworkParams` (action choice, URL, regex, duration).
+- **Trace extraction safety** — `extract_trace_events` uses `zipfile.ZipFile` as a context manager and catches `RuntimeError`.
+- **BiDi JSON/null robustness** — Added `_safe_json_loads` and replaced unguarded `json.loads` calls in `bidi.py` so malformed or null remote values do not crash.
+- **Network inspect file I/O** — Event subscription buffers events and writes the JSONL file in a thread at the end, removing the open file handle from the async event handler.
+
+### CI / Tooling
+
+- **Python 3.14 in CI** — Added 3.14 to the `typecheck` and `unit-tests` matrices in `.github/workflows/ci.yml`.
+- **Public API exports** — Added `__all__` declarations to `backend/base.py`, `backend/_trace.py`, and recently modified action modules.
+
+## v2.16.7 — 2026-07-22
+
+### Bug Fixes
+
+- **Input validation for all parameter dataclasses** — `BrowserOptions`, `WaitStrategy`, `ScreenshotParams`, `PDFParams`, `EvalParams`, `ScrapeParams`, `HarParams`, `CookieParams`, `NetworkParams`, `EmulationParams`, `InputParams`, `ThrottleParams`, `SensorParams`, `ScreencastParams`, `StorageParams`, `SystemInfoParams`, `AnimationParams`, `CSSParams`, `DebugParams`, `CookieActionParams`, `HeaderParams`, `ConsoleParams`, and `PerformanceParams` now validate URLs, numeric ranges, file paths, device/paper/format choices, and other constrained fields at construction time, preventing invalid values from reaching the backend.
+- **Path traversal protection** — CLI commands that create parent directories (`snapshot`, `network inspect --output`) now use `validate_path()` before calling `mkdir()`, and `BrowserOptions.user_data_dir`, `EvalParams.file`, and `InputParams.files` are validated for traversal/null-byte attempts.
+- **Backend resource cleanup** — `CDPBackend.close()` and `BiDiBackend.close()` now unregister all active event subscriptions before closing the client/session, preventing leaked handlers and references.
+- **Blocking I/O offloaded** — BiDi trace ZIP extraction and JSON parsing moved to `asyncio.to_thread` in `BiDiBackend.stop_combined_trace()`; `PerfettoTraceMixin` uses shared helpers in `wavexis/backend/_trace.py` to avoid duplicating blocking decode logic.
+
+### CI / Tooling
+
+- **Version metadata is now consistent** — `wavexis.__version__` and HAR `creator.version` now read from the same source as `pyproject.toml` instead of stale hard-coded values.
+- **Pytest warning noise reduced** — `filterwarnings` in `pyproject.toml` suppresses the `asyncio.get/set_event_loop_policy` deprecation warnings emitted by pytest-asyncio on Python 3.14, leaving only actionable warnings in test output.
+- **Shell completion test is platform-aware** for Linux CI.
+- **Ruff formatting applied** across the codebase and long test string literals wrapped to satisfy the 100-column limit.
+
+### Documentation
+
+- **`config get --key`** is now documented in `docs/guide/commands.md` alongside `set`, `show`, `init`, and `path`.
+- **Security policy** in `SECURITY.md` updated to show `2.16.x` as the supported release line.
+
+## v2.16.6 — 2026-07-21
+
+### Bug Fixes
+
+- **Python 3.12 compatibility** — Replaced `sys.UnraisableHookArgs` with `Any` to avoid import errors on Python 3.12.
+
+## v2.16.5 — 2026-07-21
+
+### Bug Fixes
+
+- **CLI input validation** — Commands now handle errors cleanly, enable the DOM domain when required, and validate input arguments.
+- **CDP parameter mismatches and dialog timeout** — Corrected cdpwave parameter mismatches and added a timeout for dialog handling.
+
 ## v2.16.4 — 2026-07-21
 
 ### Bug Fixes

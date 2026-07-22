@@ -71,6 +71,11 @@ def serve(
         "--max-concurrent",
         help="Max concurrent browser backends (default 5)",
     ),
+    max_request_size: int = typer.Option(
+        10 * 1024 * 1024,
+        "--max-request-size",
+        help="Maximum request body size in bytes (default 10MB)",
+    ),
 ) -> None:
     """Start the wavexis HTTP server."""
     from wavexis.serve import serve as _serve
@@ -87,6 +92,7 @@ def serve(
             api_key=api_key,
             cors_origins=origins,
             max_concurrent=max_concurrent,
+            max_request_size=max_request_size,
         )
     except WavexisError as e:
         _handle_error(e)

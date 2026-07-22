@@ -41,6 +41,15 @@ class TestLoadAuthContext:
         assert ctx.username is None
         assert ctx.password is None
 
+    @pytest.mark.unit
+    def test_load_invalid_top_level_raises(self, tmp_path: Path):
+        """Reject non-object auth context files."""
+        path = tmp_path / "bad.json"
+        path.write_text('"not-an-object"', encoding="utf-8")
+
+        with pytest.raises(ValueError):
+            load_auth_context(str(path))
+
 
 class TestLoadAuth:
     """Tests for load_auth."""
@@ -74,6 +83,15 @@ class TestLoadAuth:
         cookies = load_auth(str(path))
         assert cookies == []
 
+    @pytest.mark.unit
+    def test_load_invalid_top_level_raises(self, tmp_path: Path):
+        """Reject JSON values that are neither a list nor an object."""
+        path = tmp_path / "bad.json"
+        path.write_text("42", encoding="utf-8")
+
+        with pytest.raises(ValueError):
+            load_auth(str(path))
+
 
 class TestLoadHeaders:
     """Tests for load_headers."""
@@ -106,6 +124,15 @@ class TestLoadHeaders:
 
         headers = load_headers(str(path))
         assert headers == {}
+
+    @pytest.mark.unit
+    def test_load_invalid_top_level_raises(self, tmp_path: Path):
+        """Reject non-object headers files."""
+        path = tmp_path / "bad.json"
+        path.write_text('["not-an-object"]', encoding="utf-8")
+
+        with pytest.raises(ValueError):
+            load_headers(str(path))
 
 
 class TestAuthContext:

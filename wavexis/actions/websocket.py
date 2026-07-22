@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from wavexis.actions.base import BaseAction
 from wavexis.backend.base import AbstractBackend
-from wavexis.config import BrowserOptions, WaitStrategy
+from wavexis.config import BrowserOptions, WaitStrategy, _validate_url
+from wavexis.exceptions import ActionError
+
+__all__ = ["WebSocketInterceptAction", "WebSocketParams"]
 
 
 @dataclass
@@ -30,6 +34,19 @@ class WebSocketParams:
     mock_responses: dict[str, str] = field(default_factory=dict)
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate WebSocket interception parameters."""
+        _validate_url(self.url)
+        if self.url_pattern:
+            try:
+                re.compile(self.url_pattern)
+            except re.error as e:
+                raise ActionError(f"Invalid url_pattern regex: {e}") from e
+        if self.duration_ms <= 0:
+            raise ActionError(f"duration_ms must be positive; got {self.duration_ms}")
+        if not isinstance(self.mock_responses, dict):
+            raise ActionError("mock_responses must be a dict")
 
 
 class WebSocketInterceptAction(BaseAction[WebSocketParams, dict[str, Any]]):

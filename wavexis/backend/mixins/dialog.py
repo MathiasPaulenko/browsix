@@ -40,7 +40,5 @@ class DialogBackend(ABC):
         """Enable or disable ignoring of certificate errors."""
 
     @abstractmethod
-    async def intercept_download(
-        self, pattern: str = ".*", timeout: float | None = None
-    ) -> bytes:
+    async def intercept_download(self, pattern: str = ".*", timeout: float | None = None) -> bytes:
         """Intercept a file download matching a URL pattern and return bytes."""

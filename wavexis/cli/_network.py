@@ -140,7 +140,6 @@ def headers(
         typer.echo(f"Error: invalid JSON headers: {e}", err=True)
         raise typer.Exit(1) from e
 
-
     _run_async(_headers(data))
     typer.echo("Headers set")
 

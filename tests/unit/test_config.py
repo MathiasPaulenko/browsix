@@ -332,3 +332,12 @@ class TestNetworkParams:
         """Test with headers."""
         params = NetworkParams(action="headers", headers={"X-Test": "val"})
         assert params.headers == {"X-Test": "val"}
+
+    def test_invalid_action_raises(self):
+        """Reject unknown network action values."""
+        import pytest
+
+        from wavexis.exceptions import ActionError
+
+        with pytest.raises(ActionError):
+            NetworkParams(action="unknown_action")

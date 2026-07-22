@@ -702,9 +702,7 @@ class TestCDPMethodBodies:
         backend, _, session = _make_mock_backend()
         await backend.dialog_wait_for_opening(timeout=5.0)
         session.page.enable.assert_awaited_once()
-        session.wait_for_event.assert_awaited_once_with(
-            "Page.javascriptDialogOpening", timeout=5.0
-        )
+        session.wait_for_event.assert_awaited_once_with("Page.javascriptDialogOpening", timeout=5.0)
 
     async def test_grant_permission(self) -> None:
         backend, _, _ = _make_mock_backend()
@@ -890,33 +888,25 @@ class TestCDPMethodBodies:
         backend, _, mock = _make_mock_backend()
         # storage_get now uses runtime.evaluate (window.localStorage.getItem)
         # instead of the removed DOMStorage.getDOMStorageItems method.
-        mock.runtime.evaluate = AsyncMock(
-            return_value={"result": {"value": "data"}}
-        )
+        mock.runtime.evaluate = AsyncMock(return_value={"result": {"value": "data"}})
         result = await backend.storage_get("key")
         assert result == "data"
 
     async def test_storage_set(self) -> None:
         backend, _, mock = _make_mock_backend()
         # storage_set now uses runtime.evaluate and expects "ok" on success.
-        mock.runtime.evaluate = AsyncMock(
-            return_value={"result": {"value": "ok"}}
-        )
+        mock.runtime.evaluate = AsyncMock(return_value={"result": {"value": "ok"}})
         await backend.storage_set("key", "value")
 
     async def test_storage_clear(self) -> None:
         backend, _, mock = _make_mock_backend()
-        mock.runtime.evaluate = AsyncMock(
-            return_value={"result": {"value": "ok"}}
-        )
+        mock.runtime.evaluate = AsyncMock(return_value={"result": {"value": "ok"}})
         await backend.storage_clear()
 
     async def test_storage_list(self) -> None:
         backend, _, mock = _make_mock_backend()
         # storage_list now returns a JSON string from runtime.evaluate.
-        mock.runtime.evaluate = AsyncMock(
-            return_value={"result": {"value": '{"k": "v"}'}}
-        )
+        mock.runtime.evaluate = AsyncMock(return_value={"result": {"value": '{"k": "v"}'}})
         result = await backend.storage_list()
         assert isinstance(result, dict)
         assert result == {"k": "v"}
@@ -1198,7 +1188,9 @@ class TestCDPMethodBodies:
 
         backend = CDPBackend()
         mock_session = MagicMock()
-        mock_session.emulation.set_user_agent_override = AsyncMock(side_effect=RuntimeError("setup failed"))
+        mock_session.emulation.set_user_agent_override = AsyncMock(
+            side_effect=RuntimeError("setup failed")
+        )
         mock_client = MagicMock()
         mock_client.new_page = AsyncMock(return_value=mock_session)
         mock_client.close = AsyncMock()
@@ -2322,9 +2314,7 @@ class TestCDPMethodBodies:
     async def test_overlay_set_show_paint_rects(self) -> None:
         backend, _, mock = _make_mock_backend()
         await backend.overlay_set_show_paint_rects(True)
-        mock.send.assert_awaited_once_with(
-            "Overlay.setShowPaintRects", {"result": True}
-        )
+        mock.send.assert_awaited_once_with("Overlay.setShowPaintRects", {"result": True})
 
     async def test_overlay_set_show_debug_borders(self) -> None:
         backend, _, mock = _make_mock_backend()
@@ -4448,9 +4438,7 @@ class TestCDPMethodBodies:
     async def test_overlay_set_show_layout_shift_regions(self) -> None:
         backend, _, mock = _make_mock_backend()
         await backend.overlay_set_show_layout_shift_regions(True)
-        mock.send.assert_awaited_once_with(
-            "Overlay.setShowLayoutShiftRegions", {"result": True}
-        )
+        mock.send.assert_awaited_once_with("Overlay.setShowLayoutShiftRegions", {"result": True})
 
     async def test_overlay_set_show_scroll_bottleneck_rects(self) -> None:
         backend, _, mock = _make_mock_backend()

@@ -18,6 +18,7 @@ from wavexis.cli._shared import (
     _wait_strategy,
     app,
 )
+from wavexis.output import validate_path
 
 
 @app.command()
@@ -381,6 +382,14 @@ def events(
         raise typer.Exit(1)
 
 
+def _append_jsonl(path: Any, lines: list[str]) -> None:
+    """Append JSONL lines to a file synchronously."""
+    if not lines:
+        return
+    with path.open("a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 async def _events_subscribe(
     url: str, event_types: list[str], duration: int, output: str | None
 ) -> None:
@@ -393,17 +402,7 @@ async def _events_subscribe(
     """
     backend = _get_backend()
     count = 0
-    out_file = None
-    if output:
-        from pathlib import Path
-
-        out_path = Path(output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        # ASYNC230: open the file outside the async path using a helper
-        # that runs the blocking call in a thread.
-        out_file = await asyncio.to_thread(
-            out_path.open, "a", encoding="utf-8"
-        )
+    buffer: list[dict[str, Any]] = []
     try:
         await backend.launch(_browser_options())
         await backend.navigate(url, _wait_strategy())
@@ -413,16 +412,18 @@ async def _events_subscribe(
             count += 1
             line = json.dumps(event, default=str)
             typer.echo(line)
-            if out_file is not None:
-                out_file.write(line + "\n")
-                out_file.flush()
+            if output:
+                buffer.append(event)
 
         sub_id: str = await backend.subscribe_events(event_types, on_event)
         typer.echo(f"Subscribed: {sub_id}")
         await asyncio.sleep(duration)
         await backend.unsubscribe_events(sub_id)
         typer.echo(f"Unsubscribed (captured {count} event(s))")
+        if output:
+            out_path = validate_path(output)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            lines = [json.dumps(event, default=str) for event in buffer]
+            await asyncio.to_thread(_append_jsonl, out_path, lines)
     finally:
-        if out_file is not None:
-            out_file.close()
         await _close_backend(backend)

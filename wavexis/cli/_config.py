@@ -43,7 +43,7 @@ def completions(
         raise typer.Exit(EXIT_CONFIG_ERROR)
 
     import os
-    import subprocess
+    import subprocess  # nosec B404
 
     env = os.environ.copy()
     # Force UTF-8 so the child process can print unicode glyphs (e.g. the
@@ -56,7 +56,8 @@ def completions(
         # the parent's legacy Windows console. The child still writes the
         # completion script to the user's shell profile; we just suppress its
         # terminal output here and print our own success message.
-        result = subprocess.run(
+        # argv is a fixed list, shell=False, shell from validated allowlist
+        result = subprocess.run(  # nosec B603
             [sys.executable, "-m", "wavexis", "--install-completion", shell],
             input="y\n",
             text=True,

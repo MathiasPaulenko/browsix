@@ -45,6 +45,7 @@ try:
         LaunchTimeoutError as CdpLaunchTimeoutError,
     )
 except ImportError:  # pragma: no cover - cdpwave is optional
+
     class _CDPErrorSentinelError(Exception):
         pass
 
@@ -180,14 +181,11 @@ def _load_global_config() -> None:
         if "stealth" in raw:
             ctx.stealth = bool(raw["stealth"])
     except ImportError:
-        if ctx.verbose:
-            _echo(f"Warning: failed to load config from {config_path}: PyYAML not installed")
+        _echo(f"Warning: failed to load config from {config_path}: PyYAML not installed")
     except (OSError, ValueError, TypeError) as exc:
-        if ctx.verbose:
-            _echo(f"Warning: failed to load config from {config_path}: {exc}")
+        _echo(f"Warning: failed to load config from {config_path}: {exc}")
     except Exception as exc:
-        if ctx.verbose:
-            _echo(f"Warning: failed to load config from {config_path}: {exc}")
+        _echo(f"Warning: failed to load config from {config_path}: {exc}")
 
 
 @app.callback()
@@ -200,9 +198,7 @@ def main_callback(
     headed: bool = typer.Option(
         False, "--headed", help="Run browser in headed mode (visible window)"
     ),
-    timeout: int = typer.Option(
-        30000, "--timeout", help="Navigation timeout in milliseconds"
-    ),
+    timeout: int = typer.Option(30000, "--timeout", help="Navigation timeout in milliseconds"),
     wait_strategy: str = typer.Option(
         "load",
         "--wait-strategy",
@@ -307,13 +303,15 @@ _ERROR_EXIT_CODES: dict[type[Exception], int] = {
 
 # cdpwave exceptions are optional; add them with specific exit codes when available.
 if CDPError is not None:
-    _ERROR_EXIT_CODES.update({
-        CdpBrowserNotFoundError: EXIT_BROWSER_ERROR,
-        CdpLaunchError: EXIT_BROWSER_ERROR,
-        CdpLaunchTimeoutError: EXIT_BROWSER_ERROR,
-        CdpCommandTimeoutError: EXIT_BACKEND_ERROR,
-        CDPError: EXIT_BACKEND_ERROR,
-    })
+    _ERROR_EXIT_CODES.update(
+        {
+            CdpBrowserNotFoundError: EXIT_BROWSER_ERROR,
+            CdpLaunchError: EXIT_BROWSER_ERROR,
+            CdpLaunchTimeoutError: EXIT_BROWSER_ERROR,
+            CdpCommandTimeoutError: EXIT_BACKEND_ERROR,
+            CDPError: EXIT_BACKEND_ERROR,
+        }
+    )
 
 _ERROR_MESSAGES: dict[type[Exception], str] = {
     BackendNotAvailableError: (

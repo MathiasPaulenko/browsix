@@ -13,6 +13,7 @@ import dataclasses
 import hmac
 import json
 import logging
+import os
 import time
 import types
 import typing
@@ -227,7 +228,8 @@ async def _json_error_middleware(request: Any, handler: Any) -> Any:
     """Middleware that catches JSON decode errors and returns 400.
 
     Catches json.JSONDecodeError and aiohttp.ContentTypeError raised when
-    request.json() fails, returning a consistent 400 response.
+    request.json() fails, returning a consistent 400 response. Also converts
+    aiohttp's payload-too-large exception into a 413 JSON response.
     """
     web = _import_aiohttp()
     try:
@@ -238,6 +240,12 @@ async def _json_error_middleware(request: Any, handler: Any) -> Any:
         return web.Response(
             status=400,
             text='{"error": "invalid JSON body"}',
+            content_type="application/json",
+        )
+    except web.HTTPRequestEntityTooLarge:
+        return web.Response(
+            status=413,
+            text='{"error": "request body too large"}',
             content_type="application/json",
         )
     except Exception as exc:
@@ -295,6 +303,9 @@ def set_allowed_base_dir(path: str | None) -> None:
 def _validate_path(raw_path: str) -> Path:
     """Validate that a user-supplied path is inside the allowed base directory.
 
+    Resolves symlinks and rejects traversal attempts, null bytes, and paths
+    that fall outside the configured base directory.
+
     Args:
         raw_path: Raw path string from the request body.
 
@@ -312,11 +323,15 @@ def _validate_path(raw_path: str) -> Path:
         )
     if not raw_path or not isinstance(raw_path, str):
         raise WavexisError("A non-empty file path is required.")
+    if "\x00" in raw_path or ".." in Path(raw_path).parts:
+        raise WavexisError(f"Invalid path '{raw_path}'.")
     resolved = Path(raw_path).resolve()
     try:
-        resolved.relative_to(_ALLOWED_BASE_DIR)
+        common = Path(os.path.commonpath([str(resolved), str(_ALLOWED_BASE_DIR)]))
     except ValueError:
         raise WavexisError(f"Path '{raw_path}' is outside the allowed base directory.") from None
+    if common != _ALLOWED_BASE_DIR:
+        raise WavexisError(f"Path '{raw_path}' is outside the allowed base directory.")
     return resolved
 
 
@@ -404,29 +419,27 @@ class BackendPool:
     Uses a semaphore to cap the number of simultaneous browser instances.
     Maintains a pool of reusable backend instances to avoid launching a
     new browser per request.
+
+    ``get_backend`` acquires a slot and ``return_backend``/``discard_backend``
+    release it, so callers cannot leak the semaphore if backend creation fails.
     """
 
     def __init__(self, max_concurrent: int = 5) -> None:
+        self._max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._pool: asyncio.Queue[AbstractBackend] = asyncio.Queue(maxsize=max_concurrent)
         self._created: int = 0
         self._lock = asyncio.Lock()
 
-    async def acquire(self) -> None:
-        """Acquire a slot, blocking if the pool is full."""
-        await self._semaphore.acquire()
-
-    def release(self) -> None:
-        """Release a slot back to the pool."""
-        self._semaphore.release()
-
     async def get_backend(
         self,
         preferred: str | None = None,
     ) -> AbstractBackend:
-        """Get a backend from the pool or create a new one.
+        """Acquire a slot and get a backend from the pool or create a new one.
 
         Reuses an idle backend if available, otherwise creates a new one.
+        The acquired slot is released by ``return_backend`` or
+        ``discard_backend``.
 
         Args:
             preferred: Preferred backend name for new instances.
@@ -434,6 +447,7 @@ class BackendPool:
         Returns:
             A backend instance (may or may not be launched yet).
         """
+        await self._semaphore.acquire()
         async with self._lock:
             if not self._pool.empty():
                 return self._pool.get_nowait()
@@ -441,14 +455,15 @@ class BackendPool:
         try:
             return await get_manager().select_with_fallback(preferred)
         except Exception:
-            # Creation failed — release the slot we reserved so the pool
+            # Creation failed — release the slot and accounting so the pool
             # doesn't slowly fill with phantom backends.
             async with self._lock:
                 self._created -= 1
+            self._semaphore.release()
             raise
 
     async def return_backend(self, backend: AbstractBackend) -> None:
-        """Return a backend to the pool for reuse.
+        """Return a backend to the pool for reuse and release its slot.
 
         The backend is returned without closing it so it can be reused
         by subsequent requests. Backends are closed only by ``close_all``
@@ -463,11 +478,13 @@ class BackendPool:
                 await backend.close()
             async with self._lock:
                 self._created -= 1
+            self._semaphore.release()
             return
         await self._pool.put(backend)
+        self._semaphore.release()
 
     async def discard_backend(self, backend: AbstractBackend) -> None:
-        """Close a broken backend and remove it from the pool's bookkeeping.
+        """Close a broken backend and release its slot.
 
         Use this when a backend failed to launch or is in an unknown state
         and must not be reused.
@@ -479,15 +496,19 @@ class BackendPool:
             await backend.close()
         async with self._lock:
             self._created -= 1
+        self._semaphore.release()
 
     async def close_all(self) -> None:
-        """Close all pooled backends and clear the pool."""
+        """Close all pooled backends, drain the pool, and reset all slots."""
         while not self._pool.empty():
             backend = self._pool.get_nowait()
             with contextlib.suppress(Exception):
                 await backend.close()
         async with self._lock:
             self._created = 0
+        # Reset the semaphore so leftover acquired slots do not leak between
+        # lifecycles (e.g., across tests).
+        self._semaphore = asyncio.Semaphore(self._max_concurrent)
 
 
 _backend_pool: BackendPool | None = None
@@ -511,7 +532,6 @@ async def _get_backend(request: Any) -> AbstractBackend:
     The caller is responsible for calling ``_release_backend`` after use.
     """
     pool = _get_pool(request)
-    await pool.acquire()
     preferred = request.app.get("backend_name")
     return await pool.get_backend(preferred)
 
@@ -528,7 +548,6 @@ async def _run_action(request: Any, action: Any) -> Any:
     """
     web = _import_aiohttp()
     pool = _get_pool(request)
-    await pool.acquire()
     backend: AbstractBackend | None = None
     launched = False
     try:
@@ -555,7 +574,6 @@ async def _run_action(request: Any, action: Any) -> Any:
                 # Launch failed — close the broken backend instead of
                 # returning it to the pool for reuse.
                 await pool.discard_backend(backend)
-        pool.release()
 
 
 async def _release_backend(request: Any, backend: AbstractBackend) -> None:
@@ -567,7 +585,6 @@ async def _release_backend(request: Any, backend: AbstractBackend) -> None:
     """
     pool = _get_pool(request)
     await pool.return_backend(backend)
-    pool.release()
 
 
 def with_backend(
@@ -591,7 +608,6 @@ def with_backend(
             web = _import_aiohttp()
             opts = launch_options or BrowserOptions()
             pool = _get_pool(request)
-            await pool.acquire()
             backend: AbstractBackend | None = None
             launched = False
             try:
@@ -616,7 +632,6 @@ def with_backend(
                         await pool.return_backend(backend)
                     else:
                         await pool.discard_backend(backend)
-                pool.release()
 
         return wrapper
 
@@ -713,7 +728,8 @@ async def handle_navigate(request: Any, backend: AbstractBackend) -> Any:
     url = data.get("url", "")
     if not url:
         return web.json_response(
-            {"error": "url is required"}, status=400,
+            {"error": "url is required"},
+            status=400,
         )
     wait_for = data.get("wait_for")
     strategy = (
@@ -871,7 +887,10 @@ async def handle_auth(request: Any, backend: AbstractBackend) -> Any:
     from wavexis.auth import apply_auth_context, load_auth_context
 
     data = await _get_json_body(request)
-    context_path = _validate_path(data.get("context", ""))
+    try:
+        context_path = _validate_path(data.get("context", ""))
+    except WavexisError as e:
+        return web.json_response({"error": str(e)}, status=400)
     url = data.get("url", "")
     try:
         ctx = load_auth_context(str(context_path))
@@ -966,7 +985,10 @@ async def handle_multi(request: Any, backend: AbstractBackend) -> Any:
     from wavexis.record import replay_from_yaml
 
     data = await _get_json_body(request)
-    yaml_path = _validate_path(data.get("config", ""))
+    try:
+        yaml_path = _validate_path(data.get("config", ""))
+    except WavexisError as e:
+        return web.json_response({"error": str(e)}, status=400)
     results = await replay_from_yaml(yaml_path, backend)
     return web.json_response(
         {
@@ -1288,8 +1310,6 @@ async def handle_websocket(request: Any) -> Any:
             backend = await _get_backend(request)
         except Exception as exc:
             logger.warning("Failed to acquire backend for WebSocket: %s", exc)
-            pool = _get_pool(request)
-            pool.release()
             await ws.send_json(
                 {
                     "type": "error",
@@ -1458,7 +1478,6 @@ async def handle_websocket(request: Any) -> Any:
                     await pool.return_backend(backend)
                 else:
                     await pool.discard_backend(backend)
-                pool.release()
             await ws.close()
     finally:
         async with _ws_lock:
@@ -1492,6 +1511,7 @@ def create_app(
     api_key: str | None = None,
     cors_origins: list[str] | None = None,
     max_concurrent: int = 5,
+    max_request_size: int = 10 * 1024 * 1024,
 ) -> Any:
     """Create and configure the aiohttp web application.
 
@@ -1505,6 +1525,7 @@ def create_app(
             token or ``api_key`` query parameter.
         cors_origins: List of allowed CORS origins. Use ["*"] for all.
         max_concurrent: Max number of concurrent browser backends.
+        max_request_size: Maximum request body size in bytes (default 10MB).
 
     Returns:
         aiohttp.web.Application with all routes registered.
@@ -1540,7 +1561,10 @@ def create_app(
         bucket = TokenBucket(capacity=rate_limit, refill_period=60.0)
         middlewares.append(_rate_limit_middleware(bucket))
 
-    app = web.Application(middlewares=middlewares)
+    app = web.Application(
+        middlewares=middlewares,
+        client_max_size=max_request_size,
+    )
     manager = get_manager()
     app["backend_name"] = backend_name
     app["backends"] = manager.list_available()
@@ -1585,6 +1609,7 @@ def serve(
     api_key: str | None = None,
     cors_origins: list[str] | None = None,
     max_concurrent: int = 5,
+    max_request_size: int = 10 * 1024 * 1024,
 ) -> None:
     """Start the wavexis HTTP server.
 
@@ -1597,6 +1622,7 @@ def serve(
         api_key: If set, all requests must include this key.
         cors_origins: List of allowed CORS origins. Use ["*"] for all.
         max_concurrent: Max concurrent browser backends (default 5).
+        max_request_size: Maximum request body size in bytes (default 10MB).
 
     Raises:
         WavexisError: If aiohttp is not installed.
@@ -1615,5 +1641,6 @@ def serve(
         api_key=api_key,
         cors_origins=cors_origins,
         max_concurrent=max_concurrent,
+        max_request_size=max_request_size,
     )
     web.run_app(app, host=host, port=port)

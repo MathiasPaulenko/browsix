@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavexis"
-version = "2.16.7"
+version = "2.16.8"
 description = "Browser automation CLI — wraps cdpwave and bidiwave, no Node.js, no Chromium download"
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,8 +35,8 @@ rich = ["rich>=13.0,<14.0"]
 serve = ["aiohttp>=3.9,<4.0"]
 image = ["Pillow>=10.0,<13.0"]
 dev = [
-    "pytest>=8.0,<9.0",
-    "pytest-asyncio>=0.23,<1.0",
+    "pytest>=9.0.3,<10.0",
+    "pytest-asyncio>=1.0,<2.0",
     "pytest-aiohttp>=1.0,<2.0",
     "pytest-cov>=4.0,<5.0",
     "pytest-timeout>=2.3,<3.0",
@@ -124,6 +124,10 @@ disable_error_code = ["no-redef", "misc"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:'asyncio.get_event_loop_policy' is deprecated:DeprecationWarning",
+    "ignore:'asyncio.set_event_loop_policy' is deprecated:DeprecationWarning",
+]
 markers = [
     "unit: fast isolated tests with mocks",
     "integration: tests against a real Chrome browser",
@@ -138,6 +142,10 @@ omit = [
     "wavexis/backend/cdp.py",
     "wavexis/cli/_debug.py",
 ]
+
+[tool.codespell]
+skip = "ref,.venv*,.venv-dev,.venv-prod-test,.git,*.png,*.pdf,*.jpg,*.jpeg,*.svg,*.lock,*.json,*.js,*.txt,*.out"
+ignore-words-list = "medias"
 
 [tool.hatch.build.targets.wheel]
 packages = ["wavexis"]

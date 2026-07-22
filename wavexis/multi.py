@@ -40,7 +40,7 @@ def _substitute_variables(value: Any, variables: dict[str, str]) -> Any:
                 return str(variables[expr])
             return match.group(0)
 
-        return re.sub(r"\{\{(.+?)\}\}", replacer, value)
+        return re.sub(r"\{\{([^{}]+)\}\}", replacer, value)
     if isinstance(value, dict):
         return {k: _substitute_variables(v, variables) for k, v in value.items()}
     if isinstance(value, list):

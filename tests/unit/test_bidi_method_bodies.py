@@ -448,6 +448,7 @@ class TestBiDiMethodBodies:
 
     async def test_dialog_wait_for_opening(self) -> None:
         backend, mock_client = _make_mock_backend()
+
         # Simulate the event firing immediately by calling the handler.
         def fake_subscribe(handler: Any) -> Any:
             handler(MagicMock(model_dump=lambda: {"message": "hello"}))
@@ -629,9 +630,7 @@ class TestBiDiMethodBodies:
     async def test_storage_list(self) -> None:
         backend, mock = _make_mock_backend()
         # storage_list now returns a JSON string from script.evaluate.
-        mock.script.evaluate = AsyncMock(
-            return_value=MagicMock(value='{"k": "v"}')
-        )
+        mock.script.evaluate = AsyncMock(return_value=MagicMock(value='{"k": "v"}'))
         result = await backend.storage_list()
         assert isinstance(result, dict)
         assert result == {"k": "v"}

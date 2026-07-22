@@ -321,9 +321,7 @@ class DummyBackend:
         """Mock response."""
         pass
 
-    async def intercept_download(
-        self, url: str, timeout: float | None = None
-    ) -> bytes:
+    async def intercept_download(self, url: str, timeout: float | None = None) -> bytes:
         """Intercept download."""
         return b""
 

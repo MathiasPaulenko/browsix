@@ -173,9 +173,7 @@ class Output:
         """
         if _yaml is None:
             raise ImportError("PyYAML is required for YAML output. Run: pip install pyyaml")
-        text = _yaml.dump(
-            data, default_flow_style=False, sort_keys=False, allow_unicode=True
-        )
+        text = _yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
         if path and path != "-":
             Output.write_text(text, path)
         else:

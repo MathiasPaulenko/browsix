@@ -85,6 +85,16 @@ class TestSubstituteVariables:
         assert _substitute_variables(True, {}) is True
         assert _substitute_variables(None, {}) is None
 
+    def test_nested_braces_not_substituted(self) -> None:
+        """Braces inside a variable token are left untouched."""
+        result = _substitute_variables("{{inner{braces}}}", {})
+        assert result == "{{inner{braces}}}"
+
+    def test_unbalanced_braces_left_intact(self) -> None:
+        """Unbalanced braces should not cause runaway regex backtracking."""
+        result = _substitute_variables("{{unclosed", {})
+        assert result == "{{unclosed"
+
 
 class TestParseYamlVariables:
     """Tests for variable substitution in parse_yaml."""

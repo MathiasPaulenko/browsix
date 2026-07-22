@@ -256,8 +256,6 @@ class TestServeModifyEndpoints:
         backend.modify_request = AsyncMock()
 
         pool = MagicMock()
-        pool.acquire = AsyncMock()
-        pool.release = MagicMock()
         pool.get_backend = AsyncMock(return_value=backend)
         pool.return_backend = AsyncMock()
 
@@ -270,7 +268,6 @@ class TestServeModifyEndpoints:
             backend.modify_request.assert_called_once()
             backend.navigate.assert_called_once()
             pool.return_backend.assert_called_once_with(backend)
-            pool.release.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_handle_modify_response(self) -> None:
@@ -293,8 +290,6 @@ class TestServeModifyEndpoints:
         backend.modify_response = AsyncMock()
 
         pool = MagicMock()
-        pool.acquire = AsyncMock()
-        pool.release = MagicMock()
         pool.get_backend = AsyncMock(return_value=backend)
         pool.return_backend = AsyncMock()
 
@@ -307,4 +302,3 @@ class TestServeModifyEndpoints:
             backend.modify_response.assert_called_once()
             backend.navigate.assert_called_once()
             pool.return_backend.assert_called_once_with(backend)
-            pool.release.assert_called_once()

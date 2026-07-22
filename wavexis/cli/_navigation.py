@@ -30,6 +30,7 @@ from wavexis.cli._shared import (
     app,
 )
 from wavexis.config import WaitStrategy
+from wavexis.output import validate_path
 
 
 @app.command()
@@ -38,11 +39,7 @@ def navigate(
     wait_for: str | None = typer.Option(None, "--wait-for", help="CSS selector to wait for"),
 ) -> None:
     """Navigate to a URL and optionally wait for an element."""
-    wait = (
-        _wait_strategy("selector", selector=wait_for)
-        if wait_for
-        else _wait_strategy()
-    )
+    wait = _wait_strategy("selector", selector=wait_for) if wait_for else _wait_strategy()
     _run_async(_navigate(url, wait))
     typer.echo(f"Navigated to {url}")
 
@@ -308,9 +305,7 @@ def page_snapshot(
         return
     # Ensure the parent directory exists so the write doesn't fail
     # when the default ref/output/ path is used.
-    from pathlib import Path
-
-    out_path = Path(output)
+    out_path = validate_path(output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     Output.write_bytes(data.encode("utf-8"), output)
     typer.echo(f"Snapshot saved to {output}")

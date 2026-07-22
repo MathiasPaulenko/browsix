@@ -62,9 +62,7 @@ class TestCLIScreenshot:
         result.assert_file_exists(out)
 
         # PNG magic bytes
-        assert out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", (
-            "Screenshot file is not a valid PNG"
-        )
+        assert out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", "Screenshot file is not a valid PNG"
 
     def test_screenshot_full_page(self, cli, tmp_path: Path) -> None:
         """``wavexis screenshot --full-page`` produces a non-empty PNG."""
@@ -76,9 +74,7 @@ class TestCLIScreenshot:
     def test_screenshot_jpeg_format(self, cli, tmp_path: Path) -> None:
         """``wavexis screenshot --format jpeg`` produces a JPEG file."""
         out = tmp_path / "screenshot.jpg"
-        result = cli.run(
-            ["screenshot", EXAMPLE_URL, "-o", str(out), "--format", "jpeg"]
-        )
+        result = cli.run(["screenshot", EXAMPLE_URL, "-o", str(out), "--format", "jpeg"])
         result.assert_success()
         result.assert_file_exists(out)
         # JPEG SOI marker
@@ -93,9 +89,7 @@ class TestCLIEval:
         result = cli.run(["eval", EXAMPLE_URL, "--expression", "1+1"])
         result.assert_success()
         # The result should contain "2" somewhere in stdout
-        assert "2" in result.stdout, (
-            f"Expected '2' in eval output, got:\n{result.stdout}"
-        )
+        assert "2" in result.stdout, f"Expected '2' in eval output, got:\n{result.stdout}"
 
     def test_eval_document_title(self, cli) -> None:
         """``wavexis eval --expression 'document.title'`` returns the page title."""
@@ -156,12 +150,14 @@ class TestCLIDom:
 
     def test_dom_get(self, cli) -> None:
         """``wavexis eval`` returns the page HTML."""
-        result = cli.run([
-            "eval",
-            EXAMPLE_URL,
-            "-e",
-            "document.documentElement.outerHTML",
-        ])
+        result = cli.run(
+            [
+                "eval",
+                EXAMPLE_URL,
+                "-e",
+                "document.documentElement.outerHTML",
+            ]
+        )
         result.assert_success()
         # Should contain HTML tags from example.com
         assert "<html" in result.stdout.lower() or "example" in result.stdout.lower(), (
@@ -170,12 +166,14 @@ class TestCLIDom:
 
     def test_dom_query(self, cli) -> None:
         """``wavexis eval`` returns a selected element's outer HTML."""
-        result = cli.run([
-            "eval",
-            EXAMPLE_URL,
-            "-e",
-            "document.querySelector('h1').outerHTML",
-        ])
+        result = cli.run(
+            [
+                "eval",
+                EXAMPLE_URL,
+                "-e",
+                "document.querySelector('h1').outerHTML",
+            ]
+        )
         result.assert_success()
 
 
@@ -185,9 +183,7 @@ class TestCLICookies:
     def test_cookies_get(self, cli, tmp_path: Path) -> None:
         """``wavexis cookies get --url <url>`` returns cookie data."""
         out = tmp_path / "cookies.json"
-        result = cli.run(
-            ["cookies", "get", "--url", EXAMPLE_URL, "-o", str(out)]
-        )
+        result = cli.run(["cookies", "get", "--url", EXAMPLE_URL, "-o", str(out)])
         result.assert_success()
         result.assert_stdout_contains("saved")
         result.assert_file_exists(out)

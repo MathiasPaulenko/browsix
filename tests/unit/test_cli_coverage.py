@@ -736,8 +736,9 @@ class TestCLISharedFunctions:
                 raise ImportError("no yaml")
             return real_import(name, *args, **kwargs)
 
-        with patch("pathlib.Path.home", return_value=tmp_path), patch(
-            "builtins.__import__", side_effect=fake_import
+        with (
+            patch("pathlib.Path.home", return_value=tmp_path),
+            patch("builtins.__import__", side_effect=fake_import),
         ):
             _load_global_config()
 

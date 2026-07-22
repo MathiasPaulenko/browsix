@@ -882,6 +882,7 @@ wavexis config <action> [options]
 | Action | Description |
 |--------|-------------|
 | `show` | Print current config file contents |
+| `get` | Print the value of a single config key |
 | `set` | Set a key-value pair in the config |
 | `init` | Create a default config file |
 | `path` | Print the config file path |
@@ -894,6 +895,9 @@ wavexis config <action> [options]
 ```bash
 # Show current config
 wavexis config show
+
+# Read a single key
+wavexis config get --key backend
 
 # Set defaults
 wavexis config set --key backend --value cdp

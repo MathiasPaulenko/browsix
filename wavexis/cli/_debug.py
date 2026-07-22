@@ -297,9 +297,7 @@ def css_set_selector(
         "endLine": end_line,
         "endColumn": end_column,
     }
-    _run_async(
-        _css_direct(url, lambda b: b.css_set_rule_selector(stylesheet_id, range_, selector))
-    )
+    _run_async(_css_direct(url, lambda b: b.css_set_rule_selector(stylesheet_id, range_, selector)))
     _echo("Selector updated")
 
 
@@ -3172,7 +3170,11 @@ def dom_push_nodes_by_backend_ids(
     try:
         ids = [int(x.strip()) for x in backend_ids.split(",")]
     except ValueError:
-        _handle_error(WavexisError(f"Invalid backend node IDs: '{backend_ids}'. Expected comma-separated integers."))
+        _handle_error(
+            WavexisError(
+                f"Invalid backend node IDs: '{backend_ids}'. Expected comma-separated integers."
+            )
+        )
         return
     result = _run_async(
         _dom_node_direct(url, "push_nodes_by_backend_ids_to_frontend", backend_node_ids=ids)
@@ -4266,13 +4268,9 @@ def dom_snapshot_get_cmd(
     (``computed_styles``) instead of the previous
     ``computed_style_whitelist`` which the backend did not accept.
     """
-    styles_list = (
-        [s.strip() for s in computed_style_whitelist.split(",") if s.strip()] or []
-    )
+    styles_list = [s.strip() for s in computed_style_whitelist.split(",") if s.strip()] or []
     result = _run_async(
-        _debug_direct(
-            url, lambda b: b.dom_snapshot_get_snapshot(computed_styles=styles_list)
-        )
+        _debug_direct(url, lambda b: b.dom_snapshot_get_snapshot(computed_styles=styles_list))
     )
     if result is None:
         return
@@ -5713,7 +5711,9 @@ def input_dispatch_drag_event_cmd(
 ) -> None:
     """Dispatch a drag event."""
     _run_async(
-        _debug_direct(url, lambda b: b.input_dispatch_drag_event(type, x, y, _safe_json_loads(data, "data")))
+        _debug_direct(
+            url, lambda b: b.input_dispatch_drag_event(type, x, y, _safe_json_loads(data, "data"))
+        )
     )
     typer.echo("Drag event dispatched.")
 
@@ -5923,7 +5923,10 @@ def network_configure_durable_messages_cmd(
 ) -> None:
     """Configure durable messages."""
     _run_async(
-        _debug_direct(url, lambda b: b.network_configure_durable_messages(_safe_json_loads(options, "options")))
+        _debug_direct(
+            url,
+            lambda b: b.network_configure_durable_messages(_safe_json_loads(options, "options")),
+        )
     )
     typer.echo("Durable messages configured.")
 
@@ -6068,7 +6071,11 @@ def network_override_network_state_cmd(
     state: str = typer.Option(..., "--state", help="State JSON"),
 ) -> None:
     """Override the network state."""
-    _run_async(_debug_direct(url, lambda b: b.network_override_network_state(_safe_json_loads(state, "state"))))
+    _run_async(
+        _debug_direct(
+            url, lambda b: b.network_override_network_state(_safe_json_loads(state, "state"))
+        )
+    )
     typer.echo("Network state overridden.")
 
 
@@ -6099,7 +6106,10 @@ def network_set_accepted_encodings_cmd(
 ) -> None:
     """Set accepted encodings."""
     _run_async(
-        _debug_direct(url, lambda b: b.network_set_accepted_encodings(_safe_json_loads(encodings, "encodings")))
+        _debug_direct(
+            url,
+            lambda b: b.network_set_accepted_encodings(_safe_json_loads(encodings, "encodings")),
+        )
     )
     typer.echo("Accepted encodings set.")
 
@@ -6122,7 +6132,9 @@ def network_set_cookies_cmd(
     cookies: str = typer.Option(..., "--cookies", help="Cookies JSON array"),
 ) -> None:
     """Set cookies."""
-    _run_async(_debug_direct(url, lambda b: b.network_set_cookies(_safe_json_loads(cookies, "cookies"))))
+    _run_async(
+        _debug_direct(url, lambda b: b.network_set_cookies(_safe_json_loads(cookies, "cookies")))
+    )
     typer.echo("Cookies set.")
 
 

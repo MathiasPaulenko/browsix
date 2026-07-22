@@ -391,15 +391,16 @@ def lighthouse(
     scores = {cat: data.get("score", 0) for cat, data in result.get("categories", {}).items()}
     score_str = ", ".join(f"{k}: {v}" for k, v in scores.items())
 
-    budget_str = ""
+    budget_lines: list[str] = []
     perf = result.get("categories", {}).get("performance", {})
     budget_result = perf.get("budgets") if isinstance(perf, dict) else None
     if budget_result and isinstance(budget_result, dict):
         status = "PASS" if budget_result.get("pass") else "FAIL"
-        budget_str = f", budgets: {status}"
+        budget_lines.append(f", budgets: {status}")
         for br in budget_result.get("results", []):
             mark = "✓" if br.get("pass") else "✗"
-            budget_str += f"\n  {mark} {br['metric']}: {br['actual']} / {br['budget']}"
+            budget_lines.append(f"  {mark} {br['metric']}: {br['actual']} / {br['budget']}")
+    budget_str = "\n".join(budget_lines)
 
     if output:
         typer.echo(f"Audit complete ({score_str}){budget_str}, saved to {output}")

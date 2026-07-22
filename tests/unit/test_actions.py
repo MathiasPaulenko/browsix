@@ -169,9 +169,7 @@ class TestEvalAction:
     @pytest.mark.unit
     async def test_execute_unreadable_file(self, backend: FakeBackend, tmp_path):
         """An unreadable expression file should raise WavexisError."""
-        params = EvalParams(
-            url="https://example.com", file=str(tmp_path / "missing.js")
-        )
+        params = EvalParams(url="https://example.com", file=str(tmp_path / "missing.js"))
         action = EvalAction(params)
         with pytest.raises(WavexisError):
             await action.execute(backend)

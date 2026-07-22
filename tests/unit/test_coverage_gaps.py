@@ -702,9 +702,7 @@ class TestRecordAction:
         backend.close = AsyncMock()
 
         # Simulate KeyboardInterrupt during sleep, then return events.
-        recorded = json.dumps(
-            [{"type": "click", "selector": "#btn", "x": 1, "y": 2}]
-        )
+        recorded = json.dumps([{"type": "click", "selector": "#btn", "x": 1, "y": 2}])
 
         async def fake_eval(expr: str, await_promise: bool = False) -> Any:
             if "__wavexis_record_events" in expr:

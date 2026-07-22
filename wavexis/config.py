@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
+
+from wavexis.exceptions import ActionError
+from wavexis.output import validate_path
 
 __all__ = [
     "PAPER_SIZES",
@@ -162,6 +166,91 @@ DEVICE_PRESETS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Allowed URL schemes for navigation / page actions. Browser control URLs
+# (browser_url / remote_url) use a separate allowlist below.
+_NAVIGATION_SCHEMES: frozenset[str] = frozenset({"http", "https", "data", "about"})
+_BROWSER_SCHEMES: frozenset[str] = frozenset({"http", "https", "ws", "wss"})
+_REMOTE_SCHEMES: frozenset[str] = frozenset({"ws", "wss"})
+
+_MAX_VIEWPORT_DIMENSION: int = 32767
+_MAX_TIMEOUT_MS: int = 600_000
+_MAX_CLICK_COUNT: int = 100
+_MAX_QUALITY: int = 100
+
+
+def _validate_url(
+    url: str | None,
+    *,
+    allow_empty: bool = True,
+    schemes: frozenset[str] = _NAVIGATION_SCHEMES,
+    name: str = "url",
+) -> None:
+    """Validate a URL string.
+
+    Args:
+        url: URL to validate.
+        allow_empty: If True, an empty/missing URL is accepted.
+        schemes: Allowed URL schemes.
+        name: Field name used in error messages.
+
+    Raises:
+        ActionError: If the URL scheme is not allowed.
+    """
+    if not url:
+        if allow_empty:
+            return
+        raise ActionError(f"{name} is required")
+    parsed = urlparse(url)
+    if not parsed.scheme:
+        raise ActionError(f"{name} must have a scheme (e.g. https://): {url!r}")
+    if parsed.scheme not in schemes:
+        raise ActionError(
+            f"Invalid {name} scheme {parsed.scheme!r} in {url!r}; "
+            f"allowed schemes: {', '.join(sorted(schemes))}"
+        )
+
+
+def _validate_int_range(
+    value: int,
+    name: str,
+    *,
+    min_value: int | None = None,
+    max_value: int | None = None,
+) -> None:
+    """Validate that an integer is within an allowed range.
+
+    Raises:
+        ActionError: If the value is outside the allowed range.
+    """
+    if min_value is not None and value < min_value:
+        raise ActionError(f"{name} must be >= {min_value}; got {value}")
+    if max_value is not None and value > max_value:
+        raise ActionError(f"{name} must be <= {max_value}; got {value}")
+
+
+def _validate_choice(value: str, name: str, allowed: set[str]) -> None:
+    """Validate that a string is one of the allowed choices.
+
+    Raises:
+        ActionError: If the value is not allowed.
+    """
+    if value not in allowed:
+        raise ActionError(f"Invalid {name} {value!r}; allowed: {', '.join(sorted(allowed))}")
+
+
+def _validate_path_string(path: str | None, name: str = "path") -> None:
+    """Validate a path string for traversal / null-byte issues.
+
+    Raises:
+        ActionError: If the path contains parent-directory traversal or null bytes.
+    """
+    if path is None:
+        return
+    try:
+        validate_path(path)
+    except ValueError as exc:
+        raise ActionError(f"Invalid {name}: {exc}") from exc
+
 
 @dataclass
 class BrowserOptions:
@@ -196,6 +285,18 @@ class BrowserOptions:
     remote_url: str | None = None
     stealth: bool = False
 
+    def __post_init__(self) -> None:
+        """Validate browser launch options."""
+        _validate_int_range(self.width, "width", min_value=1, max_value=_MAX_VIEWPORT_DIMENSION)
+        _validate_int_range(self.height, "height", min_value=1, max_value=_MAX_VIEWPORT_DIMENSION)
+        _validate_int_range(self.timeout, "timeout", min_value=0, max_value=_MAX_TIMEOUT_MS)
+        if self.user_data_dir is not None:
+            _validate_path_string(self.user_data_dir, "user_data_dir")
+        if self.browser_url is not None:
+            _validate_url(self.browser_url, schemes=_BROWSER_SCHEMES, name="browser_url")
+        if self.remote_url is not None:
+            _validate_url(self.remote_url, schemes=_REMOTE_SCHEMES, name="remote_url")
+
 
 @dataclass
 class WaitStrategy:
@@ -213,6 +314,19 @@ class WaitStrategy:
     selector: str | None = None
     url_pattern: str | None = None
     timeout: int = 30000
+
+    def __post_init__(self) -> None:
+        """Validate wait strategy parameters."""
+        _validate_choice(
+            self.strategy,
+            "wait strategy",
+            {"load", "domcontentloaded", "networkidle", "selector", "url"},
+        )
+        _validate_int_range(self.timeout, "wait timeout", min_value=0, max_value=_MAX_TIMEOUT_MS)
+        if self.strategy == "selector" and not self.selector:
+            raise ActionError("selector is required when wait strategy is 'selector'")
+        if self.strategy == "url" and not self.url_pattern:
+            raise ActionError("url_pattern is required when wait strategy is 'url'")
 
     @classmethod
     def from_url(cls, url: str) -> WaitStrategy:
@@ -241,6 +355,16 @@ class ScreenshotParams:
     device: str | None = None
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate screenshot parameters."""
+        _validate_url(self.url)
+        _validate_choice(self.format, "format", {"png", "jpeg"})
+        _validate_int_range(self.quality, "quality", min_value=0, max_value=_MAX_QUALITY)
+        if self.device is not None and self.device not in DEVICE_PRESETS:
+            raise ActionError(
+                f"Invalid device {self.device!r}; available: {', '.join(sorted(DEVICE_PRESETS))}"
+            )
+
 
 @dataclass
 class PDFParams:
@@ -268,6 +392,15 @@ class PDFParams:
     js: str | None = None
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate PDF parameters."""
+        _validate_url(self.url)
+        if self.paper not in PAPER_SIZES:
+            raise ActionError(
+                f"Invalid paper size {self.paper!r}; available: {', '.join(sorted(PAPER_SIZES))}"
+            )
+        _validate_choice(self.media, "media", {"print", "screen"})
+
 
 @dataclass
 class EvalParams:
@@ -288,6 +421,12 @@ class EvalParams:
     file: str | None = None
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate eval parameters."""
+        _validate_url(self.url)
+        if self.file is not None:
+            _validate_path_string(self.file, "file")
 
 
 @dataclass
@@ -316,6 +455,10 @@ class DOMParams:
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate DOM parameters."""
+        _validate_url(self.url)
+
 
 @dataclass
 class ScrapeParams:
@@ -339,6 +482,16 @@ class ScrapeParams:
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate scrape parameters."""
+        _validate_choice(self.output_format, "output_format", {"json", "csv"})
+        if self.file is not None:
+            _validate_path_string(self.file, "file")
+        for url in self.urls:
+            if not url:
+                continue
+            _validate_url(url, allow_empty=False)
+
 
 @dataclass
 class HarParams:
@@ -357,6 +510,11 @@ class HarParams:
     filter: str | None = None
     timeout: int = 5000
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate HAR capture parameters."""
+        _validate_url(self.url)
+        _validate_int_range(self.timeout, "timeout", min_value=0, max_value=_MAX_TIMEOUT_MS)
 
 
 @dataclass
@@ -380,6 +538,10 @@ class CookieParams:
     secure: bool = True
     http_only: bool = False
     same_site: str = "Lax"
+
+    def __post_init__(self) -> None:
+        """Validate cookie parameters."""
+        _validate_choice(self.same_site, "same_site", {"Lax", "Strict", "None"})
 
 
 @dataclass
@@ -408,6 +570,20 @@ class NetworkParams:
     name: str | None = None
     domain: str | None = None
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate network parameters."""
+        _network_actions = {
+            "cookies_get",
+            "cookies_set",
+            "cookies_delete",
+            "cookies_clear",
+            "headers",
+            "user_agent",
+        }
+        _validate_choice(self.action, "network action", _network_actions)
+        if self.url is not None:
+            _validate_url(self.url)
 
 
 @dataclass
@@ -444,6 +620,14 @@ class EmulationParams:
     url: str = ""
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate emulation parameters."""
+        _validate_url(self.url)
+        if self.device is not None and self.device not in DEVICE_PRESETS:
+            raise ActionError(
+                f"Invalid device {self.device!r}; available: {', '.join(sorted(DEVICE_PRESETS))}"
+            )
 
 
 @dataclass
@@ -487,6 +671,18 @@ class InputParams:
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate input interaction parameters."""
+        _validate_url(self.url)
+        _validate_choice(self.button, "button", {"left", "right", "middle"})
+        _validate_int_range(
+            self.click_count, "click_count", min_value=1, max_value=_MAX_CLICK_COUNT
+        )
+        _validate_int_range(self.delay, "delay", min_value=0)
+        if self.files is not None:
+            for f in self.files:
+                _validate_path_string(f, "file path")
+
 
 @dataclass
 class ThrottleParams:
@@ -504,6 +700,12 @@ class ThrottleParams:
     download_bps: int = -1
     upload_bps: int = -1
 
+    def __post_init__(self) -> None:
+        """Validate network throttling parameters."""
+        _validate_int_range(self.latency_ms, "latency_ms", min_value=0)
+        _validate_int_range(self.download_bps, "download_bps", min_value=-1)
+        _validate_int_range(self.upload_bps, "upload_bps", min_value=-1)
+
 
 @dataclass
 class SensorParams:
@@ -516,6 +718,14 @@ class SensorParams:
 
     type: str = ""
     values: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Validate sensor parameters."""
+        allowed = {"geolocation", "device-orientation", "ambient-light"}
+        if self.type and self.type not in allowed:
+            raise ActionError(
+                f"Invalid sensor type {self.type!r}; allowed: {', '.join(sorted(allowed))}"
+            )
 
 
 @dataclass
@@ -541,6 +751,16 @@ class ScreencastParams:
     duration: float = 5.0
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate screencast parameters."""
+        _validate_url(self.url)
+        _validate_choice(self.format, "format", {"png", "jpeg"})
+        _validate_int_range(self.quality, "quality", min_value=0, max_value=_MAX_QUALITY)
+        _validate_int_range(self.max_width, "max_width", min_value=1)
+        _validate_int_range(self.max_height, "max_height", min_value=1)
+        if self.duration <= 0:
+            raise ActionError(f"duration must be positive; got {self.duration}")
 
 
 @dataclass
@@ -609,6 +829,13 @@ class StorageParams:
     skip_count: int = 0
     page_size: int = 100
 
+    def __post_init__(self) -> None:
+        """Validate storage parameters."""
+        _validate_url(self.url)
+        _validate_choice(self.storage_type, "storage_type", {"local", "session"})
+        _validate_int_range(self.skip_count, "skip_count", min_value=0)
+        _validate_int_range(self.page_size, "page_size", min_value=1)
+
 
 @dataclass
 class AnimationParams:
@@ -629,6 +856,10 @@ class AnimationParams:
     action: str = "list"
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate animation parameters."""
+        _validate_url(self.url)
 
 
 @dataclass
@@ -652,6 +883,10 @@ class CSSParams:
     action: str = "styles"
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate CSS parameters."""
+        _validate_url(self.url)
 
 
 @dataclass
@@ -684,6 +919,11 @@ class DebugParams:
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate debug parameters."""
+        if self.url is not None:
+            _validate_url(self.url)
+
 
 @dataclass
 class CookieActionParams:
@@ -707,6 +947,10 @@ class CookieActionParams:
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate cookie action parameters."""
+        _validate_url(self.url)
+
 
 @dataclass
 class HeaderParams:
@@ -728,6 +972,10 @@ class HeaderParams:
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
 
+    def __post_init__(self) -> None:
+        """Validate header/user-agent parameters."""
+        _validate_url(self.url)
+
 
 @dataclass
 class SystemInfoParams:
@@ -747,3 +995,7 @@ class SystemInfoParams:
     feature_name: str | None = None
     wait: WaitStrategy = field(default_factory=WaitStrategy)
     browser: BrowserOptions = field(default_factory=BrowserOptions)
+
+    def __post_init__(self) -> None:
+        """Validate system info parameters."""
+        _validate_url(self.url)

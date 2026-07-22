@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from wavexis import __version__
+from wavexis.backend._trace import extract_trace_events
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import (
     DEVICE_PRESETS,
@@ -90,7 +92,9 @@ class CDPBackend(AbstractBackend):
         return self._session
 
     @staticmethod
-    async def _send_cdp(session: CDPSession, method: str, params: dict[str, Any] | None = None) -> Any:
+    async def _send_cdp(
+        session: CDPSession, method: str, params: dict[str, Any] | None = None
+    ) -> Any:
         """Send a CDP command and translate "method not found" / "not allowed"
         errors into a friendly :class:`WavexisError`.
 
@@ -214,9 +218,9 @@ class CDPBackend(AbstractBackend):
                 if pages:
                     # Prefer a non-devtools, non-blank page if available.
                     non_blank = [
-                        p for p in pages
-                        if p.url and not p.url.startswith("devtools://")
-                        and p.url != "about:blank"
+                        p
+                        for p in pages
+                        if p.url and not p.url.startswith("devtools://") and p.url != "about:blank"
                     ]
                     target = non_blank[0] if non_blank else pages[0]
                     # TargetInfo uses ``target_id``, not ``id``.
@@ -253,6 +257,12 @@ class CDPBackend(AbstractBackend):
     async def close(self) -> None:
         """Close the browser client and release resources."""
         if self._session is not None:
+            subs: dict[str, dict[str, Any]] = getattr(self, "_subscriptions", {})
+            for handlers in subs.values():
+                for cdp_event, handler in handlers.items():
+                    with contextlib.suppress(Exception):
+                        self._session.off(cdp_event, handler)
+            subs.clear()
             await self._session.close()
             self._session = None
         if self._client is not None:
@@ -1215,7 +1225,8 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
         await session.dom.enable()
-        deadline = asyncio.get_event_loop().time() + timeout
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
         last_error: Exception | None = None
         while True:
             try:
@@ -1227,7 +1238,7 @@ class CDPBackend(AbstractBackend):
                     return int(node_id)
             except Exception as e:
                 last_error = e
-            if asyncio.get_event_loop().time() >= deadline:
+            if loop.time() >= deadline:
                 break
             await asyncio.sleep(0.25)
         if last_error:
@@ -1941,7 +1952,7 @@ class CDPBackend(AbstractBackend):
         return {
             "log": {
                 "version": "1.2",
-                "creator": {"name": "wavexis", "version": "0.3.0"},
+                "creator": {"name": "wavexis", "version": __version__},
                 "entries": entries,
             }
         }
@@ -2042,9 +2053,7 @@ class CDPBackend(AbstractBackend):
             context_id: The browser context ID to close.
         """
         client = self._require_client()
-        await client.send(
-            "Target.disposeBrowserContext", {"browserContextId": context_id}
-        )
+        await client.send("Target.disposeBrowserContext", {"browserContextId": context_id})
 
     async def new_user_context(self) -> str:
         """Create a new user context.
@@ -3198,9 +3207,6 @@ class CDPBackend(AbstractBackend):
 
         async def _on_tracing_complete(params: dict[str, Any]) -> None:
             """Handle Tracing.tracingComplete and extract trace events."""
-            import io
-            import zipfile
-
             try:
                 stream_handle = params.get("stream")
                 if stream_handle:
@@ -3214,13 +3220,8 @@ class CDPBackend(AbstractBackend):
                         if not resp.get("base64Encoded", True):
                             break
                     raw = b"".join(chunks)
-                    try:
-                        zf = zipfile.ZipFile(io.BytesIO(raw))
-                        for name in zf.namelist():
-                            content = zf.read(name).decode("utf-8", errors="replace")
-                            trace_events.extend(json.loads(content).get("traceEvents", []))
-                    except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
-                        trace_events.append({"raw_size": len(raw)})
+                    extracted = await asyncio.to_thread(extract_trace_events, raw)
+                    trace_events.extend(extracted)
             finally:
                 tracing_done.set()
 
@@ -3433,9 +3434,7 @@ class CDPBackend(AbstractBackend):
 
     # ── Downloads ──────────────────────────────────────────
 
-    async def intercept_download(
-        self, pattern: str = ".*", timeout: float | None = None
-    ) -> bytes:
+    async def intercept_download(self, pattern: str = ".*", timeout: float | None = None) -> bytes:
         """Intercept a file download matching a URL pattern and return bytes.
 
         Sets the download behavior to a temp directory, then polls for the
@@ -3472,6 +3471,7 @@ class CDPBackend(AbstractBackend):
             deadline = time.monotonic() + effective_timeout
             found: Path | None = None
             while time.monotonic() < deadline:
+
                 def _list_completed_files() -> list[Path]:
                     # Skip Chrome's in-progress temp files (.crdownload)
                     # and any 0-byte files that haven't been written yet.
@@ -3547,9 +3547,7 @@ class CDPBackend(AbstractBackend):
         """
         session = self._require_session()
         await session.page.enable()
-        return await session.wait_for_event(
-            "Page.javascriptDialogOpening", timeout=timeout
-        )
+        return await session.wait_for_event("Page.javascriptDialogOpening", timeout=timeout)
 
     # ── Permissions ────────────────────────────────────────
 
@@ -4018,9 +4016,6 @@ class CDPBackend(AbstractBackend):
             Args:
                 params: CDP event parameters containing the trace data stream handle.
             """
-            import io
-            import zipfile
-
             stream_handle = params.get("stream")
             if stream_handle:
                 chunks: list[bytes] = []
@@ -4036,13 +4031,8 @@ class CDPBackend(AbstractBackend):
                     if not resp.get("base64Encoded", True):
                         break
                 raw = b"".join(chunks)
-                try:
-                    zf = zipfile.ZipFile(io.BytesIO(raw))
-                    for name in zf.namelist():
-                        content = zf.read(name).decode("utf-8", errors="replace")
-                        trace_events.extend(json.loads(content).get("traceEvents", []))
-                except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, ValueError):
-                    trace_events.append({"raw_size": len(raw)})
+                extracted = await asyncio.to_thread(extract_trace_events, raw)
+                trace_events.extend(extracted)
             else:
                 trace_events.append({"error": "No stream handle in tracingComplete"})
 
@@ -6862,9 +6852,7 @@ class CDPBackend(AbstractBackend):
             The preference value.
         """
         session = self._require_session()
-        result = await self._send_cdp(
-            session, "Browser.getPreference", {"name": key}
-        )
+        result = await self._send_cdp(session, "Browser.getPreference", {"name": key})
         return result.get("value")
 
     async def set_pref(self, key: str, value: Any) -> None:
@@ -6875,9 +6863,7 @@ class CDPBackend(AbstractBackend):
             value: The value to set.
         """
         session = self._require_session()
-        await self._send_cdp(
-            session, "Browser.setPreference", {"name": key, "value": value}
-        )
+        await self._send_cdp(session, "Browser.setPreference", {"name": key, "value": value})
 
     # ── Tethering ─────────────────────────────────────────
 
@@ -10396,7 +10382,8 @@ class CDPBackend(AbstractBackend):
         valid_path = validate_path(path)
         return dict(
             await session.send(
-                "Extensions.loadUnpacked", {"path": str(valid_path), "enableInIncognito": enable_in_incognito}
+                "Extensions.loadUnpacked",
+                {"path": str(valid_path), "enableInIncognito": enable_in_incognito},
             )
         )
 

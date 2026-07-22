@@ -39,16 +39,10 @@ class TestSmartcardOutputFlag:
         """--output flag should write result to the specified file, not stdout."""
         backend = _make_mock_backend()
         # SmartCardEmulationAction.execute returns a dict result
-        with patch(
-            "wavexis.cli._experimental.SmartCardEmulationAction"
-        ) as mock_action_cls:
+        with patch("wavexis.cli._experimental.SmartCardEmulationAction") as mock_action_cls:
             mock_action = mock_action_cls.return_value
-            mock_action.execute = AsyncMock(
-                return_value={"status": "ok", "data": "test"}
-            )
-            with patch(
-                "wavexis.cli._experimental._get_backend", return_value=backend
-            ):
+            mock_action.execute = AsyncMock(return_value={"status": "ok", "data": "test"})
+            with patch("wavexis.cli._experimental._get_backend", return_value=backend):
                 out = str(tmp_path / "smartcard_out.json")
                 result = runner.invoke(
                     app,

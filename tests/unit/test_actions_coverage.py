@@ -68,9 +68,7 @@ class TestFormAction:
     async def test_submit_failure_does_not_raise(self) -> None:
         backend = MockBackend()
         backend.click = AsyncMock(side_effect=WavexisError("no submit button"))
-        action = FormAction(
-            FormParams(url="https://example.com", fields={"#x": "1"}, submit="#go")
-        )
+        action = FormAction(FormParams(url="https://example.com", fields={"#x": "1"}, submit="#go"))
         result = await action.execute(backend)
 
         assert result["submitted"] is False
@@ -111,9 +109,7 @@ class TestHARAction:
     async def test_har_with_filter_and_timeout(self) -> None:
         backend = MockBackend()
         backend.capture_har = AsyncMock(return_value={"log": {"entries": []}})
-        action = HARAction(
-            HarParams(url="https://example.com", filter="*.js", timeout=5000)
-        )
+        action = HARAction(HarParams(url="https://example.com", filter="*.js", timeout=5000))
         result = await action.execute(backend)
 
         assert result == {"log": {"entries": []}}
@@ -160,9 +156,7 @@ class TestScrapeAction:
     async def test_default_expression_when_empty(self) -> None:
         backend = MockBackend()
         backend.eval = AsyncMock(return_value="Default Title")
-        action = ScrapeAction(
-            ScrapeParams(urls=["https://example.com"], expression="")
-        )
+        action = ScrapeAction(ScrapeParams(urls=["https://example.com"], expression=""))
         results = await action.execute(backend)
 
         assert results[0]["result"] == "Default Title"
@@ -175,9 +169,7 @@ class TestScrapeAction:
         expr_file = tmp_path / "expr.js"
         expr_file.write_text("document.querySelector('h1').textContent", encoding="utf-8")
 
-        action = ScrapeAction(
-            ScrapeParams(urls=["https://example.com"], file=str(expr_file))
-        )
+        action = ScrapeAction(ScrapeParams(urls=["https://example.com"], file=str(expr_file)))
         results = await action.execute(backend)
 
         assert results[0]["result"] == "from-file"
@@ -188,9 +180,7 @@ class TestScrapeAction:
     async def test_expression_file_unreadable_raises(self, tmp_path: Path) -> None:
         backend = MockBackend()
         missing = tmp_path / "no-such-file.js"
-        action = ScrapeAction(
-            ScrapeParams(urls=["https://example.com"], file=str(missing))
-        )
+        action = ScrapeAction(ScrapeParams(urls=["https://example.com"], file=str(missing)))
         with pytest.raises(WavexisError, match="Failed to read scrape expression file"):
             await action.execute(backend)
 

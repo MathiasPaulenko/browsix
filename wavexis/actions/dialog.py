@@ -82,10 +82,9 @@ class DialogAction(BaseAction[str, None]):
         """
         await backend.page_enable()
         timeout = self._timeout
-        assert timeout is not None  # narrowed by caller
-        wait_task = asyncio.create_task(
-            backend.dialog_wait_for_opening(timeout)
-        )
+        if timeout is None:
+            raise TypeError("timeout is required for dialog wait")
+        wait_task = asyncio.create_task(backend.dialog_wait_for_opening(timeout))
         # Yield so the task registers its event handler before navigation.
         await asyncio.sleep(0)
         await backend.navigate(self._url, self._wait)

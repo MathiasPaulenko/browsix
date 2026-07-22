@@ -565,9 +565,7 @@ class TestActionFactories:
         """_cookies_factory passes name and domain for delete action."""
         from wavexis.multi import _cookies_factory
 
-        action = _cookies_factory(
-            {"action": "delete", "name": "old", "domain": "example.com"}
-        )
+        action = _cookies_factory({"action": "delete", "name": "old", "domain": "example.com"})
         assert action.params.action == "delete"
         assert action.params.name == "old"
         assert action.params.domain == "example.com"
