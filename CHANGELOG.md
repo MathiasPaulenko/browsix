@@ -2,6 +2,13 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.16.14 — 2026-07-24
+
+### CI / Tooling
+
+- **Visual diff tests in CI** — the unit test matrix now installs the `image` extra so `visual_diff` tests run with Pillow instead of being skipped.
+- **Robust test skip** — `TestVisualDiffAction.test_identical_images` uses `pytest.importorskip("PIL")` so the suite stays green when Pillow is not installed locally.
+
 ## v2.16.13 — 2026-07-24
 
 ### Security & Robustness
