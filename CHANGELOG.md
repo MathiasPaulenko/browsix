@@ -2,6 +2,22 @@
 
 All notable changes to wavexis are documented in this file.
 
+## v2.16.13 — 2026-07-24
+
+### Security & Robustness
+
+- **Serve-mode input validation** — added `_get_url_or_400`, `_get_dict_or_400`, `_get_int_or_400`, and `_get_device_or_400` helpers; endpoints now return `400` for malformed URLs, wrong types, and out-of-range values instead of `500`.
+- **Rate limiting** — `TokenBucket` validates capacity and refill period; `retry_after` recalculates tokens correctly using `time.monotonic()`.
+- **BiDi network intercept cleanup** — `block_requests`, `intercept_requests`, `modify_request`, `modify_response`, and `handle_auth` now remove previous intercepts and subscriptions before registering new ones; `close()` cleans remaining intercepts.
+- **Suppressed exception logging** — `cdp.py` and `bidi.py` log debug messages before swallowing expected failures in `get_request_body`, `get_response_body`, `css_get_styles`, and `css_get_stylesheets`.
+- **CLI validation** — `config set` validates booleans, integers, backends, URLs, and paths; `input upload` validates file paths before launching the backend.
+
+### Testing
+
+- **CLI coverage** — new unit tests for `wavexis/cli/_advanced.py`, `_debug.py`, `_workflow.py`, and `_experimental.py`.
+- **Action coverage** — new unit tests for `axe_audit`, `bluetooth`, `cast`, `crawl`, `download`, `extract`, `form`, `har_replay`, `lighthouse`, `session`, `tabs`, and `visual_diff`.
+- **Integration harness** — `tests/integration/conftest.py` now provides a local `aiohttp` server fixture, removing external network dependencies for most integration tests.
+
 ## v2.16.12 — 2026-07-23
 
 ### Security
