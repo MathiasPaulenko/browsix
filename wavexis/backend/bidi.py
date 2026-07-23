@@ -316,7 +316,9 @@ class BiDiBackend(AbstractBackend):
         # BiDi accepts: "none", "complete", "interactive"
         bidi_wait = "complete"  # default
         if wait:
-            if wait.strategy == "load":
+            if wait.strategy == "none":
+                bidi_wait = "none"
+            elif wait.strategy == "load":
                 bidi_wait = "complete"
             elif wait.strategy == "domcontentloaded":
                 bidi_wait = "interactive"
@@ -355,7 +357,9 @@ class BiDiBackend(AbstractBackend):
             bidi_wait = "complete"
             navigated = False
             if params.wait:
-                if params.wait.strategy == "load":
+                if params.wait.strategy == "none":
+                    bidi_wait = "none"
+                elif params.wait.strategy == "load":
                     bidi_wait = "complete"
                 elif params.wait.strategy == "domcontentloaded":
                     bidi_wait = "interactive"
@@ -1000,6 +1004,9 @@ class BiDiBackend(AbstractBackend):
     async def wait_for(self, strategy: WaitStrategy) -> None:
         """Wait for a condition via polling script.evaluate."""
         client = self._require_launched()
+
+        if strategy.strategy == "none":
+            return
 
         deadline = time.monotonic() + strategy.timeout / 1000
         while time.monotonic() < deadline:

@@ -304,7 +304,7 @@ class WaitStrategy:
 
     Attributes:
         strategy: Wait type — "load", "domcontentloaded", "networkidle",
-            "selector", or "url".
+            "selector", "url", or "none".
         selector: CSS selector to wait for (required when strategy="selector").
         url_pattern: URL substring to wait for (required when strategy="url").
         timeout: Maximum wait time in milliseconds.
@@ -320,7 +320,7 @@ class WaitStrategy:
         _validate_choice(
             self.strategy,
             "wait strategy",
-            {"load", "domcontentloaded", "networkidle", "selector", "url"},
+            {"load", "domcontentloaded", "networkidle", "selector", "url", "none"},
         )
         _validate_int_range(self.timeout, "wait timeout", min_value=0, max_value=_MAX_TIMEOUT_MS)
         if self.strategy == "selector" and not self.selector:

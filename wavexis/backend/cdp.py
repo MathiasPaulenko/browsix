@@ -302,6 +302,8 @@ class CDPBackend(AbstractBackend):
                 await session.wait_for_load_state("load", timeout=timeout_sec)
             except TimeoutError:
                 raise WaitTimeoutError("load", timeout_ms) from None
+        elif wait.strategy == "none":
+            pass
         elif wait.strategy == "selector":
             if wait.selector is None:
                 raise ValueError("selector wait strategy requires a selector")
@@ -977,6 +979,9 @@ class CDPBackend(AbstractBackend):
 
         timeout_ms: int = strategy.timeout
         timeout_sec: float = timeout_ms / 1000
+
+        if strategy.strategy == "none":
+            return
 
         if strategy.strategy == "selector" and strategy.selector:
             try:
