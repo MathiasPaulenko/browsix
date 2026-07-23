@@ -23,13 +23,13 @@ class TestBrowserIntegration:
             await backend.close()
 
     @pytest.mark.skip(reason="Browser contexts not supported in headless Chrome")
-    async def test_new_and_list_contexts(self):
+    async def test_new_and_list_contexts(self, local_http_server):
         """Test new context creation."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com")
+            await backend.navigate(local_http_server)
             ctx_id = await backend.new_context()
             assert isinstance(ctx_id, str)
             assert len(ctx_id) > 0
@@ -37,13 +37,13 @@ class TestBrowserIntegration:
         finally:
             await backend.close()
 
-    async def test_get_window_bounds(self):
+    async def test_get_window_bounds(self, local_http_server):
         """Test get window bounds."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com")
+            await backend.navigate(local_http_server)
             bounds = await backend.get_window_bounds()
             assert "width" in bounds
             assert "height" in bounds
@@ -52,13 +52,13 @@ class TestBrowserIntegration:
         finally:
             await backend.close()
 
-    async def test_set_window_bounds(self):
+    async def test_set_window_bounds(self, local_http_server):
         """Test set window bounds."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com")
+            await backend.navigate(local_http_server)
             await backend.set_window_bounds(1024, 768, 0, 0)
             bounds = await backend.get_window_bounds()
             assert bounds["width"] == 1024

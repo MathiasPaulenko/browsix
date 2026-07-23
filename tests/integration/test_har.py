@@ -11,13 +11,13 @@ from wavexis.config import BrowserOptions, HarParams
 class TestHARIntegration:
     """Integration tests for HAR capture against real Chrome."""
 
-    async def test_har_basic(self):
+    async def test_har_basic(self, local_http_server):
         """Test har basic."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            params = HarParams(url="https://example.com", timeout=2000)
+            params = HarParams(url=f"{local_http_server}example", timeout=2000)
             action = HARAction(params)
             result = await action.execute(backend)
             assert "log" in result
@@ -32,22 +32,22 @@ class TestHARIntegration:
         finally:
             await backend.close()
 
-    async def test_har_with_filter(self):
+    async def test_har_with_filter(self, local_http_server):
         """Test har with filter."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = HarParams(
-                url="https://example.com",
+                url=f"{local_http_server}example",
                 timeout=2000,
-                filter="example.com",
+                filter="example",
             )
             action = HARAction(params)
             result = await action.execute(backend)
             assert "log" in result
             for entry in result["log"]["entries"]:
                 url = entry["request"]["url"]
-                assert "example.com" in url
+                assert "example" in url
         finally:
             await backend.close()

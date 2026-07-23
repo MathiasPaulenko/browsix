@@ -561,6 +561,10 @@ class CookieParams:
     def __post_init__(self) -> None:
         """Validate cookie parameters."""
         _validate_choice(self.same_site, "same_site", {"Lax", "Strict", "None"})
+        if not self.path.startswith("/") or ".." in self.path or "\x00" in self.path:
+            raise ActionError(
+                f"Cookie path must be an absolute path without traversal: {self.path!r}"
+            )
 
 
 @dataclass
@@ -700,6 +704,24 @@ class InputParams:
     def __post_init__(self) -> None:
         """Validate input interaction parameters."""
         _validate_url(self.url)
+        _validate_choice(
+            self.action,
+            "input action",
+            {
+                "click",
+                "right_click",
+                "double_click",
+                "type",
+                "fill",
+                "select",
+                "hover",
+                "key",
+                "drag",
+                "tap",
+                "scroll",
+                "upload",
+            },
+        )
         _validate_choice(self.button, "button", {"left", "right", "middle"})
         _validate_int_range(
             self.click_count, "click_count", min_value=1, max_value=_MAX_CLICK_COUNT
@@ -976,6 +998,7 @@ class CookieActionParams:
     def __post_init__(self) -> None:
         """Validate cookie action parameters."""
         _validate_url(self.url)
+        _validate_choice(self.action, "cookie action", {"get", "set", "delete", "clear"})
 
 
 @dataclass
@@ -1001,6 +1024,7 @@ class HeaderParams:
     def __post_init__(self) -> None:
         """Validate header/user-agent parameters."""
         _validate_url(self.url)
+        _validate_choice(self.action, "header action", {"set-headers", "set-user-agent"})
 
 
 @dataclass

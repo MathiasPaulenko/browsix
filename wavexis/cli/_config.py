@@ -23,8 +23,18 @@ from wavexis.cli._shared import (
     _write_json_output,
     app,
 )
-from wavexis.config import EvalParams, ScreenshotParams
-from wavexis.exceptions import WavexisError
+from wavexis.config import (
+    _BROWSER_SCHEMES,
+    _MAX_TIMEOUT_MS,
+    _MAX_VIEWPORT_DIMENSION,
+    _REMOTE_SCHEMES,
+    EvalParams,
+    ScreenshotParams,
+    _validate_int_range,
+    _validate_path_string,
+    _validate_url,
+)
+from wavexis.exceptions import ActionError, WavexisError
 
 
 @app.command()
@@ -163,6 +173,114 @@ def repl(
     _run_async(_repl_and_close())
 
 
+_VALID_CONFIG_KEYS = {
+    "backend",
+    "headless",
+    "timeout",
+    "width",
+    "height",
+    "user_agent",
+    "proxy",
+    "user_data_dir",
+    "browser_url",
+    "remote_url",
+    "stealth",
+}
+
+_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks5", "direct"})
+
+
+def _validate_config_value(key: str, value: str) -> Any:
+    """Validate and coerce a config value for the given key.
+
+    Raises:
+        ActionError: If the value is not valid for the key.
+    """
+    if not value:
+        raise ActionError(f"value cannot be empty for key '{key}'")
+
+    if key == "headless":
+        lowered = value.lower()
+        if lowered in ("true", "1", "yes"):
+            return True
+        if lowered in ("false", "0", "no"):
+            return False
+        raise ActionError(
+            f"headless must be true/yes/1 or false/no/0; got {value!r}"
+        )
+
+    if key == "backend":
+        if value not in ("cdp", "bidi"):
+            raise ActionError(
+                f"backend must be 'cdp' or 'bidi'; got {value!r}"
+            )
+        return value
+
+    if key == "timeout":
+        try:
+            timeout = int(value)
+        except ValueError as exc:
+            raise ActionError(f"timeout must be an integer; got {value!r}") from exc
+        _validate_int_range(
+            timeout, "timeout", min_value=0, max_value=_MAX_TIMEOUT_MS
+        )
+        return timeout
+
+    if key == "width":
+        try:
+            width = int(value)
+        except ValueError as exc:
+            raise ActionError(f"width must be an integer; got {value!r}") from exc
+        _validate_int_range(
+            width, "width", min_value=1, max_value=_MAX_VIEWPORT_DIMENSION
+        )
+        return width
+
+    if key == "height":
+        try:
+            height = int(value)
+        except ValueError as exc:
+            raise ActionError(f"height must be an integer; got {value!r}") from exc
+        _validate_int_range(
+            height, "height", min_value=1, max_value=_MAX_VIEWPORT_DIMENSION
+        )
+        return height
+
+    if key == "stealth":
+        lowered = value.lower()
+        if lowered in ("true", "1", "yes"):
+            return True
+        if lowered in ("false", "0", "no"):
+            return False
+        raise ActionError(
+            f"stealth must be true/yes/1 or false/no/0; got {value!r}"
+        )
+
+    if key == "proxy":
+        _validate_url(value, schemes=_PROXY_SCHEMES, name="proxy")
+        return value
+
+    if key == "user_data_dir":
+        _validate_path_string(value, "user_data_dir")
+        return value
+
+    if key == "browser_url":
+        _validate_url(value, schemes=_BROWSER_SCHEMES, name="browser_url")
+        return value
+
+    if key == "remote_url":
+        _validate_url(value, schemes=_REMOTE_SCHEMES, name="remote_url")
+        return value
+
+    if key == "user_agent":
+        return value
+
+    if key not in _VALID_CONFIG_KEYS:
+        raise ActionError(f"unknown config key: {key!r}")
+
+    return value
+
+
 @app.command()
 def config(
     action: str = typer.Argument("show", help="Config action: show, get, set, init, path"),
@@ -255,11 +373,17 @@ def config(
 
     if action == "set":
         if not key:
-            typer.echo("Error: --key is required for 'set'")
+            typer.echo("Error: --key is required for 'set'", err=True)
             raise typer.Exit(EXIT_CONFIG_ERROR)
         if not value:
-            typer.echo("Error: --value is required for 'set'")
+            typer.echo("Error: --value is required for 'set'", err=True)
             raise typer.Exit(EXIT_CONFIG_ERROR)
+
+        try:
+            coerced = _validate_config_value(key, value)
+        except ActionError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(EXIT_CONFIG_ERROR) from e
 
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
@@ -269,16 +393,7 @@ def config(
                 if isinstance(loaded, dict):
                     current = loaded
 
-            if key in ("headless",):
-                current[key] = value.lower() in ("true", "1", "yes")
-            elif key in ("timeout",):
-                try:
-                    current[key] = int(value)
-                except ValueError:
-                    typer.echo(f"Error: timeout must be an integer, got '{value}'", err=True)
-                    raise typer.Exit(EXIT_CONFIG_ERROR) from None
-            else:
-                current[key] = value
+            current[key] = coerced
 
             config_path.write_text(
                 yaml.dump(current, default_flow_style=False, sort_keys=True),

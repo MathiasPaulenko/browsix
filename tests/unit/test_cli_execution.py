@@ -360,6 +360,39 @@ class TestCLIExecutionInput:
             result = runner.invoke(app, ["input", "tap", "https://example.com", "#btn"])
         assert result.exit_code == 0
 
+    def test_upload_executes(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "sample.txt"
+        file_path.write_text("sample", encoding="utf-8")
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._input._get_backend", return_value=backend):
+            result = runner.invoke(
+                app,
+                [
+                    "input",
+                    "upload",
+                    "https://example.com",
+                    "#file",
+                    str(file_path),
+                ],
+            )
+        assert result.exit_code == 0
+
+    def test_upload_rejects_invalid_path(self) -> None:
+        backend = _make_mock_backend()
+        with patch("wavexis.cli._input._get_backend", return_value=backend):
+            result = runner.invoke(
+                app,
+                [
+                    "input",
+                    "upload",
+                    "https://example.com",
+                    "#file",
+                    "../escape.txt",
+                ],
+            )
+        assert result.exit_code == 2
+        assert "invalid upload file" in result.output.lower()
+
 
 @pytest.mark.unit
 class TestCLIExecutionNetwork:

@@ -428,6 +428,52 @@ class TestBiDiMethodBodies:
         backend, _ = _make_mock_backend()
         await backend.modify_response({"urlPattern": "*"}, {"status": 200, "body": "ok"})
 
+    async def test_block_requests_cleans_previous_intercept(self) -> None:
+        backend, mock = _make_mock_backend()
+        mock.network.add_intercept = AsyncMock(side_effect=["intercept-1", "intercept-2"])
+        mock.on_request = MagicMock(side_effect=["sub-1", "sub-2"])
+        await backend.block_requests(["*://a.example.com/*"])
+        await backend.block_requests(["*://b.example.com/*"])
+        assert mock.network.remove_intercept.await_args.kwargs["intercept_id"] == "intercept-1"
+        assert mock.off.call_args[0][0] == "sub-1"
+        assert mock.network.add_intercept.await_count == 2
+
+    async def test_modify_request_cleans_previous_intercept(self) -> None:
+        backend, mock = _make_mock_backend()
+        mock.network.add_intercept = AsyncMock(side_effect=["intercept-1", "intercept-2"])
+        mock.on_request = MagicMock(side_effect=["sub-1", "sub-2"])
+        await backend.modify_request({"urlPattern": "*"}, {"method": "POST"})
+        await backend.modify_request({"urlPattern": "*"}, {"method": "GET"})
+        assert mock.network.remove_intercept.await_args.kwargs["intercept_id"] == "intercept-1"
+        assert mock.off.call_args[0][0] == "sub-1"
+
+    async def test_modify_response_cleans_previous_intercept(self) -> None:
+        backend, mock = _make_mock_backend()
+        mock.network.add_intercept = AsyncMock(side_effect=["intercept-1", "intercept-2"])
+        mock.on_response_started = MagicMock(side_effect=["sub-1", "sub-2"])
+        await backend.modify_response({"urlPattern": "*"}, {"status": 200, "body": "a"})
+        await backend.modify_response({"urlPattern": "*"}, {"status": 200, "body": "b"})
+        assert mock.network.remove_intercept.await_args.kwargs["intercept_id"] == "intercept-1"
+        assert mock.off.call_args[0][0] == "sub-1"
+
+    async def test_handle_auth_cleans_previous_intercept(self) -> None:
+        backend, mock = _make_mock_backend()
+        mock.network.add_intercept = AsyncMock(side_effect=["intercept-1", "intercept-2"])
+        mock.on_auth_required = MagicMock(side_effect=["sub-1", "sub-2"])
+        await backend.handle_auth("https://a.example.com", "user", "pass")
+        await backend.handle_auth("https://b.example.com", "user", "pass")
+        assert mock.network.remove_intercept.await_args.kwargs["intercept_id"] == "intercept-1"
+        assert mock.off.call_args[0][0] == "sub-1"
+
+    async def test_close_cleans_network_intercepts(self) -> None:
+        backend, mock = _make_mock_backend()
+        mock.network.add_intercept = AsyncMock(return_value="intercept-1")
+        mock.on_request = MagicMock(return_value="sub-1")
+        await backend.block_requests(["*://ads.example.com/*"])
+        await backend.close()
+        assert mock.network.remove_intercept.await_args.kwargs["intercept_id"] == "intercept-1"
+        assert mock.off.call_args[0][0] == "sub-1"
+
     async def test_replay_har(self, tmp_path: Any) -> None:
         backend, _ = _make_mock_backend()
         har_file = tmp_path / "test.har"
@@ -1009,10 +1055,19 @@ class TestBiDiMethodBodies:
         handle = await backend.new_tab_handle("https://example.com")
         assert handle is not None
 
-    async def test_tab_handle_has_current_url(self) -> None:
-        """Regression test for Bug #88: BiDiTabHandle must initialize _current_url."""
+    async def test_tab_handle_navigates_to_url(self) -> None:
+        """BiDiTabHandle should navigate to the requested URL after creation."""
         backend, mock = _make_mock_backend()
         mock.browsing.create_context = AsyncMock(return_value="ctx-2")
         handle = await backend.new_tab_handle("https://example.com")
         assert hasattr(handle, "_current_url")
-        assert handle._current_url == ""
+        assert handle._current_url == "https://example.com"
+
+    async def test_new_tab_handle_rejects_invalid_url(self) -> None:
+        """new_tab_handle must validate the initial URL."""
+        from wavexis.exceptions import ActionError
+
+        backend, mock = _make_mock_backend()
+        mock.browsing.create_context = AsyncMock(return_value="ctx-2")
+        with pytest.raises(ActionError, match="scheme"):
+            await backend.new_tab_handle("file:///etc/passwd")

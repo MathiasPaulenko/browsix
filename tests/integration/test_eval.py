@@ -13,14 +13,14 @@ from wavexis.config import BrowserOptions, EvalParams, WaitStrategy
 class TestEvalIntegration:
     """Integration tests for JS evaluation against real Chrome."""
 
-    async def test_eval_expression(self):
+    async def test_eval_expression(self, local_http_server):
         """Test eval expression."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = EvalParams(
-                url="https://example.com",
+                url=f"{local_http_server}example",
                 expression="document.title",
                 wait=WaitStrategy(strategy="load"),
             )
@@ -30,7 +30,7 @@ class TestEvalIntegration:
         finally:
             await backend.close()
 
-    async def test_eval_from_file(self, tmp_path: Path):
+    async def test_eval_from_file(self, local_http_server, tmp_path: Path):
         """Test eval from file."""
         js_file = tmp_path / "script.js"
         js_file.write_text("document.title", encoding="utf-8")
@@ -40,7 +40,7 @@ class TestEvalIntegration:
         try:
             await backend.launch(BrowserOptions())
             params = EvalParams(
-                url="https://example.com",
+                url=f"{local_http_server}example",
                 file=str(js_file),
                 wait=WaitStrategy(strategy="load"),
             )
@@ -50,14 +50,14 @@ class TestEvalIntegration:
         finally:
             await backend.close()
 
-    async def test_eval_await_promise(self):
+    async def test_eval_await_promise(self, local_http_server):
         """Test eval await promise."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = EvalParams(
-                url="https://example.com",
+                url=f"{local_http_server}example",
                 expression="Promise.resolve(42)",
                 await_promise=True,
                 wait=WaitStrategy(strategy="load"),

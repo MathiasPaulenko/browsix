@@ -94,6 +94,92 @@ class TestServeCreateApp:
 
 
 @pytest.mark.unit
+class TestAuthMiddleware:
+    """Security regression tests for the API key middleware."""
+
+    async def _run_middleware(
+        self,
+        headers: dict[str, str] | None = None,
+        query: dict[str, str] | None = None,
+        path: str = "/screenshot",
+    ) -> Any:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from wavexis.serve import _auth_middleware
+
+        middleware = _auth_middleware("secret")
+        request = MagicMock()
+        request.path = path
+        request.headers = headers or {}
+        request.query = query or {}
+        handler = AsyncMock(return_value=MagicMock(status=200))
+        return await middleware(request, handler)
+
+    async def test_rejects_missing_key(self) -> None:
+        resp = await self._run_middleware()
+        assert resp.status == 401
+
+    async def test_accepts_bearer_token(self) -> None:
+        resp = await self._run_middleware(headers={"Authorization": "Bearer secret"})
+        assert resp.status == 200
+
+    async def test_accepts_x_api_key_header(self) -> None:
+        resp = await self._run_middleware(headers={"X-API-Key": "secret"})
+        assert resp.status == 200
+
+    async def test_rejects_query_param(self) -> None:
+        """API key must not be accepted in the query string."""
+        resp = await self._run_middleware(query={"api_key": "secret"})
+        assert resp.status == 401
+
+    async def test_allows_health_without_auth(self) -> None:
+        resp = await self._run_middleware(path="/health")
+        assert resp.status == 200
+
+
+@pytest.mark.unit
+class TestCORSMiddleware:
+    """Regression tests for the CORS middleware."""
+
+    async def _run_cors(
+        self,
+        origin: str = "",
+        allowed: list[str] | None = None,
+        allow_credentials: bool = False,
+    ) -> Any:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from wavexis.serve import _cors_middleware
+
+        middleware = _cors_middleware(
+            allowed or ["https://example.com"], allow_credentials=allow_credentials
+        )
+        request = MagicMock()
+        request.method = "GET"
+        request.headers = {"Origin": origin}
+        handler = AsyncMock(return_value=MagicMock(headers={}))
+        return await middleware(request, handler)
+
+    async def test_adds_cors_headers(self) -> None:
+        resp = await self._run_cors(origin="https://example.com")
+        assert resp.headers["Access-Control-Allow-Origin"] == "https://example.com"
+        assert "Access-Control-Allow-Methods" in resp.headers
+
+    async def test_allow_credentials_with_specific_origin(self) -> None:
+        resp = await self._run_cors(
+            origin="https://example.com", allow_credentials=True
+        )
+        assert resp.headers["Access-Control-Allow-Credentials"] == "true"
+
+    async def test_no_allow_credentials_with_wildcard(self) -> None:
+        resp = await self._run_cors(
+            origin="https://example.com", allowed=["*"], allow_credentials=True
+        )
+        assert "Access-Control-Allow-Credentials" not in resp.headers
+        assert resp.headers["Access-Control-Allow-Origin"] == "*"
+
+
+@pytest.mark.unit
 class TestServeHandlers:
     """Test suite for servehandlers."""
 
@@ -224,7 +310,7 @@ class TestServeHandlerMocks:
         assert resp.content_type == "application/json"
         data = await resp.json()
         assert "error" in data
-        assert "backend failure" in data["error"]
+        assert "internal server error" in data["error"]
         await client.close()
 
     async def test_screenshot_endpoint_rejects_non_object_json_body(self) -> None:
@@ -858,7 +944,7 @@ class TestServeHandlerMocks:
         ):
             resp = await client.post(
                 "/device",
-                json={"url": "https://example.com", "device": "iPhone 12"},
+                json={"url": "https://example.com", "device": "iphone-15"},
             )
         assert resp.status == 200
         await client.close()
@@ -995,6 +1081,105 @@ class TestServeHandlerMocks:
             await client.close()
         finally:
             serve_mod.set_allowed_base_dir(None)
+
+    async def test_input_validation_returns_400(self) -> None:
+        """Invalid URL, device, headers and types must return 400, not 500."""
+        from unittest.mock import patch
+
+        from aiohttp.test_utils import TestClient, TestServer
+
+        from wavexis.serve import create_app
+
+        mock_backend = self._make_mock_backend()
+        app = create_app()
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        cases = [
+            ("/navigate", {"url": "file:///etc/passwd"}),
+            ("/cookies/get", {"url": "javascript:alert(1)"}),
+            ("/screenshot", {"url": "ftp://example.com"}),
+            ("/user-agent", {"url": "not-a-url", "user_agent": "test"}),
+            ("/headers", {"url": "https://example.com", "headers": "bad"}),
+            ("/device", {"url": "https://example.com", "device": "unknown-device"}),
+            ("/modify-request", {"url": "bad", "modifications": "nope"}),
+            ("/modify-response", {"url": "https://example.com", "modifications": 123}),
+            ("/perf/metrics", {"url": "//no-scheme"}),
+            ("/perf/trace", {"url": "https://example.com", "duration_ms": -1}),
+            ("/cwv", {"url": "https://example.com", "observe_ms": 700_000}),
+        ]
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            for path, payload in cases:
+                resp = await client.post(path, json=payload)
+                assert resp.status == 400, f"{path} with {payload!r} returned {resp.status}"
+                data = await resp.json()
+                assert "error" in data
+        await client.close()
+
+    async def test_multi_endpoint(self, tmp_path: Path) -> None:
+        """Test /multi executes a YAML config and returns results."""
+        from unittest.mock import AsyncMock, patch
+
+        from aiohttp.test_utils import TestClient, TestServer
+
+        from wavexis.serve import create_app
+
+        yaml_file = tmp_path / "multi.yml"
+        yaml_file.write_text("actions: []\n", encoding="utf-8")
+        app = create_app(base_dir=str(tmp_path))
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        mock_backend = self._make_mock_backend()
+        with (
+            patch(
+                "wavexis.backend.manager.BackendManager.select_with_fallback",
+                new_callable=AsyncMock,
+                return_value=mock_backend,
+            ),
+            patch("wavexis.record.replay_from_yaml", new_callable=AsyncMock, return_value=[b"ok"]),
+        ):
+            resp = await client.post("/multi", json={"config": str(yaml_file)})
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["status"] == "ok"
+        assert data["actions"] == 1
+        await client.close()
+
+    async def test_multi_endpoint_rejects_invalid_body(self, tmp_path: Path) -> None:
+        """Test /multi rejects non-object bodies and invalid config values."""
+        from unittest.mock import AsyncMock, patch
+
+        from aiohttp.test_utils import TestClient, TestServer
+
+        from wavexis.serve import create_app
+
+        app = create_app(base_dir=str(tmp_path))
+        server = TestServer(app)
+        client = TestClient(server)
+        await client.start_server()
+        mock_backend = self._make_mock_backend()
+        cases = [
+            [1, 2, 3],
+            {"config": 123},
+            {"config": ""},
+            {"config": "missing.yml"},
+        ]
+        with patch(
+            "wavexis.backend.manager.BackendManager.select_with_fallback",
+            new_callable=AsyncMock,
+            return_value=mock_backend,
+        ):
+            for payload in cases:
+                resp = await client.post("/multi", json=payload)
+                assert resp.status == 400, f"payload {payload!r} returned {resp.status}"
+                data = await resp.json()
+                assert "error" in data
+        await client.close()
 
 
 @pytest.mark.unit

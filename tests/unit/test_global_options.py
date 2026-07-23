@@ -257,6 +257,40 @@ class TestConfigCommand:
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         assert data["headless"] is False
 
+    @pytest.mark.parametrize(
+        "key,value,expected_error",
+        [
+            ("backend", "invalid", "backend must be"),
+            ("headless", "maybe", "headless must be"),
+            ("timeout", "abc", "timeout must be an integer"),
+            ("timeout", "-5", "timeout must be >= 0"),
+            ("proxy", "ftp://proxy", "Invalid proxy scheme"),
+            ("browser_url", "file:///tmp", "Invalid browser_url scheme"),
+            ("remote_url", "http://example.com", "Invalid remote_url scheme"),
+            ("user_data_dir", "../escape", "Invalid user_data_dir"),
+            ("stealth", "sure", "stealth must be"),
+            ("unknown_key", "x", "unknown config key"),
+        ],
+    )
+    def test_config_set_rejects_invalid_values(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        key: str,
+        value: str,
+        expected_error: str,
+    ) -> None:
+        """Invalid config values must be rejected with a clear message."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(
+            _cli.app, ["config", "set", "--key", key, "--value", value]
+        )
+        assert result.exit_code == 2
+        assert expected_error.lower() in result.output.lower()
+
     def test_config_show_no_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         from typer.testing import CliRunner

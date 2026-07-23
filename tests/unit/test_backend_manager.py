@@ -709,3 +709,38 @@ class TestBackendManager:
         assert "bidi" in result
         assert isinstance(result["cdp"], str)
         assert isinstance(result["bidi"], str)
+
+    def test_select_with_fallback_sync_uses_second_backend(self) -> None:
+        """Fallback to the next backend when the first one fails to create."""
+        from unittest.mock import patch
+
+        manager = BackendManager()
+        manager._registry = {"first": DummyBackend, "second": DummyBackend}
+        with patch.object(
+            manager, "create", side_effect=[Exception("first fails"), DummyBackend()]
+        ):
+            backend = manager.select_with_fallback_sync()
+        assert isinstance(backend, DummyBackend)
+
+    def test_select_with_fallback_sync_all_fail(self) -> None:
+        """Raise BackendNotAvailableError when no backend can be created."""
+        from unittest.mock import patch
+
+        manager = BackendManager()
+        manager._registry = {"first": DummyBackend}
+        with (
+            patch.object(manager, "create", side_effect=Exception("creation fails")),
+            pytest.raises(BackendNotAvailableError),
+        ):
+            manager.select_with_fallback_sync()
+
+    def test_install_check_missing_packages(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """install_check reports 'not installed' when optional deps are missing."""
+        import sys
+
+        manager = BackendManager()
+        monkeypatch.setitem(sys.modules, "cdpwave", None)
+        monkeypatch.setitem(sys.modules, "bidiwave", None)
+        result = manager.install_check()
+        assert result["cdp"] == "not installed"
+        assert result["bidi"] == "not installed"

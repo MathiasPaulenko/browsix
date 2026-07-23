@@ -26,6 +26,7 @@ from wavexis.actions.eval import MAX_EXPRESSION_LENGTH as _MAX_EXPRESSION_LENGTH
 from wavexis.backend.base import AbstractBackend
 from wavexis.backend.manager import get_manager
 from wavexis.config import (
+    DEVICE_PRESETS,
     BrowserOptions,
     CookieParams,
     DOMParams,
@@ -40,7 +41,7 @@ from wavexis.config import (
 from wavexis.config import (
     _validate_url as _validate_url_scheme,
 )
-from wavexis.exceptions import WavexisError
+from wavexis.exceptions import ActionError, WavexisError
 from wavexis.output import (
     set_allowed_base_dir as _output_set_allowed_base_dir,
 )
@@ -86,6 +87,8 @@ def _safe_params(cls: type, data: dict[str, Any]) -> Any:
 
     Recursively converts nested dicts to their dataclass types when the
     field type annotation is a dataclass (e.g. WaitStrategy, BrowserOptions).
+    Validation errors from the dataclass ``__post_init__`` are converted into
+    ``HTTPBadRequest`` responses so the API returns 400 instead of 500.
 
     Args:
         cls: A dataclass type to construct.
@@ -93,10 +96,19 @@ def _safe_params(cls: type, data: dict[str, Any]) -> Any:
 
     Returns:
         An instance of cls with only valid fields populated.
-
-    Raises:
-        ValueError: If ``data`` is not a dict.
     """
+    web = _import_aiohttp()
+    try:
+        return _build_safe_params(cls, data)
+    except (ActionError, WavexisError, ValueError, TypeError) as exc:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": str(exc)}),
+            content_type="application/json",
+        ) from exc
+
+
+def _build_safe_params(cls: type, data: dict[str, Any]) -> Any:
+    """Inner implementation of ``_safe_params`` (no HTTP conversion)."""
     if not isinstance(data, dict):
         raise ValueError("JSON body must be an object")
     hints = _get_type_hints(cls)
@@ -144,6 +156,92 @@ async def _get_json_body(request: Any) -> dict[str, Any]:
     return data
 
 
+def _get_url_or_400(raw_url: Any) -> str:
+    """Validate a URL string and raise HTTPBadRequest on failure."""
+    web = _import_aiohttp()
+    if not isinstance(raw_url, str) or not raw_url:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": "url must be a non-empty string"}),
+            content_type="application/json",
+        )
+    try:
+        _validate_url_scheme(raw_url, allow_empty=False)
+    except ActionError as exc:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": str(exc)}),
+            content_type="application/json",
+        ) from exc
+    return raw_url
+
+
+def _get_str_or_400(raw: Any, name: str, allow_empty: bool = True) -> str:
+    """Validate a string parameter and raise HTTPBadRequest on failure."""
+    web = _import_aiohttp()
+    if not isinstance(raw, str):
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": f"{name} must be a string"}),
+            content_type="application/json",
+        )
+    if not allow_empty and not raw:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": f"{name} is required"}),
+            content_type="application/json",
+        )
+    return raw
+
+
+def _get_int_or_400(
+    raw: Any,
+    name: str,
+    default: int | None = None,
+    min_value: int | None = None,
+) -> int:
+    """Validate/coerce an integer parameter and raise HTTPBadRequest on failure."""
+    web = _import_aiohttp()
+    if raw is None and default is not None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": f"{name} must be an integer"}),
+            content_type="application/json",
+        ) from None
+    if min_value is not None and value < min_value:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": f"{name} must be >= {min_value}"}),
+            content_type="application/json",
+        )
+    return value
+
+
+def _get_dict_or_400(raw: Any, name: str) -> dict[str, Any]:
+    """Validate a JSON object parameter and raise HTTPBadRequest on failure."""
+    web = _import_aiohttp()
+    if not isinstance(raw, dict):
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": f"{name} must be a JSON object"}),
+            content_type="application/json",
+        )
+    return raw
+
+
+def _get_device_or_400(raw: Any) -> str:
+    """Validate a device preset name and raise HTTPBadRequest on failure."""
+    web = _import_aiohttp()
+    if not isinstance(raw, str) or not raw:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": "device must be a non-empty string"}),
+            content_type="application/json",
+        )
+    if raw not in DEVICE_PRESETS:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": f"Unknown device preset: {raw}"}),
+            content_type="application/json",
+        )
+    return raw
+
+
 class TokenBucket:
     """Token bucket rate limiter for the HTTP API.
 
@@ -157,10 +255,17 @@ class TokenBucket:
         Args:
             capacity: Maximum number of tokens (burst size).
             refill_period: Seconds to fully refill from empty.
+
+        Raises:
+            ValueError: If capacity or refill_period are not valid.
         """
+        if not isinstance(capacity, int) or capacity < 1:
+            raise ValueError("capacity must be a positive integer")
+        if refill_period <= 0:
+            raise ValueError("refill_period must be positive")
         self._capacity = capacity
         self._tokens = float(capacity)
-        self._refill_rate = capacity / refill_period if refill_period > 0 else 0
+        self._refill_rate = capacity / refill_period
         self._last_refill = time.monotonic()
         self._lock = asyncio.Lock()
 
@@ -183,6 +288,10 @@ class TokenBucket:
     async def retry_after(self) -> float:
         """Return seconds until the next token is available."""
         async with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_refill
+            self._tokens = min(self._capacity, self._tokens + elapsed * self._refill_rate)
+            self._last_refill = now
             if self._tokens >= 1:
                 return 0.0
             if self._refill_rate <= 0:
@@ -343,7 +452,7 @@ def _auth_middleware(api_key: str) -> Any:
     """Create an aiohttp middleware that validates an API key.
 
     The key may be provided as a Bearer token in the Authorization header
-    or as an ``api_key`` query parameter.
+    or as an ``X-API-Key`` header.
 
     Args:
         api_key: The expected API key.
@@ -363,7 +472,7 @@ def _auth_middleware(api_key: str) -> Any:
             token = auth_header[7:].strip()
         else:
             token = auth_header.strip()
-        token = token or request.headers.get("X-API-Key", "") or request.query.get("api_key", "")
+        token = token or request.headers.get("X-API-Key", "")
         if not hmac.compare_digest(token.encode(), api_key.encode()):
             return web.Response(
                 status=401,
@@ -375,11 +484,13 @@ def _auth_middleware(api_key: str) -> Any:
     return middleware
 
 
-def _cors_middleware(allowed_origins: list[str]) -> Any:
+def _cors_middleware(allowed_origins: list[str], allow_credentials: bool = False) -> Any:
     """Create an aiohttp middleware that adds CORS headers.
 
     Args:
         allowed_origins: List of allowed origin patterns. Use ["*"] to allow all.
+        allow_credentials: Whether to allow credentials (cookies/auth headers).
+            Must be False when ``*`` is used as origin.
 
     Returns:
         A middleware factory function for aiohttp.
@@ -397,6 +508,8 @@ def _cors_middleware(allowed_origins: list[str]) -> Any:
 
         if origin and (allow_all or origin in allowed_origins):
             resp.headers["Access-Control-Allow-Origin"] = origin if not allow_all else "*"
+            if allow_credentials and not allow_all:
+                resp.headers["Access-Control-Allow-Credentials"] = "true"
             resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
             resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
             resp.headers["Access-Control-Max-Age"] = "3600"
@@ -581,9 +694,17 @@ async def _run_action(request: Any, action: Any) -> Any:
         await backend.launch(BrowserOptions())
         launched = True
         return await action.execute(backend)
-    except WavexisError as exc:
-        raise web.HTTPInternalServerError(
+    except web.HTTPException:
+        raise
+    except ActionError as exc:
+        raise web.HTTPBadRequest(
             text=json.dumps({"error": str(exc)}),
+            content_type="application/json",
+        ) from exc
+    except WavexisError as exc:
+        logger.error("WavexisError in _run_action: %s", exc)
+        raise web.HTTPInternalServerError(
+            text=json.dumps({"error": "internal server error"}),
             content_type="application/json",
         ) from exc
     except Exception as exc:
@@ -641,11 +762,29 @@ def with_backend(
                 await backend.launch(opts)
                 launched = True
                 return await handler(request, backend)
-            except WavexisError as exc:
+            except web.HTTPException:
+                raise
+            except ActionError as exc:
                 return web.json_response(
                     {"error": str(exc)},
+                    status=400,
+                )
+            except WavexisError as exc:
+                logger.error("WavexisError in %s: %s", handler.__name__, exc)
+                return web.json_response(
+                    {"error": "internal server error"},
                     status=500,
                 )
+            except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                # Let plain validation errors from _get_json_body / _safe_params
+                # propagate to _json_error_middleware, which returns 400.
+                if isinstance(exc, WavexisError):
+                    logger.error("WavexisError in %s: %s", handler.__name__, exc)
+                    return web.json_response(
+                        {"error": "internal server error"},
+                        status=500,
+                    )
+                raise
             except Exception as exc:
                 logger.exception("Unhandled error in %s: %s", handler.__name__, exc)
                 return web.json_response(
@@ -751,12 +890,7 @@ async def handle_navigate(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /navigate — navigate and return status."""
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    url = data.get("url", "")
-    if not url:
-        return web.json_response(
-            {"error": "url is required"},
-            status=400,
-        )
+    url = _get_url_or_400(data.get("url", ""))
     wait_for = data.get("wait_for")
     strategy = (
         WaitStrategy(strategy="selector", selector=wait_for)
@@ -786,6 +920,7 @@ async def handle_cookies_get(request: Any, backend: AbstractBackend) -> Any:
     data = await _get_json_body(request)
     url = data.get("url", "")
     if url:
+        url = _get_url_or_400(url)
         await backend.navigate(url, WaitStrategy(strategy="load"))
     cookies = await backend.get_cookies()
     return web.json_response({"cookies": cookies})
@@ -832,10 +967,10 @@ async def handle_perf_metrics(request: Any) -> Any:
     """Handle POST /perf/metrics — return performance metrics."""
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    url = data.get("url", "")
+    url = _get_url_or_400(data.get("url", ""))
     from wavexis.actions.performance import PerformanceAction, PerformanceParams
 
-    params = PerformanceParams(url=url, action="metrics")
+    params = _safe_params(PerformanceParams, {"url": url, "action": "metrics"})
     action = PerformanceAction(params)
     result = await _run_action(request, action)
     return web.json_response(result)
@@ -845,11 +980,16 @@ async def handle_perf_trace(request: Any) -> Any:
     """Handle POST /perf/trace — return performance trace."""
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    url = data.get("url", "")
-    duration_ms = data.get("duration_ms", 3000)
+    url = _get_url_or_400(data.get("url", ""))
+    duration_ms = _get_int_or_400(
+        data.get("duration_ms", 3000), "duration_ms", min_value=1
+    )
     from wavexis.actions.performance import PerformanceAction, PerformanceParams
 
-    params = PerformanceParams(url=url, action="trace", duration_ms=duration_ms)
+    params = _safe_params(
+        PerformanceParams,
+        {"url": url, "action": "trace", "duration_ms": duration_ms},
+    )
     action = PerformanceAction(params)
     result = await _run_action(request, action)
     return web.json_response(result)
@@ -886,28 +1026,13 @@ async def handle_cwv(request: Any) -> Any:
     Body: {"url": "...", "observe_ms": 5000, "budgets": {"lcp_ms": 2500}}
     """
     web = _import_aiohttp()
+    data = await _get_json_body(request)
     from wavexis.actions.core_web_vitals import (
         CoreWebVitalsAction,
         CoreWebVitalsParams,
     )
 
-    data = await _get_json_body(request)
-    url = data.get("url", "")
-    try:
-        observe_ms = int(data.get("observe_ms", 5000))
-    except (TypeError, ValueError):
-        return web.json_response(
-            {"error": "observe_ms must be an integer"}, status=400
-        )
-    budgets = data.get("budgets") or {}
-    if not isinstance(budgets, dict):
-        return web.json_response({"error": "budgets must be a JSON object"}, status=400)
-    params = CoreWebVitalsParams(
-        url=url,
-        wait=WaitStrategy(strategy="load"),
-        budgets=budgets,
-        observe_ms=observe_ms,
-    )
+    params = _safe_params(CoreWebVitalsParams, data)
     action = CoreWebVitalsAction(params)
     result = await _run_action(request, action)
     return web.json_response(result)
@@ -924,7 +1049,8 @@ async def handle_auth(request: Any, backend: AbstractBackend) -> Any:
         context_path = _validate_path(data.get("context", ""))
     except WavexisError as e:
         return web.json_response({"error": str(e)}, status=400)
-    url = data.get("url", "")
+    raw_url = data.get("url", "")
+    url = _get_url_or_400(raw_url) if raw_url else ""
     try:
         ctx = await asyncio.to_thread(load_auth_context, str(context_path))
     except (json.JSONDecodeError, OSError) as e:
@@ -938,8 +1064,9 @@ async def handle_user_agent(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /user-agent — set custom user agent."""
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    ua = data.get("user_agent", "")
-    url = data.get("url", "")
+    ua = _get_str_or_400(data.get("user_agent", ""), "user_agent")
+    raw_url = data.get("url", "")
+    url = _get_url_or_400(raw_url) if raw_url else ""
     await backend.set_user_agent(ua)
     if url:
         await backend.navigate(url, WaitStrategy(strategy="load"))
@@ -951,8 +1078,9 @@ async def handle_headers(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /headers — set custom HTTP headers."""
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    headers = data.get("headers", {})
-    url = data.get("url", "")
+    headers = _get_dict_or_400(data.get("headers", {}), "headers")
+    raw_url = data.get("url", "")
+    url = _get_url_or_400(raw_url) if raw_url else ""
     await backend.set_headers(headers)
     if url:
         await backend.navigate(url, WaitStrategy(strategy="load"))
@@ -964,8 +1092,9 @@ async def handle_device(request: Any, backend: AbstractBackend) -> Any:
     """Handle POST /device — emulate a device preset."""
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    device = data.get("device", "")
-    url = data.get("url", "")
+    device = _get_device_or_400(data.get("device", ""))
+    raw_url = data.get("url", "")
+    url = _get_url_or_400(raw_url) if raw_url else ""
     await backend.emulate_device(device)
     if url:
         await backend.navigate(url, WaitStrategy(strategy="load"))
@@ -981,11 +1110,20 @@ async def handle_modify_request(request: Any, backend: AbstractBackend) -> Any:
     """
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    url = data.get("url", "")
+    raw_url = data.get("url", "")
+    url = _get_url_or_400(raw_url) if raw_url else ""
     pattern_input = data.get("pattern", "*")
-    modifications = data.get("modifications", {})
+    modifications = _get_dict_or_400(data.get("modifications", {}), "modifications")
 
-    pattern = {"urlPattern": pattern_input} if isinstance(pattern_input, str) else pattern_input
+    if isinstance(pattern_input, str):
+        pattern: dict[str, Any] = {"urlPattern": pattern_input}
+    elif isinstance(pattern_input, dict):
+        pattern = pattern_input
+    else:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": "pattern must be a string or a JSON object"}),
+            content_type="application/json",
+        )
 
     await backend.modify_request(pattern, modifications)
     if url:
@@ -1002,13 +1140,25 @@ async def handle_modify_response(request: Any, backend: AbstractBackend) -> Any:
     """
     web = _import_aiohttp()
     data = await _get_json_body(request)
-    url = data.get("url", "")
-    pattern = data.get("pattern", "*")
-    modifications = data.get("modifications", {})
-    await backend.modify_response({"urlPattern": pattern}, modifications)
+    raw_url = data.get("url", "")
+    url = _get_url_or_400(raw_url) if raw_url else ""
+    pattern_input = data.get("pattern", "*")
+    modifications = _get_dict_or_400(data.get("modifications", {}), "modifications")
+
+    if isinstance(pattern_input, str):
+        pattern = {"urlPattern": pattern_input}
+    elif isinstance(pattern_input, dict):
+        pattern = pattern_input
+    else:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": "pattern must be a string or a JSON object"}),
+            content_type="application/json",
+        )
+
+    await backend.modify_response(pattern, modifications)
     if url:
         await backend.navigate(url, WaitStrategy(strategy="load"))
-    return web.json_response({"status": "ok", "pattern": pattern})
+    return web.json_response({"status": "ok", "pattern": pattern_input})
 
 
 @with_backend(launch_options=BrowserOptions(headless=True))
@@ -1018,11 +1168,19 @@ async def handle_multi(request: Any, backend: AbstractBackend) -> Any:
     from wavexis.record import replay_from_yaml
 
     data = await _get_json_body(request)
+    if not isinstance(data, dict):
+        return web.json_response({"error": "body must be a JSON object"}, status=400)
+    config_value = data.get("config", "")
+    if not isinstance(config_value, str) or not config_value:
+        return web.json_response({"error": "config must be a non-empty string path"}, status=400)
     try:
-        yaml_path = _validate_path(data.get("config", ""))
+        yaml_path = _validate_path(config_value)
     except WavexisError as e:
         return web.json_response({"error": str(e)}, status=400)
-    results = await replay_from_yaml(yaml_path, backend)
+    try:
+        results = await replay_from_yaml(yaml_path, backend)
+    except WavexisError as e:
+        return web.json_response({"error": str(e)}, status=400)
     return web.json_response(
         {
             "status": "ok",
@@ -1291,6 +1449,7 @@ async def handle_websocket(request: Any) -> Any:
     web = _import_aiohttp()
 
     global _ws_connections
+    _ws_acquired = False
     try:
         async with _ws_lock:
             if _ws_connections >= _ws_max_connections:
@@ -1300,6 +1459,7 @@ async def handle_websocket(request: Any) -> Any:
                     content_type="application/json",
                 )
             _ws_connections += 1
+            _ws_acquired = True
 
         ws = web.WebSocketResponse()
         tasks: list[asyncio.Task[None]] = []
@@ -1562,8 +1722,9 @@ async def handle_websocket(request: Any) -> Any:
                     await pool.discard_backend(backend)
             await ws.close()
     finally:
-        async with _ws_lock:
-            _ws_connections = max(0, _ws_connections - 1)
+        if _ws_acquired:
+            async with _ws_lock:
+                _ws_connections = max(0, _ws_connections - 1)
 
     return ws
 
@@ -1634,7 +1795,9 @@ def create_app(
                 "authenticated requests. Consider restricting --cors-origins "
                 "to specific domains."
             )
-        middlewares.append(web.middleware(_cors_middleware(cors_origins)))
+        middlewares.append(
+            web.middleware(_cors_middleware(cors_origins, allow_credentials=api_key is not None))
+        )
 
     if api_key:
         middlewares.append(web.middleware(_auth_middleware(api_key)))

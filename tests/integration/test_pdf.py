@@ -11,14 +11,14 @@ from wavexis.config import BrowserOptions, PDFParams, WaitStrategy
 class TestPDFIntegration:
     """Integration tests for PDF generation against real Chrome."""
 
-    async def test_pdf_letter(self):
+    async def test_pdf_letter(self, local_http_server):
         """Test pdf letter."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = PDFParams(
-                url="https://example.com",
+                url=local_http_server,
                 paper="letter",
                 wait=WaitStrategy(strategy="load"),
             )
@@ -29,14 +29,14 @@ class TestPDFIntegration:
         finally:
             await backend.close()
 
-    async def test_pdf_a4(self):
+    async def test_pdf_a4(self, local_http_server):
         """Test pdf a4."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = PDFParams(
-                url="https://example.com",
+                url=local_http_server,
                 paper="a4",
                 wait=WaitStrategy(strategy="load"),
             )
@@ -47,14 +47,14 @@ class TestPDFIntegration:
         finally:
             await backend.close()
 
-    async def test_pdf_landscape(self):
+    async def test_pdf_landscape(self, local_http_server):
         """Test pdf landscape."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = PDFParams(
-                url="https://example.com",
+                url=local_http_server,
                 paper="a4",
                 landscape=True,
                 wait=WaitStrategy(strategy="load"),

@@ -21,10 +21,12 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_sw_list(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_sw_list(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test sw list."""
     params = ServiceWorkerParams(
-        url="https://example.com",
+        url=local_http_server,
         action="list",
         wait=WaitStrategy(strategy="load"),
         browser=browser_opts,

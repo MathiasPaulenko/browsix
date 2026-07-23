@@ -174,6 +174,27 @@ class BiDiBackend(AbstractBackend):
         self._combined_traces: dict[str, dict[str, Any]] = {}
         self._subscription_counter = 0
         self._trace_counter = 0
+        self._launch_lock = asyncio.Lock()
+        self._subscription_lock = asyncio.Lock()
+        self._network_intercepts: dict[str, Any] = {}
+        self._network_subscriptions: dict[str, Any] = {}
+
+    async def _clear_network_intercept(self, client: Any, name: str) -> None:
+        """Remove a previous network intercept and its event handler.
+
+        This prevents duplicate intercepts/handlers when the same method is
+        called more than once on the same backend instance.
+        """
+        intercept_id = self._network_intercepts.pop(name, None)
+        subscription = self._network_subscriptions.pop(name, None)
+        if subscription is not None:
+            with contextlib.suppress(Exception):
+                client.off(subscription)
+        if intercept_id is not None:
+            try:
+                await client.network.remove_intercept(intercept_id=intercept_id)
+            except Exception as exc:
+                logger.debug("Failed to remove intercept %s: %s", intercept_id, exc)
 
     async def new_tab_handle(self, url: str = "about:blank") -> BiDiTabHandle:
         """Create a new browsing context with its own session for concurrent ops.
@@ -186,7 +207,11 @@ class BiDiBackend(AbstractBackend):
         """
         client = self._require_client()
         context = await client.browsing.create_context()
-        return BiDiTabHandle(client, context)
+        handle = BiDiTabHandle(client, context)
+        if url and url != "about:blank":
+            _validate_url(url, allow_empty=False)
+            await handle.navigate(url, WaitStrategy(strategy="none"))
+        return handle
 
     def _require_client(self) -> BiDiClient:
         """Return the current client or raise if not initialized.
@@ -226,114 +251,116 @@ class BiDiBackend(AbstractBackend):
             control headless mode, user_data_dir, or timeout at launch time.
             These options are ignored if provided.
         """
-        if self._client is not None:
-            return
         if BiDiClient is None:
             raise ImportError("bidiwave is not installed. Run: pip install wavexis[bidi]")
 
-        # BiDi connects to existing browser, cannot control launch options
-        if options.headless is not None:
-            import warnings
+        async with self._launch_lock:
+            if self._client is not None:
+                return
 
-            warnings.warn(
-                "BiDi backend ignores 'headless' option - it connects to "
-                "an existing ChromeDriver instance. Use CDP backend for headless control.",
-                UserWarning,
-                stacklevel=2,
-            )
-        if options.user_data_dir:
-            import warnings
+            # BiDi connects to existing browser, cannot control launch options
+            if options.headless is not None:
+                import warnings
 
-            warnings.warn(
-                "BiDi backend ignores 'user_data_dir' option - it connects to "
-                "an existing ChromeDriver instance. Use CDP backend for profile control.",
-                UserWarning,
-                stacklevel=2,
-            )
-        if options.timeout:
-            import warnings
+                warnings.warn(
+                    "BiDi backend ignores 'headless' option - it connects to "
+                    "an existing ChromeDriver instance. Use CDP backend for headless control.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            if options.user_data_dir:
+                import warnings
 
-            warnings.warn(
-                "BiDi backend ignores 'timeout' option - it connects to "
-                "an existing ChromeDriver instance. Use CDP backend for timeout control.",
-                UserWarning,
-                stacklevel=2,
-            )
+                warnings.warn(
+                    "BiDi backend ignores 'user_data_dir' option - it connects to "
+                    "an existing ChromeDriver instance. Use CDP backend for profile control.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            if options.timeout:
+                import warnings
 
-        if options.browser_url:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(options.browser_url)
-            host = parsed.hostname or "localhost"
-            port = parsed.port or 9222
-            ws_url = f"ws://{host}:{port}/session"
-        elif options.remote_url:
-            ws_url = options.remote_url
-        else:
-            ws_url = "ws://localhost:9222/session"
-        try:
-            client = await asyncio.wait_for(
-                BiDiClient.connect(ws_url), timeout=_CONNECT_TIMEOUT
-            )
-        except WavexisError:
-            # Already a friendly error; re-raise as-is.
-            raise
-        except Exception as e:
-            # Bug #34: the default ws://localhost:9222/session requires a
-            # running ChromeDriver with BiDi enabled. The raw exception
-            # (OSError "Connection refused", websockets InvalidStatus
-            # "HTTP 404", bidiwave BiDiConnectionError, etc.) is confusing.
-            # Catch any connection-time failure and provide a clear message
-            # with setup instructions.
-            raise WavexisError(
-                f"Could not connect to the BiDi endpoint at {ws_url}.\n"
-                f"The BiDi backend requires ChromeDriver running with BiDi support.\n"
-                f"Start it with:\n"
-                f"  chromedriver --port=9222 --allowed-origins='*'\n"
-                f"or use the CDP backend instead (default):\n"
-                f"  wavexis screenshot https://example.com\n"
-                f"Original error: {type(e).__name__}: {e}"
-            ) from e
-        try:
-            await client.session.new()
-            self._context = await client.browsing.create_context()
-
-            if options.width and options.height:
-                await client.browsing.set_viewport(
-                    self._context,
-                    viewport={"width": options.width, "height": options.height},
+                warnings.warn(
+                    "BiDi backend ignores 'timeout' option - it connects to "
+                    "an existing ChromeDriver instance. Use CDP backend for timeout control.",
+                    UserWarning,
+                    stacklevel=2,
                 )
 
-            if options.user_agent:
-                await client.emulation.set_user_agent(
-                    options.user_agent,
-                    contexts=[self._context],
+            if options.browser_url:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(options.browser_url)
+                host = parsed.hostname or "localhost"
+                port = parsed.port or 9222
+                ws_url = f"ws://{host}:{port}/session"
+            elif options.remote_url:
+                ws_url = options.remote_url
+            else:
+                ws_url = "ws://localhost:9222/session"
+            try:
+                client = await asyncio.wait_for(
+                    BiDiClient.connect(ws_url), timeout=_CONNECT_TIMEOUT
                 )
+            except WavexisError:
+                # Already a friendly error; re-raise as-is.
+                raise
+            except Exception as e:
+                # Bug #34: the default ws://localhost:9222/session requires a
+                # running ChromeDriver with BiDi enabled. The raw exception
+                # (OSError "Connection refused", websockets InvalidStatus
+                # "HTTP 404", bidiwave BiDiConnectionError, etc.) is confusing.
+                # Catch any connection-time failure and provide a clear message
+                # with setup instructions.
+                raise WavexisError(
+                    f"Could not connect to the BiDi endpoint at {ws_url}.\n"
+                    f"The BiDi backend requires ChromeDriver running with BiDi support.\n"
+                    f"Start it with:\n"
+                    f"  chromedriver --port=9222 --allowed-origins='*'\n"
+                    f"or use the CDP backend instead (default):\n"
+                    f"  wavexis screenshot https://example.com\n"
+                    f"Original error: {type(e).__name__}: {e}"
+                ) from e
+            try:
+                await client.session.new()
+                self._context = await client.browsing.create_context()
 
-            if options.extra_headers:
-                header_list = [{"name": k, "value": v} for k, v in options.extra_headers.items()]
-                await client.cdp.send_command(
-                    "Network.setExtraRequestHeaders", {"headers": header_list}
-                )
+                if options.width and options.height:
+                    await client.browsing.set_viewport(
+                        self._context,
+                        viewport={"width": options.width, "height": options.height},
+                    )
 
-            if options.proxy:
-                await client.cdp.send_command(
-                    "Network.setProxyOverride",
-                    {"proxy": {"server": options.proxy}},
-                )
+                if options.user_agent:
+                    await client.emulation.set_user_agent(
+                        options.user_agent,
+                        contexts=[self._context],
+                    )
 
-            if options.stealth:
-                from wavexis.actions.stealth import get_stealth_js
+                if options.extra_headers:
+                    header_list = [{"name": k, "value": v} for k, v in options.extra_headers.items()]
+                    await client.cdp.send_command(
+                        "Network.setExtraRequestHeaders", {"headers": header_list}
+                    )
 
-                await client.script.evaluate(self._context, get_stealth_js())
+                if options.proxy:
+                    await client.cdp.send_command(
+                        "Network.setProxyOverride",
+                        {"proxy": {"server": options.proxy}},
+                    )
 
-            self._client = client
-        except Exception:
-            with contextlib.suppress(Exception):
-                await client.close()
-            self._client = None
-            self._context = None
-            raise
+                if options.stealth:
+                    from wavexis.actions.stealth import get_stealth_js
+
+                    await client.script.evaluate(self._context, get_stealth_js())
+
+                self._client = client
+            except Exception:
+                with contextlib.suppress(Exception):
+                    await client.close()
+                self._client = None
+                self._context = None
+                raise
 
     async def close(self) -> None:
         """Close the BiDi client and release resources."""
@@ -344,6 +371,10 @@ class BiDiBackend(AbstractBackend):
                     with contextlib.suppress(Exception):
                         client.off(subscription)
             self._subscriptions.clear()
+            for name in list(self._network_intercepts):
+                await self._clear_network_intercept(client, name)
+            self._network_subscriptions.clear()
+            self._network_intercepts.clear()
             if self._context is not None:
                 await client.browsing.close(self._context)
                 self._context = None
@@ -2536,7 +2567,9 @@ class BiDiBackend(AbstractBackend):
         client = self._require_launched()
         contexts = [self._context] if self._context else None
 
-        await client.network.add_intercept(
+        await self._clear_network_intercept(client, "block")
+
+        intercept_id = await client.network.add_intercept(
             phases=["beforeRequestSent"],
             contexts=contexts,
             url_patterns=patterns or None,
@@ -2550,7 +2583,9 @@ class BiDiBackend(AbstractBackend):
             if request_id:
                 await client.network.fail_request(request=request_id)
 
-        client.on_request(on_request)
+        subscription = client.on_request(on_request)
+        self._network_intercepts["block"] = intercept_id
+        self._network_subscriptions["block"] = subscription
 
     async def throttle_network(self, params: ThrottleParams) -> None:
         """Throttle network conditions via BiDi/CDP.
@@ -2595,11 +2630,15 @@ class BiDiBackend(AbstractBackend):
         """Intercept requests matching a pattern using native BiDi add_intercept."""
         client = self._require_launched()
         url_pattern = pattern.get("urlPattern")
-        await client.network.add_intercept(
+
+        await self._clear_network_intercept(client, "intercept")
+
+        intercept_id = await client.network.add_intercept(
             phases=["beforeRequestSent"],
             contexts=[self._context] if self._context else None,
             url_patterns=[url_pattern] if url_pattern else None,
         )
+        self._network_intercepts["intercept"] = intercept_id
 
     async def mock_response(self, url: str, response: dict[str, Any]) -> None:
         """Mock a response for requests matching a URL via network.addCacheOverride.
@@ -2642,6 +2681,7 @@ class BiDiBackend(AbstractBackend):
         except Exception as exc:
             if isinstance(exc, WavexisError):
                 raise
+            logger.debug("Failed to get request body for %s: %s", request_id, exc)
             return None
 
     async def get_response_body(self, request_id: str) -> str | None:
@@ -2660,6 +2700,7 @@ class BiDiBackend(AbstractBackend):
         except Exception as exc:
             if isinstance(exc, WavexisError):
                 raise
+            logger.debug("Failed to get response body for %s: %s", request_id, exc)
             return None
 
     async def modify_request(
@@ -2677,7 +2718,9 @@ class BiDiBackend(AbstractBackend):
         url_pattern = pattern.get("urlPattern")
         contexts = [self._context] if self._context else None
 
-        await client.network.add_intercept(
+        await self._clear_network_intercept(client, "modify_request")
+
+        intercept_id = await client.network.add_intercept(
             phases=["beforeRequestSent"],
             contexts=contexts,
             url_patterns=[url_pattern] if url_pattern else None,
@@ -2705,7 +2748,9 @@ class BiDiBackend(AbstractBackend):
                 post_data=modifications.get("post_data"),
             )
 
-        client.on_request(on_request)
+        subscription = client.on_request(on_request)
+        self._network_intercepts["modify_request"] = intercept_id
+        self._network_subscriptions["modify_request"] = subscription
 
     async def modify_response(
         self,
@@ -2726,7 +2771,9 @@ class BiDiBackend(AbstractBackend):
         url_pattern = pattern.get("urlPattern")
         contexts = [self._context] if self._context else None
 
-        await client.network.add_intercept(
+        await self._clear_network_intercept(client, "modify_response")
+
+        intercept_id = await client.network.add_intercept(
             phases=["responseStarted"],
             contexts=contexts,
             url_patterns=[url_pattern] if url_pattern else None,
@@ -2765,7 +2812,9 @@ class BiDiBackend(AbstractBackend):
                 body=body_b64,
             )
 
-        client.on_response_started(on_response_started)
+        subscription = client.on_response_started(on_response_started)
+        self._network_intercepts["modify_response"] = intercept_id
+        self._network_subscriptions["modify_response"] = subscription
 
     async def replay_har(self, har_path: str, url_filter: str = "") -> None:
         """Replay network requests from a HAR file.
@@ -2828,6 +2877,8 @@ class BiDiBackend(AbstractBackend):
         """
         client = self._require_client()
 
+        await self._clear_network_intercept(client, "auth")
+
         async def on_auth_required(params: dict[str, Any]) -> None:
             """Respond to network.authRequired events."""
             request_url = params.get("request", {}).get("url", "")
@@ -2848,12 +2899,14 @@ class BiDiBackend(AbstractBackend):
                     action="cancel",
                 )
 
-        await client.network.add_intercept(
+        intercept_id = await client.network.add_intercept(
             phases=["authRequired"],
             contexts=[self._context] if self._context else None,
             url_patterns=[url_pattern] if url_pattern else None,
         )
-        client.on_auth_required(on_auth_required)
+        subscription = client.on_auth_required(on_auth_required)
+        self._network_intercepts["auth"] = intercept_id
+        self._network_subscriptions["auth"] = subscription
 
     async def network_clear_browser_cache(self) -> None:
         """Clear the browser cache via CDP bridge."""
@@ -3131,63 +3184,64 @@ class BiDiBackend(AbstractBackend):
             A subscription ID for later unsubscription.
         """
         client = self._require_client()
-        self._subscription_counter += 1
-        sub_id = f"sub-{self._subscription_counter}"
+        async with self._subscription_lock:
+            self._subscription_counter += 1
+            sub_id = f"sub-{self._subscription_counter}"
 
-        subscriptions: list[Any] = []
+            subscriptions: list[Any] = []
 
-        event_map = {
-            "console": ("log.entryAdded", client.on_log_entry, "console"),
-            "network_request": (
-                "network.beforeRequestSent",
-                client.on_request,
-                "network_request",
-            ),
-            "network_response": (
-                "network.responseCompleted",
-                client.on_response,
-                "network_response",
-            ),
-            "dialog": (
-                "browsingContext.userPromptOpened",
-                client.on_user_prompt_opened,
-                "dialog",
-            ),
-            "navigation": (
-                "browsingContext.navigationStarted",
-                client.on_navigation_started,
-                "navigation",
-            ),
-        }
+            event_map = {
+                "console": ("log.entryAdded", client.on_log_entry, "console"),
+                "network_request": (
+                    "network.beforeRequestSent",
+                    client.on_request,
+                    "network_request",
+                ),
+                "network_response": (
+                    "network.responseCompleted",
+                    client.on_response,
+                    "network_response",
+                ),
+                "dialog": (
+                    "browsingContext.userPromptOpened",
+                    client.on_user_prompt_opened,
+                    "dialog",
+                ),
+                "navigation": (
+                    "browsingContext.navigationStarted",
+                    client.on_navigation_started,
+                    "navigation",
+                ),
+            }
 
-        try:
-            for evt_type in event_types:
-                if evt_type in event_map:
-                    _, subscribe_fn, label = event_map[evt_type]
+            try:
+                for evt_type in event_types:
+                    if evt_type in event_map:
+                        _, subscribe_fn, label = event_map[evt_type]
 
-                    def make_handler(lbl: str) -> Any:
-                        def _handler(params: Any) -> None:
-                            data = (
-                                params.model_dump() if hasattr(params, "model_dump") else dict(params)
-                            )
-                            callback({"type": lbl, "data": data})
+                        def make_handler(lbl: str) -> Any:
+                            def _handler(params: Any) -> None:
+                                data = (
+                                    params.model_dump() if hasattr(params, "model_dump") else dict(params)
+                                )
+                                callback({"type": lbl, "data": data})
 
-                        return _handler
+                            return _handler
 
-                    handler = make_handler(label)
-                    if inspect.iscoroutinefunction(subscribe_fn):
-                        subscription = await subscribe_fn(handler)
-                    else:
-                        subscription = subscribe_fn(handler)
-                    subscriptions.append(subscription)
+                        handler = make_handler(label)
+                        if inspect.iscoroutinefunction(subscribe_fn):
+                            subscription = await subscribe_fn(handler)
+                        else:
+                            subscription = subscribe_fn(handler)
+                        subscriptions.append(subscription)
 
-            self._subscriptions[sub_id] = subscriptions
-            return sub_id
-        except Exception:
-            for subscription in subscriptions:
-                with contextlib.suppress(Exception):
-                    client.off(subscription)
-            raise
+                self._subscriptions[sub_id] = subscriptions
+                return sub_id
+            except Exception:
+                for subscription in subscriptions:
+                    with contextlib.suppress(Exception):
+                        client.off(subscription)
+                raise
 
     async def unsubscribe_events(self, subscription_id: str) -> None:
         """Unsubscribe from events by subscription ID.
@@ -10782,6 +10836,10 @@ class BiDiTabHandle(BiDiBackend):
                     with contextlib.suppress(Exception):
                         client.off(subscription)
             self._subscriptions.clear()
+            for name in list(self._network_intercepts):
+                await self._clear_network_intercept(client, name)
+            self._network_subscriptions.clear()
+            self._network_intercepts.clear()
         if client is not None and self._context is not None:
             await client.browsing.close(self._context)
             self._context = None

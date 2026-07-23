@@ -23,10 +23,10 @@ class TestMultiIntegration:
             """
 actions:
   - screenshot:
-      url: https://example.com
+      url: http://127.0.0.1:12345/example
       full_page: true
   - eval:
-      url: https://example.com
+      url: http://127.0.0.1:12345/example
       expression: document.title
 """,
             encoding="utf-8",
@@ -43,14 +43,14 @@ actions:
         with pytest.raises(MultiConfigError):
             parse_yaml(config)
 
-    async def test_execute_screenshot_and_eval(self) -> None:
+    async def test_execute_screenshot_and_eval(self, local_http_server: str) -> None:
         """Test execute screenshot and eval."""
         backend = CDPBackend()
         await backend.launch(BrowserOptions())
         try:
             actions = [
-                {"screenshot": {"url": "https://example.com", "full_page": True}},
-                {"eval": {"url": "https://example.com", "expression": "document.title"}},
+                {"screenshot": {"url": local_http_server, "full_page": True}},
+                {"eval": {"url": local_http_server, "expression": "document.title"}},
             ]
             results = await execute_actions(actions, backend)
             assert len(results) == 2

@@ -102,6 +102,8 @@ class CDPBackend(AbstractBackend):
         self._combined_traces: dict[str, dict[str, Any]] = {}
         self._subscription_counter = 0
         self._trace_counter = 0
+        self._launch_lock = asyncio.Lock()
+        self._subscription_lock = asyncio.Lock()
 
     async def new_tab_handle(self, url: str = "about:blank") -> TabHandle:
         """Create a new tab with its own session, sharing the browser process.
@@ -117,6 +119,7 @@ class CDPBackend(AbstractBackend):
         """
         if self._client is None:
             raise SessionNotInitializedError("Backend not launched. Call launch() first.")
+        _validate_url(url, allow_empty=False)
         session = await self._client.new_page(url)
         return TabHandle(self._client, session)
 
@@ -209,103 +212,105 @@ class CDPBackend(AbstractBackend):
         Args:
             options: Browser launch options (headless, width, height, proxy, etc.).
         """
-        if self._client is not None and self._session is not None:
-            return
-        if self._client is not None:
-            with contextlib.suppress(Exception):
-                await self._client.close()
-            self._client = None
+        async with self._launch_lock:
+            if self._client is not None and self._session is not None:
+                return
+            if self._client is not None:
+                with contextlib.suppress(Exception):
+                    await self._client.close()
+                self._client = None
 
-        extra_args: list[str] = []
-        if options.width and options.height:
-            extra_args.append(f"--window-size={options.width},{options.height}")
-        if options.proxy:
-            extra_args.append(f"--proxy-server={options.proxy}")
+            extra_args: list[str] = []
+            if options.width and options.height:
+                extra_args.append(f"--window-size={options.width},{options.height}")
+            if options.proxy:
+                extra_args.append(f"--proxy-server={options.proxy}")
 
-        # CI runners often have a small /dev/shm and a strict sandbox; cdpwave
-        # already adds --no-sandbox when CI env vars are present, but these
-        # companion flags prevent additional launch failures on GitHub Actions.
-        if os.environ.get("CI"):
-            extra_args.extend(
-                [
-                    "--disable-dev-shm-usage",
-                    "--no-zygote",
-                ]
-            )
-
-        if options.browser_url:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(options.browser_url)
-            host = parsed.hostname or "localhost"
-            port = parsed.port or 9222
-            self._client = await asyncio.wait_for(
-                CDPClient.connect(host=host, port=port), timeout=_CONNECT_TIMEOUT
-            )
-        elif options.remote_url:
-            self._client = await asyncio.wait_for(
-                CDPClient.connect(ws_url=options.remote_url), timeout=_CONNECT_TIMEOUT
-            )
-        else:
-            launch_timeout = 30.0 if os.environ.get("CI") else 10.0
-            self._client = await CDPClient.launch(
-                headless=options.headless,
-                user_data_dir=options.user_data_dir,  # type: ignore[call-arg]
-                extra_args=extra_args if extra_args else None,
-                timeout=launch_timeout,
-            )
-
-        client = self._client
-        try:
-            # Bug #28: when connecting to an already-running browser via
-            # ``--browser-url`` or ``--remote-url``, ``client.new_page()``
-            # creates a brand-new tab. The user expects commands like
-            # ``navigate`` to operate on the tab they already have open.
-            # We instead attach to the first existing page target (or
-            # fall back to creating a new one if the browser has none).
-            if options.browser_url or options.remote_url:
-                try:
-                    pages = await client.get_pages()
-                except Exception:
-                    pages = []
-                if pages:
-                    # Prefer a non-devtools, non-blank page if available.
-                    non_blank = [
-                        p
-                        for p in pages
-                        if p.url and not p.url.startswith("devtools://") and p.url != "about:blank"
+            # CI runners often have a small /dev/shm and a strict sandbox; cdpwave
+            # already adds --no-sandbox when CI env vars are present, but these
+            # companion flags prevent additional launch failures on GitHub Actions.
+            if os.environ.get("CI"):
+                extra_args.extend(
+                    [
+                        "--disable-dev-shm-usage",
+                        "--no-zygote",
                     ]
-                    target = non_blank[0] if non_blank else pages[0]
-                    # TargetInfo uses ``target_id``, not ``id``.
-                    target_id = getattr(target, "target_id", None) or getattr(target, "id", None)
-                    if not target_id:
-                        raise WavexisError(
-                            "Could not determine target id of the existing page. "
-                            "Use `wavexis navigate <url>` without --browser-url to "
-                            "open a fresh page."
-                        )
-                    self._session = await client.connect_to_page(str(target_id))
+                )
+
+            if options.browser_url:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(options.browser_url)
+                host = parsed.hostname or "localhost"
+                port = parsed.port or 9222
+                self._client = await asyncio.wait_for(
+                    CDPClient.connect(host=host, port=port), timeout=_CONNECT_TIMEOUT
+                )
+            elif options.remote_url:
+                self._client = await asyncio.wait_for(
+                    CDPClient.connect(ws_url=options.remote_url), timeout=_CONNECT_TIMEOUT
+                )
+            else:
+                launch_timeout = 30.0 if os.environ.get("CI") else 10.0
+                self._client = await CDPClient.launch(
+                    headless=options.headless,
+                    user_data_dir=options.user_data_dir,  # type: ignore[call-arg]
+                    extra_args=extra_args if extra_args else None,
+                    timeout=launch_timeout,
+                )
+
+            client = self._client
+            try:
+                # Bug #28: when connecting to an already-running browser via
+                # ``--browser-url`` or ``--remote-url``, ``client.new_page()``
+                # creates a brand-new tab. The user expects commands like
+                # ``navigate`` to operate on the tab they already have open.
+                # We instead attach to the first existing page target (or
+                # fall back to creating a new one if the browser has none).
+                if options.browser_url or options.remote_url:
+                    try:
+                        pages = await client.get_pages()
+                    except Exception as exc:
+                        logger.debug("Failed to list existing pages: %s", exc)
+                        pages = []
+                    if pages:
+                        # Prefer a non-devtools, non-blank page if available.
+                        non_blank = [
+                            p
+                            for p in pages
+                            if p.url and not p.url.startswith("devtools://") and p.url != "about:blank"
+                        ]
+                        target = non_blank[0] if non_blank else pages[0]
+                        # TargetInfo uses ``target_id``, not ``id``.
+                        target_id = getattr(target, "target_id", None) or getattr(target, "id", None)
+                        if not target_id:
+                            raise WavexisError(
+                                "Could not determine target id of the existing page. "
+                                "Use `wavexis navigate <url>` without --browser-url to "
+                                "open a fresh page."
+                            )
+                        self._session = await client.connect_to_page(str(target_id))
+                    else:
+                        self._session = await client.new_page()
                 else:
                     self._session = await client.new_page()
-            else:
-                self._session = await client.new_page()
 
-            if options.user_agent:
-                await self._session.emulation.set_user_agent_override(user_agent=options.user_agent)
+                if options.user_agent:
+                    await self._session.emulation.set_user_agent_override(user_agent=options.user_agent)
 
-            if options.extra_headers:
-                await self._session.network.set_extra_http_headers(options.extra_headers)
+                if options.extra_headers:
+                    await self._session.network.set_extra_http_headers(options.extra_headers)
 
-            if options.stealth:
-                from wavexis.actions.stealth import get_stealth_js
+                if options.stealth:
+                    from wavexis.actions.stealth import get_stealth_js
 
-                await self._session.runtime.evaluate(get_stealth_js(), await_promise=False)
-        except Exception:
-            self._session = None
-            self._client = None
-            with contextlib.suppress(Exception):
-                await client.close()
-            raise
+                    await self._session.runtime.evaluate(get_stealth_js(), await_promise=False)
+            except Exception:
+                self._session = None
+                self._client = None
+                with contextlib.suppress(Exception):
+                    await client.close()
+                raise
 
     async def close(self) -> None:
         """Close the browser client and release resources."""
@@ -2889,6 +2894,7 @@ class CDPBackend(AbstractBackend):
         except Exception as exc:
             if isinstance(exc, WavexisError):
                 raise
+            logger.debug("Failed to get request body for %s: %s", request_id, exc)
             return None
 
     async def get_response_body(self, request_id: str) -> str | None:
@@ -2910,6 +2916,7 @@ class CDPBackend(AbstractBackend):
         except Exception as exc:
             if isinstance(exc, WavexisError):
                 raise
+            logger.debug("Failed to get response body for %s: %s", request_id, exc)
             return None
 
     async def modify_request(
@@ -3389,52 +3396,53 @@ class CDPBackend(AbstractBackend):
             A subscription ID for later unsubscription.
         """
         session = self._require_session()
-        self._subscription_counter += 1
-        sub_id = f"sub-{self._subscription_counter}"
+        async with self._subscription_lock:
+            self._subscription_counter += 1
+            sub_id = f"sub-{self._subscription_counter}"
 
-        handlers: dict[str, Any] = {}
+            handlers: dict[str, Any] = {}
 
-        event_map = {
-            "console": ("Runtime.consoleAPICalled", "console"),
-            "network_request": ("Network.requestWillBeSent", "network_request"),
-            "network_response": ("Network.responseReceived", "network_response"),
-            "dialog": ("Page.javascriptDialogOpening", "dialog"),
-            "navigation": ("Page.frameNavigated", "navigation"),
-        }
+            event_map = {
+                "console": ("Runtime.consoleAPICalled", "console"),
+                "network_request": ("Network.requestWillBeSent", "network_request"),
+                "network_response": ("Network.responseReceived", "network_response"),
+                "dialog": ("Page.javascriptDialogOpening", "dialog"),
+                "navigation": ("Page.frameNavigated", "navigation"),
+            }
 
-        try:
-            for evt_type in event_types:
-                if evt_type in event_map:
-                    cdp_event, label = event_map[evt_type]
+            try:
+                for evt_type in event_types:
+                    if evt_type in event_map:
+                        cdp_event, label = event_map[evt_type]
 
-                    def make_handler(lbl: str) -> Any:
-                        def _handler(params: dict[str, Any]) -> None:
-                            callback({"type": lbl, "data": params})
+                        def make_handler(lbl: str) -> Any:
+                            def _handler(params: dict[str, Any]) -> None:
+                                callback({"type": lbl, "data": params})
 
-                        return _handler
+                            return _handler
 
-                    handler = make_handler(label)
-                    session.on(cdp_event, handler)
-                    handlers[cdp_event] = handler
+                        handler = make_handler(label)
+                        session.on(cdp_event, handler)
+                        handlers[cdp_event] = handler
 
-                    if evt_type in ("network_request", "network_response"):
-                        await session.network.enable()
-                    elif evt_type == "console":
-                        await session.runtime.enable()
-                    elif evt_type in ("dialog", "navigation"):
-                        # Bug #27: Page events (Page.javascriptDialogOpening,
-                        # Page.frameNavigated) are only delivered after
-                        # Page.enable() is called. Without this, the
-                        # subscription silently captured nothing.
-                        await session.page.enable()
+                        if evt_type in ("network_request", "network_response"):
+                            await session.network.enable()
+                        elif evt_type == "console":
+                            await session.runtime.enable()
+                        elif evt_type in ("dialog", "navigation"):
+                            # Bug #27: Page events (Page.javascriptDialogOpening,
+                            # Page.frameNavigated) are only delivered after
+                            # Page.enable() is called. Without this, the
+                            # subscription silently captured nothing.
+                            await session.page.enable()
 
-            self._subscriptions[sub_id] = handlers
-            return sub_id
-        except Exception:
-            for cdp_event, handler in handlers.items():
-                with contextlib.suppress(Exception):
-                    session.off(cdp_event, handler)
-            raise
+                self._subscriptions[sub_id] = handlers
+                return sub_id
+            except Exception:
+                for cdp_event, handler in handlers.items():
+                    with contextlib.suppress(Exception):
+                        session.off(cdp_event, handler)
+                raise
 
     async def unsubscribe_events(self, subscription_id: str) -> None:
         """Unsubscribe from events by subscription ID.
@@ -4295,6 +4303,7 @@ class CDPBackend(AbstractBackend):
         except Exception as exc:
             if isinstance(exc, WavexisError):
                 raise
+            logger.debug("CSS.getInlineStyles failed for %s, falling back to JS: %s", selector, exc)
             escaped = json.dumps(selector)
             inline = await session.runtime.evaluate(
                 expression=(
@@ -4312,6 +4321,7 @@ class CDPBackend(AbstractBackend):
         except Exception as exc:
             if isinstance(exc, WavexisError):
                 raise
+            logger.debug("CSS.getComputedStyleForNode failed for %s, falling back to JS: %s", selector, exc)
             escaped = json.dumps(selector)
             computed = await session.runtime.evaluate(
                 expression=(
@@ -4343,6 +4353,7 @@ class CDPBackend(AbstractBackend):
         except Exception as exc:
             if isinstance(exc, WavexisError):
                 raise
+            logger.debug("CSS.getLayoutTreeAndStyles failed, falling back to JS: %s", exc)
             js = (
                 "Array.from(document.styleSheets).map((s, i) => ({"
                 "styleSheetId: String(i), "
@@ -10814,6 +10825,8 @@ class TabHandle(CDPBackend):
         self._combined_traces: dict[str, dict[str, Any]] = {}
         self._subscription_counter = 0
         self._trace_counter = 0
+        self._launch_lock = asyncio.Lock()
+        self._subscription_lock = asyncio.Lock()
 
     async def close(self) -> None:
         """Close the tab session without closing the browser."""

@@ -21,10 +21,12 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_dom_snapshot(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_dom_snapshot(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test dom snapshot."""
     params = DOMSnapshotParams(
-        url="https://example.com",
+        url=local_http_server,
         wait=WaitStrategy(strategy="load"),
         browser=browser_opts,
     )

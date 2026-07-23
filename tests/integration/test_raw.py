@@ -21,11 +21,13 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_raw_cdp_command(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_raw_cdp_command(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test raw cdp command."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com")
+        await backend.navigate(local_http_server)
         result = await backend.raw("Page.getNavigationHistory", {})
         assert isinstance(result, dict)
     finally:
@@ -52,11 +54,13 @@ async def test_raw_network_enable(backend: CDPBackend, browser_opts: BrowserOpti
         await backend.close()
 
 
-async def test_raw_get_cookies(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_raw_get_cookies(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test raw get cookies."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com")
+        await backend.navigate(local_http_server)
         result = await backend.raw("Network.getCookies", {})
         assert isinstance(result, dict)
     finally:

@@ -21,10 +21,12 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_media_get_players(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_media_get_players(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test media get players."""
     params = MediaParams(
-        url="https://example.com",
+        url=local_http_server,
         action="list",
         wait=WaitStrategy(strategy="load"),
         browser=browser_opts,

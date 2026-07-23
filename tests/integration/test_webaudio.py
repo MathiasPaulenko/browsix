@@ -21,10 +21,12 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_webaudio_get_contexts(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_webaudio_get_contexts(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test webaudio get contexts."""
     params = WebAudioParams(
-        url="https://example.com",
+        url=local_http_server,
         action="list",
         wait=WaitStrategy(strategy="load"),
         browser=browser_opts,

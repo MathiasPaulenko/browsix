@@ -21,10 +21,12 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_overlay_highlight(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_overlay_highlight(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test overlay highlight."""
     params = OverlayParams(
-        url="https://example.com",
+        url=local_http_server,
         action="highlight",
         selector="body",
         wait=WaitStrategy(strategy="load"),
@@ -33,10 +35,12 @@ async def test_overlay_highlight(backend: CDPBackend, browser_opts: BrowserOptio
     await OverlayAction(params).execute(backend)
 
 
-async def test_overlay_clear(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_overlay_clear(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test overlay clear."""
     params = OverlayParams(
-        url="https://example.com",
+        url=local_http_server,
         action="clear",
         wait=WaitStrategy(strategy="load"),
         browser=browser_opts,

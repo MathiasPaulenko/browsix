@@ -53,10 +53,12 @@ async def test_debug_step_over(backend: CDPBackend, browser_opts: BrowserOptions
         await backend.close()
 
 
-async def test_debug_listeners(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_debug_listeners(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test debug listeners."""
     params = DebugActionParams(
-        url="https://example.com",
+        url=local_http_server,
         action="listeners",
         selector="body",
         wait=WaitStrategy(strategy="load"),

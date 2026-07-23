@@ -7,6 +7,8 @@ from typing import Annotated
 import typer
 
 from wavexis.cli._shared import (
+    EXIT_CONFIG_ERROR,
+    Output,
     _browser_options,
     _close_backend,
     _get_backend,
@@ -15,6 +17,7 @@ from wavexis.cli._shared import (
     app,
 )
 from wavexis.config import InputParams
+from wavexis.output import validate_path
 
 input_app = typer.Typer(help="Input commands (click, type, fill, select, hover, key, drag, tap)")
 app.add_typer(input_app, name="input")
@@ -153,7 +156,19 @@ def input_upload(
     files: Annotated[list[str], typer.Argument(help="Absolute file paths to upload")] = [],  # noqa: B006
 ) -> None:
     """Upload files to a file input element on a web page."""
-    _run_async(_input_action(url, "upload", selector=selector, files=files))
+    validated_files: list[str] = []
+    for f in files:
+        try:
+            p = validate_path(f)
+            resolved = p.resolve()
+            if not resolved.exists():
+                raise ValueError(f"File not found: {f}")
+            validated_files.append(str(resolved))
+        except ValueError as exc:
+            Output.error(f"Invalid upload file: {exc}")
+            raise typer.Exit(EXIT_CONFIG_ERROR) from None
+
+    _run_async(_input_action(url, "upload", selector=selector, files=validated_files))
     typer.echo(f"Uploaded {len(files)} file(s) to '{selector}' on {url}")
 
 

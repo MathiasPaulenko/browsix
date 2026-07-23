@@ -12,70 +12,70 @@ from wavexis.config import BrowserOptions, ScreenshotParams, WaitStrategy
 class TestEmulationIntegration:
     """Test suite for emulationintegration."""
 
-    async def test_emulate_device(self) -> None:
+    async def test_emulate_device(self, local_http_server: str) -> None:
         """Test emulate device."""
         backend = CDPBackend()
         await backend.launch(BrowserOptions())
         try:
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
             await backend.emulate_device("iphone-15")
-            params = ScreenshotParams(url="https://example.com", full_page=True)
+            params = ScreenshotParams(url=local_http_server, full_page=True)
             result = await backend.screenshot(params)
             assert isinstance(result, bytes)
             assert len(result) > 0
         finally:
             await backend.close()
 
-    async def test_set_viewport(self) -> None:
+    async def test_set_viewport(self, local_http_server: str) -> None:
         """Test set viewport."""
         backend = CDPBackend()
         await backend.launch(BrowserOptions())
         try:
             await backend.set_viewport(375, 812, 3.0)
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
-            params = ScreenshotParams(url="https://example.com", full_page=True)
+            await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
+            params = ScreenshotParams(url=local_http_server, full_page=True)
             result = await backend.screenshot(params)
             assert isinstance(result, bytes)
             assert len(result) > 0
         finally:
             await backend.close()
 
-    async def test_set_geolocation(self) -> None:
+    async def test_set_geolocation(self, local_http_server: str) -> None:
         """Test set geolocation."""
         backend = CDPBackend()
         await backend.launch(BrowserOptions())
         try:
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
             await backend.set_geolocation(40.7128, -74.0060, 50.0)
-            params = ScreenshotParams(url="https://example.com", full_page=True)
+            params = ScreenshotParams(url=local_http_server, full_page=True)
             result = await backend.screenshot(params)
             assert isinstance(result, bytes)
             assert len(result) > 0
         finally:
             await backend.close()
 
-    async def test_set_timezone(self) -> None:
+    async def test_set_timezone(self, local_http_server: str) -> None:
         """Test set timezone."""
         backend = CDPBackend()
         await backend.launch(BrowserOptions())
         try:
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
             await backend.set_timezone("America/New_York")
-            params = ScreenshotParams(url="https://example.com", full_page=True)
+            params = ScreenshotParams(url=local_http_server, full_page=True)
             result = await backend.screenshot(params)
             assert isinstance(result, bytes)
             assert len(result) > 0
         finally:
             await backend.close()
 
-    async def test_set_dark_mode(self) -> None:
+    async def test_set_dark_mode(self, local_http_server: str) -> None:
         """Test set dark mode."""
         backend = CDPBackend()
         await backend.launch(BrowserOptions())
         try:
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
             await backend.set_dark_mode(True)
-            params = ScreenshotParams(url="https://example.com", full_page=True)
+            params = ScreenshotParams(url=local_http_server, full_page=True)
             result = await backend.screenshot(params)
             assert isinstance(result, bytes)
             assert len(result) > 0

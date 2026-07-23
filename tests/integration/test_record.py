@@ -24,11 +24,14 @@ def browser_opts() -> BrowserOptions:
 
 
 async def test_record_and_replay(
-    backend: CDPBackend, browser_opts: BrowserOptions, tmp_path: Path
+    backend: CDPBackend,
+    browser_opts: BrowserOptions,
+    tmp_path: Path,
+    local_http_server: str,
 ) -> None:
     """Test record and replay."""
     actions = [
-        {"eval": {"url": "https://example.com", "expression": "1 + 1"}},
+        {"eval": {"url": local_http_server, "expression": "1 + 1"}},
     ]
     yaml_path = tmp_path / "session.yml"
     record_to_yaml(actions, yaml_path)
@@ -43,12 +46,15 @@ async def test_record_and_replay(
 
 
 async def test_replay_multi_action(
-    backend: CDPBackend, browser_opts: BrowserOptions, tmp_path: Path
+    backend: CDPBackend,
+    browser_opts: BrowserOptions,
+    tmp_path: Path,
+    local_http_server: str,
 ) -> None:
     """Test replay multi action."""
     actions = [
-        {"eval": {"url": "https://example.com", "expression": "document.title"}},
-        {"screenshot": {"url": "https://example.com", "output": "out.png"}},
+        {"eval": {"url": local_http_server, "expression": "document.title"}},
+        {"screenshot": {"url": local_http_server, "output": "out.png"}},
     ]
     yaml_path = tmp_path / "multi.yml"
     record_to_yaml(actions, yaml_path)

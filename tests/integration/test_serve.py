@@ -39,13 +39,13 @@ async def test_serve_backends() -> None:
             assert "bidi" in data
 
 
-async def test_serve_screenshot() -> None:
+async def test_serve_screenshot(local_http_server: str) -> None:
     """Test serve screenshot."""
     app = create_app()
     async with aiohttp.test_utils.TestServer(app) as server, aiohttp.ClientSession() as session:  # noqa: SIM117
         async with session.post(
             f"http://127.0.0.1:{server.port}/screenshot",
-            json={"url": "https://example.com"},
+            json={"url": local_http_server},
         ) as resp:
             assert resp.status == 200
             assert resp.content_type == "image/png"
@@ -54,7 +54,7 @@ async def test_serve_screenshot() -> None:
             assert data[:4] == b"\x89PNG"
 
 
-async def test_serve_eval() -> None:
+async def test_serve_eval(local_http_server: str) -> None:
     """Test serve eval with an API key."""
     app = create_app(api_key="test-key")
     async with aiohttp.test_utils.TestServer(app) as server, aiohttp.ClientSession() as session:  # noqa: SIM117
@@ -62,7 +62,7 @@ async def test_serve_eval() -> None:
             f"http://127.0.0.1:{server.port}/eval",
             headers={"X-API-Key": "test-key"},
             json={
-                "url": "https://example.com",
+                "url": local_http_server,
                 "expression": "document.title",
             },
         ) as resp:
@@ -71,13 +71,13 @@ async def test_serve_eval() -> None:
             assert "result" in data
 
 
-async def test_serve_perf_metrics() -> None:
+async def test_serve_perf_metrics(local_http_server: str) -> None:
     """Test serve perf metrics."""
     app = create_app()
     async with aiohttp.test_utils.TestServer(app) as server, aiohttp.ClientSession() as session:  # noqa: SIM117
         async with session.post(
             f"http://127.0.0.1:{server.port}/perf/metrics",
-            json={"url": "https://example.com"},
+            json={"url": local_http_server},
         ) as resp:
             assert resp.status == 200
             data = await resp.json()

@@ -11,102 +11,102 @@ from wavexis.config import BrowserOptions, DOMParams, WaitStrategy
 class TestDOMIntegration:
     """Integration tests for DOM against real Chrome."""
 
-    async def test_dom_get_outer(self):
+    async def test_dom_get_outer(self, local_http_server):
         """Test dom get outer."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(f"{local_http_server}example", WaitStrategy(strategy="load"))
             html = await backend.dom_get("h1", outer=True)
             assert "<h1>" in html
             assert "Example Domain" in html
         finally:
             await backend.close()
 
-    async def test_dom_get_inner(self):
+    async def test_dom_get_inner(self, local_http_server):
         """Test dom get inner."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(f"{local_http_server}example", WaitStrategy(strategy="load"))
             html = await backend.dom_get("h1", outer=False)
             assert "Example Domain" in html
             assert "<h1>" not in html
         finally:
             await backend.close()
 
-    async def test_dom_query_single(self):
+    async def test_dom_query_single(self, local_http_server):
         """Test dom query single."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(f"{local_http_server}example", WaitStrategy(strategy="load"))
             node = await backend.dom_query("h1", all=False)
             assert isinstance(node, dict)
             assert "nodeName" in node
         finally:
             await backend.close()
 
-    async def test_dom_query_all(self):
+    async def test_dom_query_all(self, local_http_server):
         """Test dom query all."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(f"{local_http_server}example", WaitStrategy(strategy="load"))
             nodes = await backend.dom_query("p", all=True)
             assert isinstance(nodes, list)
             assert len(nodes) >= 1
         finally:
             await backend.close()
 
-    async def test_dom_get_attr(self):
+    async def test_dom_get_attr(self, local_http_server):
         """Test dom get attr."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(f"{local_http_server}example", WaitStrategy(strategy="load"))
             href = await backend.dom_get_attr("a", "href")
             assert "example.com" in href or "iana.org" in href
         finally:
             await backend.close()
 
-    async def test_dom_set_attr(self):
+    async def test_dom_set_attr(self, local_http_server):
         """Test dom set attr."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(f"{local_http_server}example", WaitStrategy(strategy="load"))
             await backend.dom_set_attr("h1", "data-test", "value123")
             val = await backend.dom_get_attr("h1", "data-test")
             assert val == "value123"
         finally:
             await backend.close()
 
-    async def test_dom_scroll(self):
+    async def test_dom_scroll(self, local_http_server):
         """Test dom scroll."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
-            await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+            await backend.navigate(f"{local_http_server}example", WaitStrategy(strategy="load"))
             await backend.dom_scroll(x=0, y=100)
         finally:
             await backend.close()
 
-    async def test_dom_action_via_action_class(self):
+    async def test_dom_action_via_action_class(self, local_http_server):
         """Test dom action via action class."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = DOMParams(
-                url="https://example.com",
+                url=f"{local_http_server}example",
                 action="get",
                 selector="h1",
                 wait=WaitStrategy(strategy="load"),

@@ -21,10 +21,12 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_css_styles(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_css_styles(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test css styles."""
     params = CSSActionParams(
-        url="https://example.com",
+        url=local_http_server,
         action="styles",
         selector="body",
         wait=WaitStrategy(strategy="load"),
@@ -35,10 +37,12 @@ async def test_css_styles(backend: CDPBackend, browser_opts: BrowserOptions) -> 
     assert "inlineStyles" in result
 
 
-async def test_css_stylesheets(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_css_stylesheets(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test css stylesheets."""
     params = CSSActionParams(
-        url="https://example.com",
+        url=local_http_server,
         action="stylesheets",
         wait=WaitStrategy(strategy="load"),
         browser=browser_opts,
@@ -47,10 +51,12 @@ async def test_css_stylesheets(backend: CDPBackend, browser_opts: BrowserOptions
     assert isinstance(result, list)
 
 
-async def test_css_computed(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_css_computed(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test css computed."""
     params = CSSActionParams(
-        url="https://example.com",
+        url=local_http_server,
         action="computed",
         selector="body",
         wait=WaitStrategy(strategy="load"),

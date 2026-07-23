@@ -1143,6 +1143,14 @@ class TestCDPMethodBodies:
         assert handle._subscription_counter == 0
         assert handle._trace_counter == 0
 
+    async def test_new_tab_handle_rejects_invalid_url(self) -> None:
+        """new_tab_handle must validate the initial URL."""
+        from wavexis.exceptions import ActionError
+
+        backend, _, _ = _make_mock_backend()
+        with pytest.raises(ActionError, match="scheme"):
+            await backend.new_tab_handle("file:///etc/passwd")
+
     async def test_launch_with_browser_url(self) -> None:
         from wavexis.backend.cdp import CDPBackend
 

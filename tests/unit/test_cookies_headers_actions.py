@@ -9,6 +9,7 @@ import pytest
 from wavexis.actions.cookies import CookieAction
 from wavexis.actions.headers import HeaderAction
 from wavexis.config import CookieActionParams, CookieParams, HeaderParams
+from wavexis.exceptions import ActionError
 
 
 @pytest.mark.unit
@@ -100,15 +101,9 @@ class TestCookieAction:
         backend.clear_cookies.assert_called_once()
 
     async def test_unknown_action(self) -> None:
-        """Test unknown action raises ValueError."""
-        backend = MagicMock()
-        backend.launch = AsyncMock()
-        backend.navigate = AsyncMock()
-        backend.close = AsyncMock()
-
-        params = CookieActionParams(url="https://example.com", action="invalid")
-        with pytest.raises(ValueError, match="Unknown cookie action"):
-            await CookieAction(params).execute(backend)
+        """Test unknown action is rejected at validation time."""
+        with pytest.raises(ActionError, match="cookie action"):
+            CookieActionParams(url="https://example.com", action="invalid")
 
     async def test_no_url_skips_navigate(self) -> None:
         """Test that empty URL skips navigation."""
@@ -184,12 +179,6 @@ class TestHeaderAction:
             await HeaderAction(params).execute(backend)
 
     async def test_unknown_action(self) -> None:
-        """Test unknown action raises ValueError."""
-        backend = MagicMock()
-        backend.launch = AsyncMock()
-        backend.navigate = AsyncMock()
-        backend.close = AsyncMock()
-
-        params = HeaderParams(url="https://example.com", action="invalid")
-        with pytest.raises(ValueError, match="Unknown header action"):
-            await HeaderAction(params).execute(backend)
+        """Test unknown action is rejected at validation time."""
+        with pytest.raises(ActionError, match="header action"):
+            HeaderParams(url="https://example.com", action="invalid")

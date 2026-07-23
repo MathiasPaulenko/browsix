@@ -11,14 +11,14 @@ from wavexis.config import BrowserOptions, WaitStrategy
 class TestConsoleIntegration:
     """Integration tests for console capture against real Chrome."""
 
-    async def test_capture_console(self):
+    async def test_capture_console(self, local_http_server):
         """Test capture console."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = ConsoleParams(
-                url="https://example.com",
+                url=local_http_server,
                 capture="console",
                 wait=WaitStrategy(strategy="load"),
             )
@@ -29,14 +29,14 @@ class TestConsoleIntegration:
         finally:
             await backend.close()
 
-    async def test_capture_logs(self):
+    async def test_capture_logs(self, local_http_server):
         """Test capture logs."""
         manager = BackendManager()
         backend = manager.select()
         try:
             await backend.launch(BrowserOptions())
             params = ConsoleParams(
-                url="https://example.com",
+                url=local_http_server,
                 capture="logs",
                 wait=WaitStrategy(strategy="load"),
             )

@@ -7,6 +7,7 @@ import pytest
 from wavexis.actions.input import InputAction
 from wavexis.backend.base import AbstractBackend
 from wavexis.config import InputParams
+from wavexis.exceptions import ActionError
 
 
 @pytest.mark.unit
@@ -107,8 +108,6 @@ class TestInputAction:
         backend.tap.assert_called_once_with("#el")
 
     async def test_unknown_action_raises(self) -> None:
-        """Test that unknown action raises raises an appropriate error."""
-        backend = self._make_backend()
-        params = InputParams(url="https://example.com", action="unknown")
-        with pytest.raises(ValueError, match="Unknown input action"):
-            await InputAction(params).execute(backend)
+        """Test that an unknown input action is rejected at validation time."""
+        with pytest.raises(ActionError, match="input action"):
+            InputParams(url="https://example.com", action="unknown")

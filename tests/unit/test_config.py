@@ -6,10 +6,13 @@ from wavexis.config import (
     DEVICE_PRESETS,
     PAPER_SIZES,
     BrowserOptions,
+    CookieActionParams,
     CookieParams,
     DOMParams,
     EvalParams,
     HarParams,
+    HeaderParams,
+    InputParams,
     NetworkParams,
     PDFParams,
     ScrapeParams,
@@ -320,6 +323,17 @@ class TestCookieParams:
         assert params.name == "session"
         assert params.domain == ".example.com"
 
+    def test_rejects_path_traversal(self):
+        """Cookie paths must be absolute and free of traversal sequences."""
+        from wavexis.exceptions import ActionError
+
+        with pytest.raises(ActionError, match="path"):
+            CookieParams(path="/../etc")
+
+    def test_rejects_non_absolute_path(self):
+        with pytest.raises(ActionError, match="path"):
+            CookieParams(path="relative/path")
+
 
 class TestNetworkParams:
     """Tests for NetworkParams dataclass."""
@@ -373,3 +387,27 @@ class TestURLValidation:
         """about:blank is a valid navigation target with no hostname."""
         params = ScreenshotParams(url="about:blank")
         assert params.url == "about:blank"
+
+
+class TestInputParams:
+    """Tests for InputParams dataclass."""
+
+    def test_rejects_invalid_action(self):
+        with pytest.raises(ActionError, match="input action"):
+            InputParams(action="middle_click")
+
+
+class TestCookieActionParams:
+    """Tests for CookieActionParams dataclass."""
+
+    def test_rejects_invalid_action(self):
+        with pytest.raises(ActionError, match="cookie action"):
+            CookieActionParams(action="modify")
+
+
+class TestHeaderParams:
+    """Tests for HeaderParams dataclass."""
+
+    def test_rejects_invalid_action(self):
+        with pytest.raises(ActionError, match="header action"):
+            HeaderParams(action="add")

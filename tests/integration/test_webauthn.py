@@ -22,11 +22,11 @@ def browser_opts() -> BrowserOptions:
 
 
 async def test_webauthn_add_virtual_authenticator(
-    backend: CDPBackend, browser_opts: BrowserOptions
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
 ) -> None:
     """Test webauthn add virtual authenticator."""
     params = WebAuthnParams(
-        url="https://example.com",
+        url=local_http_server,
         action="add-virtual-authenticator",
         protocol="ctap2",
         transport="usb",
@@ -39,12 +39,12 @@ async def test_webauthn_add_virtual_authenticator(
 
 
 async def test_webauthn_add_and_get_credentials(
-    backend: CDPBackend, browser_opts: BrowserOptions
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
 ) -> None:
     """Test webauthn add and get credentials in a single session."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
         auth_id = await backend.webauthn_add_virtual_authenticator("ctap2", "usb")
         assert isinstance(auth_id, str)
         assert len(auth_id) > 0

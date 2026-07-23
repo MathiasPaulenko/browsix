@@ -20,11 +20,13 @@ def browser_opts() -> BrowserOptions:
     return BrowserOptions(headless=True)
 
 
-async def test_storage_set_and_get(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_storage_set_and_get(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test storage set and get in a single browser session."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
         await backend.storage_set("test_key", "test_value")
         result = await backend.storage_get("test_key")
         assert result == "test_value"
@@ -32,11 +34,13 @@ async def test_storage_set_and_get(backend: CDPBackend, browser_opts: BrowserOpt
         await backend.close()
 
 
-async def test_storage_list(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_storage_list(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test storage list in a single browser session."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
         await backend.storage_set("list_key", "list_value")
         result = await backend.storage_list()
         assert "list_key" in result
@@ -45,11 +49,13 @@ async def test_storage_list(backend: CDPBackend, browser_opts: BrowserOptions) -
         await backend.close()
 
 
-async def test_storage_clear(backend: CDPBackend, browser_opts: BrowserOptions) -> None:
+async def test_storage_clear(
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
+) -> None:
     """Test storage clear in a single browser session."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
         await backend.storage_set("clear_key", "clear_value")
         await backend.storage_clear()
         result = await backend.storage_list()
@@ -59,12 +65,12 @@ async def test_storage_clear(backend: CDPBackend, browser_opts: BrowserOptions) 
 
 
 async def test_storage_session_set_and_get(
-    backend: CDPBackend, browser_opts: BrowserOptions
+    backend: CDPBackend, browser_opts: BrowserOptions, local_http_server: str
 ) -> None:
     """Test storage session set and get in a single browser session."""
     await backend.launch(browser_opts)
     try:
-        await backend.navigate("https://example.com", WaitStrategy(strategy="load"))
+        await backend.navigate(local_http_server, WaitStrategy(strategy="load"))
         await backend.storage_set("session_key", "session_value", "session")
         result = await backend.storage_get("session_key", "session")
         assert result == "session_value"
