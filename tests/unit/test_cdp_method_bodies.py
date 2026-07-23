@@ -1189,6 +1189,8 @@ class TestCDPMethodBodies:
             mock_client_cls.launch = AsyncMock(return_value=mock_client)
             mock_client_cls.connect = AsyncMock(return_value=mock_client)
             await backend.launch(BrowserOptions())
+            mock_client_cls.launch.assert_not_called()
+            mock_client_cls.connect.assert_not_called()
 
     async def test_launch_closes_client_on_setup_error(self) -> None:
         from wavexis.backend.cdp import CDPBackend

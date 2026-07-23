@@ -209,6 +209,13 @@ class CDPBackend(AbstractBackend):
         Args:
             options: Browser launch options (headless, width, height, proxy, etc.).
         """
+        if self._client is not None and self._session is not None:
+            return
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                await self._client.close()
+            self._client = None
+
         extra_args: list[str] = []
         if options.width and options.height:
             extra_args.append(f"--window-size={options.width},{options.height}")

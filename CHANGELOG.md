@@ -10,6 +10,7 @@ All notable changes to wavexis are documented in this file.
 - **Auth context strict origin binding** — when `target_origin` is set, it is the only allowed origin; cookie domains can no longer bypass it.
 - **Serve-mode WebSocket hardening** — WebSocket `navigate` and `eval` commands now validate URL schemes and expression length; the screenshot format allowlist matches the backend (`png`/`jpeg`); authorization token parsing avoids `removeprefix` timing side-channels; the DOM mutation observer queue is bounded.
 - **Connection timeouts** — `CDPBackend.launch` and `BiDiBackend.launch` now wrap `connect()` calls with `asyncio.wait_for` to avoid hanging on unreachable endpoints.
+- **Backend launch idempotency** — `CDPBackend.launch` is now a no-op when the backend is already launched, preventing pooled backends from spawning duplicate browser processes.
 
 ### Bug Fixes
 
