@@ -222,28 +222,52 @@ async def _user_agent(ua: str, url: str = "") -> str | None:
 @app.command()
 def browser(
     action: str = typer.Argument(
-        "version", help="Browser action: version, new_context, list_contexts"
+        "version",
+        help=(
+            "Browser action: version, new_context, list_contexts, "
+            "close_context, get_window, set_window"
+        ),
     ),
+    context_id: str = typer.Option("", "--context-id", help="Context ID for close_context"),
+    width: int = typer.Option(0, "--width", help="Window width for set_window"),
+    height: int = typer.Option(0, "--height", help="Window height for set_window"),
+    x: int = typer.Option(0, "--x", help="Window X position for set_window"),
+    y: int = typer.Option(0, "--y", help="Window Y position for set_window"),
 ) -> None:
-    """Browser management commands (version, contexts)."""
-    result = _run_async(_browser(action))
+    """Browser management commands (version, contexts, window bounds)."""
+    result = _run_async(_browser(action, context_id, width, height, x, y))
     if result is None:
         return
 
     if isinstance(result, str):
         typer.echo(result)
-    elif isinstance(result, list):
+    elif isinstance(result, (list, dict)):
         typer.echo(json.dumps(result, indent=2, default=str))
     else:
         typer.echo("Done")
 
 
-async def _browser(action: str) -> Any:
+async def _browser(
+    action: str,
+    context_id: str,
+    width: int,
+    height: int,
+    x: int,
+    y: int,
+) -> Any:
     """Async helper for browser management."""
     backend = _get_backend()
     try:
         await backend.launch(_browser_options())
-        return await BrowserAction(action).execute(backend)
+        kwargs: dict[str, Any] = {}
+        if action == "close_context":
+            kwargs["context_id"] = context_id or None
+        elif action == "set_window":
+            kwargs["width"] = width if width > 0 else None
+            kwargs["height"] = height if height > 0 else None
+            kwargs["x"] = x
+            kwargs["y"] = y
+        return await BrowserAction(action, **kwargs).execute(backend)
     finally:
         await _close_backend(backend)
 

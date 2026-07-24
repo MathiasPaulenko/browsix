@@ -11,6 +11,10 @@ All notable changes to wavexis are documented in this file.
 - Polished `docs/index.md` and removed duplicate headings in `docs/api/actions.md` and `docs/guide/commands.md`.
 - Fixed bare email URLs in `SECURITY.md`, `CODE_OF_CONDUCT.md`, and `CONTRIBUTING.md`.
 
+### Bug fixes
+
+- Implemented `close_context`, `get_window`, and `set_window` actions in `BrowserAction`; exposed them via the `browser` CLI command with `--context-id`, `--width`, `--height`, `--x`, and `--y` options; added unit tests.
+
 ### CI / tooling
 
 - Upgraded all GitHub Actions to current major versions.

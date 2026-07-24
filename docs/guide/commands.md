@@ -372,7 +372,19 @@ Browser management commands.
 wavexis browser <action>
 ```
 
-Actions: `version`, `new_context`, `list_contexts`
+Actions: `version`, `new_context`, `list_contexts`, `close_context`, `get_window`, `set_window`
+
+```bash
+# Create and then close a context
+wavexis browser new_context
+wavexis browser close_context --context-id <id>
+
+# Get current window bounds
+wavexis browser get_window
+
+# Set window size and position
+wavexis browser set_window --width 1920 --height 1080 --x 0 --y 0
+```
 
 ## devices
 

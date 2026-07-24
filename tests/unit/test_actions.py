@@ -69,11 +69,11 @@ class FakeBackend:
         self.set_user_agent = AsyncMock()
         self.new_context = AsyncMock(return_value="ctx-1")
         self.list_contexts = AsyncMock(return_value=[{"contextId": "ctx-1"}])
-        self.close_context = AsyncMock()
+        self.close_context = AsyncMock(return_value=None)
         self.get_window_bounds = AsyncMock(
             return_value={"width": 1280, "height": 800, "x": 0, "y": 0}
         )
-        self.set_window_bounds = AsyncMock()
+        self.set_window_bounds = AsyncMock(return_value=None)
         self.browser_version = AsyncMock(return_value="Chrome/120.0")
 
 
@@ -599,3 +599,41 @@ class TestBrowserAction:
         result = await action.execute(backend)
         assert result == [{"contextId": "ctx-1"}]
         backend.list_contexts.assert_called_once()
+
+    @pytest.mark.unit
+    async def test_close_context(self, backend: FakeBackend):
+        """Test close context."""
+        from wavexis.actions.browser import BrowserAction
+        from wavexis.exceptions import ActionError
+
+        with pytest.raises(ActionError, match="--context-id is required"):
+            await BrowserAction("close_context").execute(backend)
+
+        action = BrowserAction("close_context", context_id="ctx-1")
+        result = await action.execute(backend)
+        assert result is None
+        backend.close_context.assert_called_once_with("ctx-1")
+
+    @pytest.mark.unit
+    async def test_get_window(self, backend: FakeBackend):
+        """Test get window bounds."""
+        from wavexis.actions.browser import BrowserAction
+
+        action = BrowserAction("get_window")
+        result = await action.execute(backend)
+        assert result == {"width": 1280, "height": 800, "x": 0, "y": 0}
+        backend.get_window_bounds.assert_called_once()
+
+    @pytest.mark.unit
+    async def test_set_window(self, backend: FakeBackend):
+        """Test set window bounds."""
+        from wavexis.actions.browser import BrowserAction
+        from wavexis.exceptions import ActionError
+
+        with pytest.raises(ActionError, match="--width and --height are required"):
+            await BrowserAction("set_window").execute(backend)
+
+        action = BrowserAction("set_window", width=1920, height=1080, x=10, y=20)
+        result = await action.execute(backend)
+        assert result is None
+        backend.set_window_bounds.assert_called_once_with(1920, 1080, 10, 20)
