@@ -9638,6 +9638,13 @@ class BiDiBackend(AbstractBackend):
     async def debugger_continue_to_location(
         self, location: dict[str, Any], target_call_frames: str | None = None
     ) -> None:
+        """Call the `Debugger.continueToLocation` CDP command.
+        
+        Args:
+            location (dict[str, Any]): The location value.
+            target_call_frames (str | None): The target call frames value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"location": location}
         if target_call_frames is not None:
@@ -9645,16 +9652,34 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("Debugger.continueToLocation", params)
 
     async def debugger_disable(self) -> None:
+        """Call the `Debugger.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.disable", {})
 
     async def debugger_disassemble_wasm_module(self, script_id: str) -> dict[str, Any]:
+        """Call the `Debugger.disassembleWasmModule` CDP command.
+        
+        Args:
+            script_id (str): The script id value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command("Debugger.disassembleWasmModule", {"scriptId": script_id})
         )
 
     async def debugger_enable(self, max_scripts_cache_size: int | None = None) -> None:
+        """Call the `Debugger.enable` CDP command.
+        
+        Args:
+            max_scripts_cache_size (int | None): The max scripts cache size value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if max_scripts_cache_size is not None:
@@ -9673,6 +9698,23 @@ class BiDiBackend(AbstractBackend):
         throw_on_side_effect: bool | None = None,
         timeout: float | None = None,
     ) -> dict[str, Any]:
+        """Call the `Debugger.evaluateOnCallFrame` CDP command.
+        
+        Args:
+            call_frame_id (str): The call frame id value.
+            expression (str): The expression value.
+            object_group (str | None): The object group value.
+            include_command_line_api (bool | None): The include command line api value.
+            silent (bool | None): The silent value.
+            return_by_value (bool | None): The return by value value.
+            generate_preview (bool | None): The generate preview value.
+            throw_on_side_effect (bool | None): The throw on side effect value.
+            timeout (float | None): The timeout value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"callFrameId": call_frame_id, "expression": expression}
         if object_group is not None:
@@ -9697,6 +9739,17 @@ class BiDiBackend(AbstractBackend):
         end: dict[str, Any] | None = None,
         restrict_to_function: bool | None = None,
     ) -> list[dict[str, Any]]:
+        """Call the `Debugger.getPossibleBreakpoints` CDP command.
+        
+        Args:
+            start (dict[str, Any]): The start value.
+            end (dict[str, Any] | None): The end value.
+            restrict_to_function (bool | None): The restrict to function value.
+        
+        Returns:
+            list[dict[str, Any]]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"start": start}
         if end is not None:
@@ -9707,11 +9760,29 @@ class BiDiBackend(AbstractBackend):
         return list(result.get("locations", []))
 
     async def debugger_get_script_source(self, script_id: str) -> str:
+        """Call the `Debugger.getScriptSource` CDP command.
+        
+        Args:
+            script_id (str): The script id value.
+        
+        Returns:
+            str: The command result.
+        
+        """
         client = self._require_launched()
         result = await client.cdp.send_command("Debugger.getScriptSource", {"scriptId": script_id})
         return str(result.get("scriptSource", ""))
 
     async def debugger_get_stack_trace(self, stack_trace_id: dict[str, Any]) -> dict[str, Any]:
+        """Call the `Debugger.getStackTrace` CDP command.
+        
+        Args:
+            stack_trace_id (dict[str, Any]): The stack trace id value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command(
@@ -9720,12 +9791,30 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def debugger_get_wasm_bytecode(self, script_id: str) -> dict[str, Any]:
+        """Call the `Debugger.getWasmBytecode` CDP command.
+        
+        Args:
+            script_id (str): The script id value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command("Debugger.getWasmBytecode", {"scriptId": script_id})
         )
 
     async def debugger_next_wasm_disassembly_chunk(self, stream_id: str) -> dict[str, Any]:
+        """Call the `Debugger.nextWasmDisassemblyChunk` CDP command.
+        
+        Args:
+            stream_id (str): The stream id value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command(
@@ -9734,26 +9823,54 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def debugger_pause(self) -> None:
+        """Call the `Debugger.pause` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.pause", {})
 
     async def debugger_pause_on_async_call(self, parent_stack_trace_id: dict[str, Any]) -> None:
+        """Call the `Debugger.pauseOnAsyncCall` CDP command.
+        
+        Args:
+            parent_stack_trace_id (dict[str, Any]): The parent stack trace id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "Debugger.pauseOnAsyncCall", {"parentStackTraceId": parent_stack_trace_id}
         )
 
     async def debugger_remove_breakpoint(self, breakpoint_id: str) -> None:
+        """Call the `Debugger.removeBreakpoint` CDP command.
+        
+        Args:
+            breakpoint_id (str): The breakpoint id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.removeBreakpoint", {"breakpointId": breakpoint_id})
 
     async def debugger_restart_frame(self, call_frame_id: str, mode: str) -> None:
+        """Call the `Debugger.restartFrame` CDP command.
+        
+        Args:
+            call_frame_id (str): The call frame id value.
+            mode (str): The mode value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "Debugger.restartFrame", {"callFrameId": call_frame_id, "mode": mode}
         )
 
     async def debugger_resume(self, terminate_on_resume: bool | None = None) -> None:
+        """Call the `Debugger.resume` CDP command.
+        
+        Args:
+            terminate_on_resume (bool | None): The terminate on resume value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if terminate_on_resume is not None:
@@ -9767,6 +9884,18 @@ class BiDiBackend(AbstractBackend):
         case_sensitive: bool | None = None,
         is_regex: bool | None = None,
     ) -> list[dict[str, Any]]:
+        """Call the `Debugger.searchInContent` CDP command.
+        
+        Args:
+            script_id (str): The script id value.
+            query (str): The query value.
+            case_sensitive (bool | None): The case sensitive value.
+            is_regex (bool | None): The is regex value.
+        
+        Returns:
+            list[dict[str, Any]]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"scriptId": script_id, "query": query}
         if case_sensitive is not None:
@@ -9777,12 +9906,24 @@ class BiDiBackend(AbstractBackend):
         return list(result.get("result", []))
 
     async def debugger_set_async_call_stack_depth(self, max_depth: int) -> None:
+        """Call the `Debugger.setAsyncCallStackDepth` CDP command.
+        
+        Args:
+            max_depth (int): The max depth value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.setAsyncCallStackDepth", {"maxDepth": max_depth})
 
     async def debugger_set_blackbox_execution_contexts(
         self, execution_context_ids: list[int]
     ) -> None:
+        """Call the `Debugger.setBlackboxExecutionContexts` CDP command.
+        
+        Args:
+            execution_context_ids (list[int]): The execution context ids value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "Debugger.setBlackboxExecutionContexts", {"executionContextIds": execution_context_ids}
@@ -9791,6 +9932,13 @@ class BiDiBackend(AbstractBackend):
     async def debugger_set_blackbox_patterns(
         self, patterns: list[str], skip_anonymous: bool | None = None
     ) -> None:
+        """Call the `Debugger.setBlackboxPatterns` CDP command.
+        
+        Args:
+            patterns (list[str]): The patterns value.
+            skip_anonymous (bool | None): The skip anonymous value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"patterns": patterns}
         if skip_anonymous is not None:
@@ -9800,6 +9948,13 @@ class BiDiBackend(AbstractBackend):
     async def debugger_set_blackboxed_ranges(
         self, script_id: str, positions: list[dict[str, Any]]
     ) -> None:
+        """Call the `Debugger.setBlackboxedRanges` CDP command.
+        
+        Args:
+            script_id (str): The script id value.
+            positions (list[dict[str, Any]]): The positions value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "Debugger.setBlackboxedRanges", {"scriptId": script_id, "positions": positions}
@@ -9808,6 +9963,16 @@ class BiDiBackend(AbstractBackend):
     async def debugger_set_breakpoint(
         self, location: dict[str, Any], condition: str | None = None
     ) -> dict[str, Any]:
+        """Call the `Debugger.setBreakpoint` CDP command.
+        
+        Args:
+            location (dict[str, Any]): The location value.
+            condition (str | None): The condition value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"location": location}
         if condition is not None:
@@ -9823,6 +9988,20 @@ class BiDiBackend(AbstractBackend):
         column_number: int | None = None,
         condition: str | None = None,
     ) -> dict[str, Any]:
+        """Call the `Debugger.setBreakpointByUrl` CDP command.
+        
+        Args:
+            line_number (int): The line number value.
+            url (str | None): The url value.
+            url_regex (str | None): The url regex value.
+            script_hash (str | None): The script hash value.
+            column_number (int | None): The column number value.
+            condition (str | None): The condition value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"lineNumber": line_number}
         if url is not None:
@@ -9840,6 +10019,13 @@ class BiDiBackend(AbstractBackend):
     async def debugger_set_breakpoint_on_function_call(
         self, object_id: str, condition: str | None = None
     ) -> None:
+        """Call the `Debugger.setBreakpointOnFunctionCall` CDP command.
+        
+        Args:
+            object_id (str): The object id value.
+            condition (str | None): The condition value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"objectId": object_id}
         if condition is not None:
@@ -9847,20 +10033,44 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("Debugger.setBreakpointOnFunctionCall", params)
 
     async def debugger_set_breakpoints_active(self, active: bool) -> None:
+        """Call the `Debugger.setBreakpointsActive` CDP command.
+        
+        Args:
+            active (bool): The active value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.setBreakpointsActive", {"active": active})
 
     async def debugger_set_instrumentation_breakpoint(self, instrumentation: str) -> None:
+        """Call the `Debugger.setInstrumentationBreakpoint` CDP command.
+        
+        Args:
+            instrumentation (str): The instrumentation value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "Debugger.setInstrumentationBreakpoint", {"instrumentation": instrumentation}
         )
 
     async def debugger_set_pause_on_exceptions(self, state: str) -> None:
+        """Call the `Debugger.setPauseOnExceptions` CDP command.
+        
+        Args:
+            state (str): The state value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.setPauseOnExceptions", {"state": state})
 
     async def debugger_set_return_value(self, new_value: dict[str, Any]) -> None:
+        """Call the `Debugger.setReturnValue` CDP command.
+        
+        Args:
+            new_value (dict[str, Any]): The new value value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.setReturnValue", {"newValue": new_value})
 
@@ -9871,6 +10081,18 @@ class BiDiBackend(AbstractBackend):
         dry_run: bool | None = None,
         allow_top_frame_editing: bool | None = None,
     ) -> dict[str, Any]:
+        """Call the `Debugger.setScriptSource` CDP command.
+        
+        Args:
+            script_id (str): The script id value.
+            source (str): The source value.
+            dry_run (bool | None): The dry run value.
+            allow_top_frame_editing (bool | None): The allow top frame editing value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"scriptId": script_id, "source": source}
         if dry_run is not None:
@@ -9880,6 +10102,12 @@ class BiDiBackend(AbstractBackend):
         return dict(await client.cdp.send_command("Debugger.setScriptSource", params))
 
     async def debugger_set_skip_all_pauses(self, skip: bool) -> None:
+        """Call the `Debugger.setSkipAllPauses` CDP command.
+        
+        Args:
+            skip (bool): The skip value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.setSkipAllPauses", {"skip": skip})
 
@@ -9890,6 +10118,15 @@ class BiDiBackend(AbstractBackend):
         variable_name: str,
         new_value: dict[str, Any],
     ) -> None:
+        """Call the `Debugger.setVariableValue` CDP command.
+        
+        Args:
+            call_frame_id (str): The call frame id value.
+            scope_number (int): The scope number value.
+            variable_name (str): The variable name value.
+            new_value (dict[str, Any]): The new value value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "Debugger.setVariableValue",
@@ -9906,6 +10143,13 @@ class BiDiBackend(AbstractBackend):
         break_on_async_call: bool | None = None,
         skip_list: list[dict[str, Any]] | None = None,
     ) -> None:
+        """Call the `Debugger.stepInto` CDP command.
+        
+        Args:
+            break_on_async_call (bool | None): The break on async call value.
+            skip_list (list[dict[str, Any]] | None): The skip list value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if break_on_async_call is not None:
@@ -9915,10 +10159,19 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("Debugger.stepInto", params)
 
     async def debugger_step_out(self) -> None:
+        """Call the `Debugger.stepOut` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Debugger.stepOut", {})
 
     async def debugger_step_over(self, skip_list: list[dict[str, Any]] | None = None) -> None:
+        """Call the `Debugger.stepOver` CDP command.
+        
+        Args:
+            skip_list (list[dict[str, Any]] | None): The skip list value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if skip_list is not None:
@@ -9928,24 +10181,48 @@ class BiDiBackend(AbstractBackend):
     # ── HeapProfiler (CDP bridge) ─────────────────────────
 
     async def heap_profiler_add_inspected_heap_object(self, heap_object_id: str) -> None:
+        """Call the `HeapProfiler.addInspectedHeapObject` CDP command.
+        
+        Args:
+            heap_object_id (str): The heap object id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "HeapProfiler.addInspectedHeapObject", {"heapObjectId": heap_object_id}
         )
 
     async def heap_profiler_collect_garbage(self) -> None:
+        """Call the `HeapProfiler.collectGarbage` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("HeapProfiler.collectGarbage", {})
 
     async def heap_profiler_disable(self) -> None:
+        """Call the `HeapProfiler.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("HeapProfiler.disable", {})
 
     async def heap_profiler_enable(self) -> None:
+        """Call the `HeapProfiler.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("HeapProfiler.enable", {})
 
     async def heap_profiler_get_heap_object_id(self, object_id: str) -> str:
+        """Call the `HeapProfiler.getHeapObjectId` CDP command.
+        
+        Args:
+            object_id (str): The object id value.
+        
+        Returns:
+            str: The command result.
+        
+        """
         client = self._require_launched()
         result = await client.cdp.send_command(
             "HeapProfiler.getHeapObjectId", {"objectId": object_id}
@@ -9955,6 +10232,16 @@ class BiDiBackend(AbstractBackend):
     async def heap_profiler_get_object_by_heap_object_id(
         self, heap_object_id: str, object_group: str | None = None
     ) -> dict[str, Any]:
+        """Call the `HeapProfiler.getObjectByHeapObjectId` CDP command.
+        
+        Args:
+            heap_object_id (str): The heap object id value.
+            object_group (str | None): The object group value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"heapObjectId": heap_object_id}
         if object_group is not None:
@@ -9962,6 +10249,12 @@ class BiDiBackend(AbstractBackend):
         return dict(await client.cdp.send_command("HeapProfiler.getObjectByHeapObjectId", params))
 
     async def heap_profiler_get_sampling_profile(self) -> dict[str, Any]:
+        """Call the `HeapProfiler.getSamplingProfile` CDP command.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(await client.cdp.send_command("HeapProfiler.getSamplingProfile", {}))
 
@@ -9972,6 +10265,15 @@ class BiDiBackend(AbstractBackend):
         include_objects_collected_by_major_gc: bool = False,
         include_objects_collected_by_minor_gc: bool = False,
     ) -> None:
+        """Call the `HeapProfiler.startSampling` CDP command.
+        
+        Args:
+            sampling_interval (float | None): The sampling interval value.
+            stack_depth (float | None): The stack depth value.
+            include_objects_collected_by_major_gc (bool): The include objects collected by major gc value.
+            include_objects_collected_by_minor_gc (bool): The include objects collected by minor gc value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {
             "includeObjectsCollectedByMajorGC": include_objects_collected_by_major_gc,
@@ -9986,12 +10288,24 @@ class BiDiBackend(AbstractBackend):
     async def heap_profiler_start_tracking_heap_objects(
         self, track_allocations: bool = False
     ) -> None:
+        """Call the `HeapProfiler.startTrackingHeapObjects` CDP command.
+        
+        Args:
+            track_allocations (bool): The track allocations value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "HeapProfiler.startTrackingHeapObjects", {"trackAllocations": track_allocations}
         )
 
     async def heap_profiler_stop_sampling(self) -> dict[str, Any]:
+        """Call the `HeapProfiler.stopSampling` CDP command.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(await client.cdp.send_command("HeapProfiler.stopSampling", {}))
 
@@ -10001,6 +10315,17 @@ class BiDiBackend(AbstractBackend):
         capture_numeric_value: bool = False,
         expose_internals: bool = False,
     ) -> dict[str, Any]:
+        """Call the `HeapProfiler.stopTrackingHeapObjects` CDP command.
+        
+        Args:
+            report_progress (bool): The report progress value.
+            capture_numeric_value (bool): The capture numeric value value.
+            expose_internals (bool): The expose internals value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command(
@@ -10019,6 +10344,14 @@ class BiDiBackend(AbstractBackend):
         capture_numeric_value: bool = False,
         expose_internals: bool = False,
     ) -> None:
+        """Call the `HeapProfiler.takeHeapSnapshot` CDP command.
+        
+        Args:
+            report_progress (bool): The report progress value.
+            capture_numeric_value (bool): The capture numeric value value.
+            expose_internals (bool): The expose internals value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "HeapProfiler.takeHeapSnapshot",
@@ -10032,16 +10365,29 @@ class BiDiBackend(AbstractBackend):
     # ── SmartCardEmulation (CDP bridge) ───────────────────
 
     async def smart_card_emulation_disable(self) -> None:
+        """Call the `SmartCardEmulation.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("SmartCardEmulation.disable", {})
 
     async def smart_card_emulation_enable(self) -> None:
+        """Call the `SmartCardEmulation.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("SmartCardEmulation.enable", {})
 
     async def smart_card_emulation_report_begin_transaction_result(
         self, request_id: str, handle: int
     ) -> None:
+        """Call the `SmartCardEmulation.reportBeginTransactionResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            handle (int): The handle value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportBeginTransactionResult",
@@ -10051,6 +10397,14 @@ class BiDiBackend(AbstractBackend):
     async def smart_card_emulation_report_connect_result(
         self, request_id: str, handle: int, active_protocol: str | None = None
     ) -> None:
+        """Call the `SmartCardEmulation.reportConnectResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            handle (int): The handle value.
+            active_protocol (str | None): The active protocol value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"requestId": request_id, "handle": handle}
         if active_protocol is not None:
@@ -10058,12 +10412,26 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("SmartCardEmulation.reportConnectResult", params)
 
     async def smart_card_emulation_report_data_result(self, request_id: str, data: str) -> None:
+        """Call the `SmartCardEmulation.reportDataResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            data (str): The data value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportDataResult", {"requestId": request_id, "data": data}
         )
 
     async def smart_card_emulation_report_error(self, request_id: str, result_code: str) -> None:
+        """Call the `SmartCardEmulation.reportError` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            result_code (str): The result code value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportError", {"requestId": request_id, "resultCode": result_code}
@@ -10072,6 +10440,13 @@ class BiDiBackend(AbstractBackend):
     async def smart_card_emulation_report_establish_context_result(
         self, request_id: str, context_id: int
     ) -> None:
+        """Call the `SmartCardEmulation.reportEstablishContextResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            context_id (int): The context id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportEstablishContextResult",
@@ -10081,6 +10456,13 @@ class BiDiBackend(AbstractBackend):
     async def smart_card_emulation_report_get_status_change_result(
         self, request_id: str, reader_states: list[dict[str, Any]]
     ) -> None:
+        """Call the `SmartCardEmulation.reportGetStatusChangeResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            reader_states (list[dict[str, Any]]): The reader states value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportGetStatusChangeResult",
@@ -10090,6 +10472,13 @@ class BiDiBackend(AbstractBackend):
     async def smart_card_emulation_report_list_readers_result(
         self, request_id: str, readers: list[str]
     ) -> None:
+        """Call the `SmartCardEmulation.reportListReadersResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            readers (list[str]): The readers value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportListReadersResult",
@@ -10097,12 +10486,24 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def smart_card_emulation_report_plain_result(self, request_id: str) -> None:
+        """Call the `SmartCardEmulation.reportPlainResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportPlainResult", {"requestId": request_id}
         )
 
     async def smart_card_emulation_report_release_context_result(self, request_id: str) -> None:
+        """Call the `SmartCardEmulation.reportReleaseContextResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "SmartCardEmulation.reportReleaseContextResult", {"requestId": request_id}
@@ -10116,6 +10517,16 @@ class BiDiBackend(AbstractBackend):
         atr: str,
         protocol: str | None = None,
     ) -> None:
+        """Call the `SmartCardEmulation.reportStatusResult` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            reader_name (str): The reader name value.
+            state (str): The state value.
+            atr (str): The atr value.
+            protocol (str | None): The protocol value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {
             "requestId": request_id,
@@ -10137,6 +10548,16 @@ class BiDiBackend(AbstractBackend):
         storage_key: str | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> None:
+        """Call the `IndexedDB.clearObjectStore` CDP command.
+        
+        Args:
+            database_name (str): The database name value.
+            object_store_name (str): The object store name value.
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {
             "databaseName": database_name,
@@ -10157,6 +10578,15 @@ class BiDiBackend(AbstractBackend):
         storage_key: str | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> None:
+        """Call the `IndexedDB.deleteDatabase` CDP command.
+        
+        Args:
+            database_name (str): The database name value.
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"databaseName": database_name}
         if security_origin is not None:
@@ -10176,6 +10606,17 @@ class BiDiBackend(AbstractBackend):
         storage_key: str | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> None:
+        """Call the `IndexedDB.deleteObjectStoreEntries` CDP command.
+        
+        Args:
+            database_name (str): The database name value.
+            object_store_name (str): The object store name value.
+            key_range (dict[str, Any]): The key range value.
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {
             "databaseName": database_name,
@@ -10191,10 +10632,16 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("IndexedDB.deleteObjectStoreEntries", params)
 
     async def indexed_db_disable(self) -> None:
+        """Call the `IndexedDB.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("IndexedDB.disable", {})
 
     async def indexed_db_enable(self) -> None:
+        """Call the `IndexedDB.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("IndexedDB.enable", {})
 
@@ -10206,6 +10653,19 @@ class BiDiBackend(AbstractBackend):
         storage_key: str | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Call the `IndexedDB.getMetadata` CDP command.
+        
+        Args:
+            database_name (str): The database name value.
+            object_store_name (str): The object store name value.
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {
             "databaseName": database_name,
@@ -10231,6 +10691,23 @@ class BiDiBackend(AbstractBackend):
         key_range: dict[str, Any] | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Call the `IndexedDB.requestData` CDP command.
+        
+        Args:
+            database_name (str): The database name value.
+            object_store_name (str): The object store name value.
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            index_name (str): The index name value.
+            skip_count (int): The skip count value.
+            page_size (int): The page size value.
+            key_range (dict[str, Any] | None): The key range value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {
             "databaseName": database_name,
@@ -10256,6 +10733,18 @@ class BiDiBackend(AbstractBackend):
         storage_key: str | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Call the `IndexedDB.requestDatabase` CDP command.
+        
+        Args:
+            database_name (str): The database name value.
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"databaseName": database_name}
         if security_origin is not None:
@@ -10272,6 +10761,17 @@ class BiDiBackend(AbstractBackend):
         storage_key: str | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Call the `IndexedDB.requestDatabaseNames` CDP command.
+        
+        Args:
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if security_origin is not None:
@@ -10285,25 +10785,58 @@ class BiDiBackend(AbstractBackend):
     # ── LayerTree (CDP bridge) ────────────────────────────
 
     async def layer_tree_compositing_reasons(self, layer_id: str) -> dict[str, Any]:
+        """Call the `LayerTree.compositingReasons` CDP command.
+        
+        Args:
+            layer_id (str): The layer id value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command("LayerTree.compositingReasons", {"layerId": layer_id})
         )
 
     async def layer_tree_disable(self) -> None:
+        """Call the `LayerTree.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("LayerTree.disable", {})
 
     async def layer_tree_enable(self) -> None:
+        """Call the `LayerTree.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("LayerTree.enable", {})
 
     async def layer_tree_load_snapshot(self, tiles: list[dict[str, Any]]) -> str:
+        """Call the `LayerTree.loadSnapshot` CDP command.
+        
+        Args:
+            tiles (list[dict[str, Any]]): The tiles value.
+        
+        Returns:
+            str: The command result.
+        
+        """
         client = self._require_launched()
         result = await client.cdp.send_command("LayerTree.loadSnapshot", {"tiles": tiles})
         return str(result.get("snapshotId", ""))
 
     async def layer_tree_make_snapshot(self, layer_id: str) -> str:
+        """Call the `LayerTree.makeSnapshot` CDP command.
+        
+        Args:
+            layer_id (str): The layer id value.
+        
+        Returns:
+            str: The command result.
+        
+        """
         client = self._require_launched()
         result = await client.cdp.send_command("LayerTree.makeSnapshot", {"layerId": layer_id})
         return str(result.get("snapshotId", ""))
@@ -10315,6 +10848,18 @@ class BiDiBackend(AbstractBackend):
         min_duration: float | None = None,
         clip_rect: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Call the `LayerTree.profileSnapshot` CDP command.
+        
+        Args:
+            snapshot_id (str): The snapshot id value.
+            min_repeat_count (int | None): The min repeat count value.
+            min_duration (float | None): The min duration value.
+            clip_rect (dict[str, Any] | None): The clip rect value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"snapshotId": snapshot_id}
         if min_repeat_count is not None:
@@ -10326,6 +10871,12 @@ class BiDiBackend(AbstractBackend):
         return dict(await client.cdp.send_command("LayerTree.profileSnapshot", params))
 
     async def layer_tree_release_snapshot(self, snapshot_id: str) -> None:
+        """Call the `LayerTree.releaseSnapshot` CDP command.
+        
+        Args:
+            snapshot_id (str): The snapshot id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("LayerTree.releaseSnapshot", {"snapshotId": snapshot_id})
 
@@ -10336,6 +10887,18 @@ class BiDiBackend(AbstractBackend):
         to_step: int | None = None,
         scale: float | None = None,
     ) -> dict[str, Any]:
+        """Call the `LayerTree.replaySnapshot` CDP command.
+        
+        Args:
+            snapshot_id (str): The snapshot id value.
+            from_step (int | None): The from step value.
+            to_step (int | None): The to step value.
+            scale (float | None): The scale value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"snapshotId": snapshot_id}
         if from_step is not None:
@@ -10347,6 +10910,15 @@ class BiDiBackend(AbstractBackend):
         return dict(await client.cdp.send_command("LayerTree.replaySnapshot", params))
 
     async def layer_tree_snapshot_command_log(self, snapshot_id: str) -> dict[str, Any]:
+        """Call the `LayerTree.snapshotCommandLog` CDP command.
+        
+        Args:
+            snapshot_id (str): The snapshot id value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command(
@@ -10357,22 +10929,45 @@ class BiDiBackend(AbstractBackend):
     # ── FedCM (CDP bridge) ────────────────────────────────
 
     async def fed_cm_click_dialog_button(self, dialog_id: str, dialog_button: str) -> None:
+        """Call the `FedCM.clickDialogButton` CDP command.
+        
+        Args:
+            dialog_id (str): The dialog id value.
+            dialog_button (str): The dialog button value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "FedCM.clickDialogButton", {"dialogId": dialog_id, "dialogButton": dialog_button}
         )
 
     async def fed_cm_disable(self) -> None:
+        """Call the `FedCM.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("FedCM.disable", {})
 
     async def fed_cm_dismiss_dialog(self, dialog_id: str, trigger_cooldown: bool = False) -> None:
+        """Call the `FedCM.dismissDialog` CDP command.
+        
+        Args:
+            dialog_id (str): The dialog id value.
+            trigger_cooldown (bool): The trigger cooldown value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "FedCM.dismissDialog", {"dialogId": dialog_id, "triggerCooldown": trigger_cooldown}
         )
 
     async def fed_cm_enable(self, disable_rejection_delay: bool = False) -> None:
+        """Call the `FedCM.enable` CDP command.
+        
+        Args:
+            disable_rejection_delay (bool): The disable rejection delay value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "FedCM.enable", {"disableRejectionDelay": disable_rejection_delay}
@@ -10381,6 +10976,14 @@ class BiDiBackend(AbstractBackend):
     async def fed_cm_open_url(
         self, dialog_id: str, account_index: int, account_url_type: str
     ) -> None:
+        """Call the `FedCM.openURL` CDP command.
+        
+        Args:
+            dialog_id (str): The dialog id value.
+            account_index (int): The account index value.
+            account_url_type (str): The account url type value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "FedCM.openURL",
@@ -10392,10 +10995,20 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def fed_cm_reset_cooldown(self) -> None:
+        """Call the `FedCM.resetCooldown` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("FedCM.resetCooldown", {})
 
     async def fed_cm_select_account(self, dialog_id: str, account_index: int) -> None:
+        """Call the `FedCM.selectAccount` CDP command.
+        
+        Args:
+            dialog_id (str): The dialog id value.
+            account_index (int): The account index value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "FedCM.selectAccount", {"dialogId": dialog_id, "accountIndex": account_index}
@@ -10404,10 +11017,23 @@ class BiDiBackend(AbstractBackend):
     # ── CacheStorage (CDP bridge) ─────────────────────────
 
     async def cache_storage_delete_cache(self, cache_id: str) -> None:
+        """Call the `CacheStorage.deleteCache` CDP command.
+        
+        Args:
+            cache_id (str): The cache id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("CacheStorage.deleteCache", {"cacheId": cache_id})
 
     async def cache_storage_delete_entry(self, cache_id: str, request: str) -> None:
+        """Call the `CacheStorage.deleteEntry` CDP command.
+        
+        Args:
+            cache_id (str): The cache id value.
+            request (str): The request value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "CacheStorage.deleteEntry", {"cacheId": cache_id, "request": request}
@@ -10419,6 +11045,17 @@ class BiDiBackend(AbstractBackend):
         storage_key: str | None = None,
         storage_bucket: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        """Call the `CacheStorage.requestCacheNames` CDP command.
+        
+        Args:
+            security_origin (str | None): The security origin value.
+            storage_key (str | None): The storage key value.
+            storage_bucket (dict[str, Any] | None): The storage bucket value.
+        
+        Returns:
+            list[dict[str, Any]]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if security_origin is not None:
@@ -10433,6 +11070,17 @@ class BiDiBackend(AbstractBackend):
     async def cache_storage_request_cached_response(
         self, cache_id: str, request_url: str, request_headers: list[dict[str, Any]]
     ) -> dict[str, Any]:
+        """Call the `CacheStorage.requestCachedResponse` CDP command.
+        
+        Args:
+            cache_id (str): The cache id value.
+            request_url (str): The request url value.
+            request_headers (list[dict[str, Any]]): The request headers value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command(
@@ -10452,6 +11100,18 @@ class BiDiBackend(AbstractBackend):
         page_size: int | None = None,
         path_filter: str | None = None,
     ) -> dict[str, Any]:
+        """Call the `CacheStorage.requestEntries` CDP command.
+        
+        Args:
+            cache_id (str): The cache id value.
+            skip_count (int | None): The skip count value.
+            page_size (int | None): The page size value.
+            path_filter (str | None): The path filter value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"cacheId": cache_id}
         if skip_count is not None:
@@ -10465,24 +11125,51 @@ class BiDiBackend(AbstractBackend):
     # ── DOMStorage (CDP bridge) ───────────────────────────
 
     async def dom_storage_clear(self, storage_id: dict[str, Any]) -> None:
+        """Call the `DOMStorage.clear` CDP command.
+        
+        Args:
+            storage_id (dict[str, Any]): The storage id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMStorage.clear", {"storageId": storage_id})
 
     async def dom_storage_clear_dom_storage_items(self, storage_id: dict[str, Any]) -> None:
+        """Call the `DOMStorage.clear` CDP command.
+        
+        Args:
+            storage_id (dict[str, Any]): The storage id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMStorage.clear", {"storageId": storage_id})
 
     async def dom_storage_disable(self) -> None:
+        """Call the `DOMStorage.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMStorage.disable", {})
 
     async def dom_storage_enable(self) -> None:
+        """Call the `DOMStorage.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMStorage.enable", {})
 
     async def dom_storage_get_dom_storage_items(
         self, storage_id: dict[str, Any]
     ) -> list[dict[str, Any]]:
+        """Call the `DOMStorage.getDOMStorageItems` CDP command.
+        
+        Args:
+            storage_id (dict[str, Any]): The storage id value.
+        
+        Returns:
+            list[dict[str, Any]]: The command result.
+        
+        """
         client = self._require_launched()
         result = await client.cdp.send_command(
             "DOMStorage.getDOMStorageItems", {"storageId": storage_id}
@@ -10492,6 +11179,13 @@ class BiDiBackend(AbstractBackend):
     async def dom_storage_remove_dom_storage_item(
         self, storage_id: dict[str, Any], key: str
     ) -> None:
+        """Call the `DOMStorage.removeDOMStorageItem` CDP command.
+        
+        Args:
+            storage_id (dict[str, Any]): The storage id value.
+            key (str): The key value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DOMStorage.removeDOMStorageItem", {"storageId": storage_id, "key": key}
@@ -10500,6 +11194,14 @@ class BiDiBackend(AbstractBackend):
     async def dom_storage_set_dom_storage_item(
         self, storage_id: dict[str, Any], key: str, value: str
     ) -> None:
+        """Call the `DOMStorage.setDOMStorageItem` CDP command.
+        
+        Args:
+            storage_id (dict[str, Any]): The storage id value.
+            key (str): The key value.
+            value (str): The value value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DOMStorage.setDOMStorageItem", {"storageId": storage_id, "key": key, "value": value}
@@ -10508,22 +11210,43 @@ class BiDiBackend(AbstractBackend):
     # ── EventBreakpoints (CDP bridge) ─────────────────────
 
     async def event_breakpoints_clear_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Call the `EventBreakpoints.clearInstrumentationBreakpoint` CDP command.
+        
+        Args:
+            event_name (str): The event name value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "EventBreakpoints.clearInstrumentationBreakpoint", {"eventName": event_name}
         )
 
     async def event_breakpoints_disable(self) -> None:
+        """Call the `EventBreakpoints.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("EventBreakpoints.disable", {})
 
     async def event_breakpoints_remove_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Call the `EventBreakpoints.removeInstrumentationBreakpoint` CDP command.
+        
+        Args:
+            event_name (str): The event name value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "EventBreakpoints.removeInstrumentationBreakpoint", {"eventName": event_name}
         )
 
     async def event_breakpoints_set_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Call the `EventBreakpoints.setInstrumentationBreakpoint` CDP command.
+        
+        Args:
+            event_name (str): The event name value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "EventBreakpoints.setInstrumentationBreakpoint", {"eventName": event_name}
@@ -10532,6 +11255,12 @@ class BiDiBackend(AbstractBackend):
     # ── Extensions (CDP bridge) ───────────────────────────
 
     async def extensions_get_extensions(self) -> list[dict[str, Any]]:
+        """Call the `Extensions.getExtensions` CDP command.
+        
+        Returns:
+            list[dict[str, Any]]: The command result.
+        
+        """
         client = self._require_launched()
         result = await client.cdp.send_command("Extensions.getExtensions", {})
         return list(result.get("extensions", []))
@@ -10539,6 +11268,16 @@ class BiDiBackend(AbstractBackend):
     async def extensions_load_unpacked(
         self, path: str, enable_in_incognito: bool = False
     ) -> dict[str, Any]:
+        """Call the `Extensions.loadUnpacked` CDP command.
+        
+        Args:
+            path (str): The path value.
+            enable_in_incognito (bool): The enable in incognito value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         valid_path = validate_path(path)
         return dict(
@@ -10549,6 +11288,12 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def extensions_uninstall(self, extension_id: str) -> None:
+        """Call the `Extensions.uninstall` CDP command.
+        
+        Args:
+            extension_id (str): The extension id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("Extensions.uninstall", {"id": extension_id})
 
@@ -10561,6 +11306,18 @@ class BiDiBackend(AbstractBackend):
         no_display_updates: bool | None = None,
         screenshot: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Call the `HeadlessExperimental.beginFrame` CDP command.
+        
+        Args:
+            frame_time_ticks (float | None): The frame time ticks value.
+            interval (float | None): The interval value.
+            no_display_updates (bool | None): The no display updates value.
+            screenshot (dict[str, Any] | None): The screenshot value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if frame_time_ticks is not None:
@@ -10574,16 +11331,31 @@ class BiDiBackend(AbstractBackend):
         return dict(await client.cdp.send_command("HeadlessExperimental.beginFrame", params))
 
     async def headless_experimental_disable(self) -> None:
+        """Call the `HeadlessExperimental.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("HeadlessExperimental.disable", {})
 
     async def headless_experimental_enable(self) -> None:
+        """Call the `HeadlessExperimental.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("HeadlessExperimental.enable", {})
 
     # ── SystemInfo (CDP bridge) ───────────────────────────
 
     async def system_info_get_feature_state(self, feature_state: str) -> dict[str, Any]:
+        """Call the `SystemInfo.getFeatureState` CDP command.
+        
+        Args:
+            feature_state (str): The feature state value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command(
@@ -10592,22 +11364,45 @@ class BiDiBackend(AbstractBackend):
         )
 
     async def system_info_get_info(self) -> dict[str, Any]:
+        """Call the `SystemInfo.getInfo` CDP command.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(await client.cdp.send_command("SystemInfo.getInfo", {}))
 
     async def system_info_get_process_info(self) -> dict[str, Any]:
+        """Call the `SystemInfo.getProcessInfo` CDP command.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(await client.cdp.send_command("SystemInfo.getProcessInfo", {}))
 
     # ── DeviceOrientation (CDP bridge) ────────────────────
 
     async def device_orientation_clear_device_orientation_override(self) -> None:
+        """Call the `DeviceOrientation.clearDeviceOrientationOverride` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DeviceOrientation.clearDeviceOrientationOverride", {})
 
     async def device_orientation_set_device_orientation_override(
         self, alpha: float, beta: float, gamma: float
     ) -> None:
+        """Call the `DeviceOrientation.setDeviceOrientationOverride` CDP command.
+        
+        Args:
+            alpha (float): The alpha value.
+            beta (float): The beta value.
+            gamma (float): The gamma value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DeviceOrientation.setDeviceOrientationOverride",
@@ -10619,6 +11414,17 @@ class BiDiBackend(AbstractBackend):
     async def dom_debugger_get_event_listeners(
         self, object_id: str, depth: int | None = None, pierce: bool | None = None
     ) -> list[dict[str, Any]]:
+        """Call the `DOMDebugger.getEventListeners` CDP command.
+        
+        Args:
+            object_id (str): The object id value.
+            depth (int | None): The depth value.
+            pierce (bool | None): The pierce value.
+        
+        Returns:
+            list[dict[str, Any]]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"objectId": object_id}
         if depth is not None:
@@ -10629,6 +11435,13 @@ class BiDiBackend(AbstractBackend):
         return list(result.get("listeners", []))
 
     async def dom_debugger_remove_dom_breakpoint(self, node_id: int, type: str) -> None:
+        """Call the `DOMDebugger.removeDOMBreakpoint` CDP command.
+        
+        Args:
+            node_id (int): The node id value.
+            type (str): The type value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DOMDebugger.removeDOMBreakpoint", {"nodeId": node_id, "type": type}
@@ -10637,6 +11450,13 @@ class BiDiBackend(AbstractBackend):
     async def dom_debugger_remove_event_listener_breakpoint(
         self, event_name: str, target_name: str | None = None
     ) -> None:
+        """Call the `DOMDebugger.removeEventListenerBreakpoint` CDP command.
+        
+        Args:
+            event_name (str): The event name value.
+            target_name (str | None): The target name value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"eventName": event_name}
         if target_name is not None:
@@ -10644,22 +11464,47 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("DOMDebugger.removeEventListenerBreakpoint", params)
 
     async def dom_debugger_remove_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Call the `DOMDebugger.removeInstrumentationBreakpoint` CDP command.
+        
+        Args:
+            event_name (str): The event name value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DOMDebugger.removeInstrumentationBreakpoint", {"eventName": event_name}
         )
 
     async def dom_debugger_remove_xhr_breakpoint(self, url: str) -> None:
+        """Call the `DOMDebugger.removeXHRBreakpoint` CDP command.
+        
+        Args:
+            url (str): The url value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMDebugger.removeXHRBreakpoint", {"url": url})
 
     async def dom_debugger_set_break_on_csp_violation(self, violation_types: list[str]) -> None:
+        """Call the `DOMDebugger.setBreakOnCSPViolation` CDP command.
+        
+        Args:
+            violation_types (list[str]): The violation types value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DOMDebugger.setBreakOnCSPViolation", {"violationTypes": violation_types}
         )
 
     async def dom_debugger_set_dom_breakpoint(self, node_id: int, type: str) -> None:
+        """Call the `DOMDebugger.setDOMBreakpoint` CDP command.
+        
+        Args:
+            node_id (int): The node id value.
+            type (str): The type value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DOMDebugger.setDOMBreakpoint", {"nodeId": node_id, "type": type}
@@ -10668,6 +11513,13 @@ class BiDiBackend(AbstractBackend):
     async def dom_debugger_set_event_listener_breakpoint(
         self, event_name: str, target_name: str | None = None
     ) -> None:
+        """Call the `DOMDebugger.setEventListenerBreakpoint` CDP command.
+        
+        Args:
+            event_name (str): The event name value.
+            target_name (str | None): The target name value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"eventName": event_name}
         if target_name is not None:
@@ -10675,12 +11527,24 @@ class BiDiBackend(AbstractBackend):
         await client.cdp.send_command("DOMDebugger.setEventListenerBreakpoint", params)
 
     async def dom_debugger_set_instrumentation_breakpoint(self, event_name: str) -> None:
+        """Call the `DOMDebugger.setInstrumentationBreakpoint` CDP command.
+        
+        Args:
+            event_name (str): The event name value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DOMDebugger.setInstrumentationBreakpoint", {"eventName": event_name}
         )
 
     async def dom_debugger_set_xhr_breakpoint(self, url: str) -> None:
+        """Call the `DOMDebugger.setXHRBreakpoint` CDP command.
+        
+        Args:
+            url (str): The url value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMDebugger.setXHRBreakpoint", {"url": url})
 
@@ -10694,6 +11558,19 @@ class BiDiBackend(AbstractBackend):
         include_blended_background_colors: bool = False,
         include_text_color_opacities: bool = False,
     ) -> dict[str, Any]:
+        """Call the `DOMSnapshot.captureSnapshot` CDP command.
+        
+        Args:
+            computed_styles (list[str] | None): The computed styles value.
+            include_paint_order (bool): The include paint order value.
+            include_dom_rects (bool): The include dom rects value.
+            include_blended_background_colors (bool): The include blended background colors value.
+            include_text_color_opacities (bool): The include text color opacities value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {
             "includePaintOrder": include_paint_order,
@@ -10706,10 +11583,16 @@ class BiDiBackend(AbstractBackend):
         return dict(await client.cdp.send_command("DOMSnapshot.captureSnapshot", params))
 
     async def dom_snapshot_disable(self) -> None:
+        """Call the `DOMSnapshot.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMSnapshot.disable", {})
 
     async def dom_snapshot_enable(self) -> None:
+        """Call the `DOMSnapshot.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DOMSnapshot.enable", {})
 
@@ -10720,6 +11603,18 @@ class BiDiBackend(AbstractBackend):
         include_paint_order: bool | None = None,
         include_user_agent_shadow_tree: bool | None = None,
     ) -> dict[str, Any]:
+        """Call the `DOMSnapshot.getSnapshot` CDP command.
+        
+        Args:
+            computed_style_whitelist (list[str] | None): The computed style whitelist value.
+            include_event_listeners (bool | None): The include event listeners value.
+            include_paint_order (bool | None): The include paint order value.
+            include_user_agent_shadow_tree (bool | None): The include user agent shadow tree value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {}
         if computed_style_whitelist is not None:
@@ -10735,18 +11630,37 @@ class BiDiBackend(AbstractBackend):
     # ── DeviceAccess (CDP bridge) ─────────────────────────
 
     async def device_access_cancel_prompt(self, request_id: str) -> None:
+        """Call the `DeviceAccess.cancelPrompt` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DeviceAccess.cancelPrompt", {"id": request_id})
 
     async def device_access_disable(self) -> None:
+        """Call the `DeviceAccess.disable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DeviceAccess.disable", {})
 
     async def device_access_enable(self) -> None:
+        """Call the `DeviceAccess.enable` CDP command.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command("DeviceAccess.enable", {})
 
     async def device_access_select_prompt(self, request_id: str, device_id: str) -> None:
+        """Call the `DeviceAccess.selectPrompt` CDP command.
+        
+        Args:
+            request_id (str): The request id value.
+            device_id (str): The device id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "DeviceAccess.selectPrompt", {"id": request_id, "deviceId": device_id}
@@ -10755,6 +11669,16 @@ class BiDiBackend(AbstractBackend):
     # ── Remaining single methods (CDP bridge) ─────────────
 
     async def dom_get_attribute(self, node_id: int, name: str | None = None) -> dict[str, Any]:
+        """Call the `DOM.getAttributes` CDP command.
+        
+        Args:
+            node_id (int): The node id value.
+            name (str | None): The name value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"nodeId": node_id}
         if name is not None:
@@ -10762,12 +11686,24 @@ class BiDiBackend(AbstractBackend):
         return dict(await client.cdp.send_command("DOM.getAttributes", params))
 
     async def webauthn_remove_virtual_authenticator(self, authenticator_id: str) -> None:
+        """Call the `WebAuthn.removeVirtualAuthenticator` CDP command.
+        
+        Args:
+            authenticator_id (str): The authenticator id value.
+        
+        """
         client = self._require_launched()
         await client.cdp.send_command(
             "WebAuthn.removeVirtualAuthenticator", {"authenticatorId": authenticator_id}
         )
 
     async def crash_report_context_get_entries(self) -> list[dict[str, Any]]:
+        """Call the `CrashReportContext.getEntries` CDP command.
+        
+        Returns:
+            list[dict[str, Any]]: The command result.
+        
+        """
         client = self._require_launched()
         result = await client.cdp.send_command("CrashReportContext.getEntries", {})
         return list(result.get("entries", []))
@@ -10779,6 +11715,15 @@ class BiDiBackend(AbstractBackend):
         response: dict[str, Any] | None = None,
         frame_id: str | None = None,
     ) -> None:
+        """Call the `DigitalCredentials.setVirtualWalletBehavior` CDP command.
+        
+        Args:
+            action (str): The action value.
+            protocol (str | None): The protocol value.
+            response (dict[str, Any] | None): The response value.
+            frame_id (str | None): The frame id value.
+        
+        """
         client = self._require_launched()
         params: dict[str, Any] = {"action": action}
         if protocol is not None:
@@ -10792,6 +11737,17 @@ class BiDiBackend(AbstractBackend):
     async def file_system_get_directory(
         self, storage_key: str, path_components: list[str], bucket_name: str = ""
     ) -> dict[str, Any]:
+        """Call the `FileSystem.getDirectory` CDP command.
+        
+        Args:
+            storage_key (str): The storage key value.
+            path_components (list[str]): The path components value.
+            bucket_name (str): The bucket name value.
+        
+        Returns:
+            dict[str, Any]: The command result.
+        
+        """
         client = self._require_launched()
         return dict(
             await client.cdp.send_command(
